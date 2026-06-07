@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_payment_methods ADD COLUMN custom_emoji_id text DEFAULT NULL;

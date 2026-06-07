@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_button_emojis ADD COLUMN style text DEFAULT NULL;

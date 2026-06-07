@@ -1,0 +1,1 @@
+UPDATE bot_products SET sold_column = 'SOLD' WHERE id = 'f1b3a662-6a89-48a1-b187-562649cbb8ca';

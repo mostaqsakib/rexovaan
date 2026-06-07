@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_customer_pricing ADD COLUMN IF NOT EXISTS min_quantity integer NOT NULL DEFAULT 1;

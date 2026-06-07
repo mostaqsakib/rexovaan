@@ -1,0 +1,1 @@
+INSERT INTO bot_button_emojis (button_key, button_label) VALUES ('refresh', '🔄 Refresh') ON CONFLICT DO NOTHING;

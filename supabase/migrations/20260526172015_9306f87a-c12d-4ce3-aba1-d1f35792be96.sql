@@ -1,0 +1,4 @@
+ALTER TABLE public.bot_orders
+  ADD COLUMN IF NOT EXISTS delivery_message_ids BIGINT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS refund_note TEXT;

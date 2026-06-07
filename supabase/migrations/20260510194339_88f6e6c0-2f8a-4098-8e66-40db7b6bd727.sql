@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_flash_sales ADD COLUMN IF NOT EXISTS broadcast_attempted boolean NOT NULL DEFAULT false;
