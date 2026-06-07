@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_products ADD COLUMN sheet_gid integer;

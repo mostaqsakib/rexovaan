@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_products ADD COLUMN delivery_instruction text DEFAULT null;

@@ -1,0 +1,20 @@
+INSERT INTO bot_button_emojis (button_key, button_label) VALUES
+  ('buy_now', '🛒 Buy Now'),
+  ('back_to_store', '◀️ Back to Store'),
+  ('custom_amount', '✏️ Custom Amount'),
+  ('back_to_product', '◀️ Back to Product'),
+  ('confirm_payment', '✅ Confirm & Choose Payment'),
+  ('change_quantity', '◀️ Change Quantity'),
+  ('pay_with_balance', '💰 Pay with Balance'),
+  ('back_to_summary', '◀️ Back to Summary'),
+  ('refresh_stock', '🔄 Refresh Stock'),
+  ('product_item', '📦 Product Item'),
+  ('deposit_method', '💳 Deposit Method'),
+  ('payment_method', '💳 Payment Method'),
+  ('no_thanks', '❌ No Thanks'),
+  ('send_emoji', '✏️ Send Premium Emoji'),
+  ('remove_emoji', '🗑️ Remove Premium Emoji'),
+  ('back_to_emoji_list', '◀️ Back to List'),
+  ('approve_wd_notify', '✅ Approve (Notification)'),
+  ('reject_wd_notify', '❌ Reject (Notification)')
+ON CONFLICT (button_key) DO NOTHING;

@@ -1,0 +1,1 @@
+UPDATE bot_button_emojis SET custom_emoji_id = '6105179944067798549' WHERE button_key = 'cancel_order';

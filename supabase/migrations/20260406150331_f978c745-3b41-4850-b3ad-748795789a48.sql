@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_products ADD COLUMN custom_emoji_id text DEFAULT NULL;

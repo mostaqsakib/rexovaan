@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_flash_sales ADD COLUMN IF NOT EXISTS target_group_ids bigint[] DEFAULT NULL;

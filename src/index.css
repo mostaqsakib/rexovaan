@@ -1,0 +1,205 @@
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+@layer base {
+  :root {
+    /* Midnight Indigo */
+    --background: 240 43% 7%;
+    --foreground: 220 30% 96%;
+
+    --card: 240 43% 12%;
+    --card-foreground: 220 30% 96%;
+
+    --popover: 240 43% 11%;
+    --popover-foreground: 220 30% 96%;
+
+    --primary: 244 75% 59%;
+    --primary-foreground: 220 30% 98%;
+    --primary-glow: 244 75% 72%;
+
+    --secondary: 240 40% 18%;
+    --secondary-foreground: 220 30% 96%;
+
+    --muted: 240 35% 16%;
+    --muted-foreground: 220 15% 70%;
+
+    --accent: 240 50% 23%;
+    --accent-foreground: 220 30% 98%;
+
+    --destructive: 0 75% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 64% 48%;
+    --success-foreground: 220 47% 6%;
+
+    --warning: 38 92% 58%;
+    --warning-foreground: 220 47% 6%;
+
+    --border: 240 35% 22%;
+    --input: 240 35% 18%;
+    --ring: 244 75% 59%;
+
+    --radius: 0.875rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(244 75% 59%), hsl(260 75% 65%));
+    --gradient-mesh: radial-gradient(60% 50% at 20% 0%, hsl(244 75% 59% / 0.18) 0%, transparent 60%),
+                     radial-gradient(45% 40% at 100% 10%, hsl(260 75% 65% / 0.14) 0%, transparent 60%),
+                     radial-gradient(50% 50% at 50% 100%, hsl(240 50% 23% / 0.30) 0%, transparent 70%);
+    --shadow-glow: 0 0 40px -8px hsl(244 75% 59% / 0.45);
+    --shadow-elegant: 0 20px 60px -20px hsl(240 50% 4% / 0.6), 0 8px 24px -12px hsl(240 50% 4% / 0.4);
+    --shadow-soft: 0 1px 0 0 hsl(220 30% 98% / 0.06) inset, 0 0 0 1px hsl(220 30% 98% / 0.05);
+
+    --sidebar-background: 240 43% 6%;
+    --sidebar-foreground: 220 20% 72%;
+    --sidebar-primary: 244 75% 59%;
+    --sidebar-primary-foreground: 220 30% 98%;
+    --sidebar-accent: 240 40% 15%;
+    --sidebar-accent-foreground: 220 30% 96%;
+    --sidebar-border: 240 35% 20%;
+    --sidebar-ring: 244 75% 59%;
+  }
+}
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    @apply bg-background text-foreground font-body;
+    min-height: 100vh;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    background-image: var(--gradient-mesh);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  ::selection {
+    background-color: hsl(var(--primary) / 0.35);
+    color: hsl(var(--foreground));
+  }
+
+  /* Premium scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(217 22% 28%);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(217 22% 36%); background-clip: padding-box; }
+}
+
+@layer components {
+  .glass {
+    background: linear-gradient(180deg, hsl(222 25% 18% / 0.75), hsl(222 25% 14% / 0.75));
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid hsl(210 40% 98% / 0.08);
+    box-shadow: var(--shadow-elegant);
+  }
+  .glass-subtle {
+    background: hsl(222 25% 16% / 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid hsl(210 40% 98% / 0.06);
+  }
+  .premium-card {
+    @apply rounded-xl relative;
+    background: linear-gradient(180deg, hsl(240 43% 14%) 0%, hsl(240 43% 10%) 100%);
+    border: 1px solid hsl(220 30% 98% / 0.08);
+    box-shadow: var(--shadow-elegant), var(--shadow-soft);
+  }
+  .premium-card-hover {
+    transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease, border-color .25s ease;
+    will-change: transform;
+  }
+  .premium-card-hover:hover {
+    border-color: hsl(244 75% 59% / 0.35);
+    box-shadow: var(--shadow-elegant), 0 12px 28px -16px hsl(244 75% 59% / 0.45);
+    transform: translateY(-2px);
+  }
+
+
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .gradient-border {
+    position: relative;
+    background-clip: padding-box;
+  }
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(199 89% 56% / 0.6), hsl(217 91% 60% / 0.2), transparent);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+  .glow-primary { box-shadow: var(--shadow-glow); }
+
+  /* Telegram-flavored rich text rendering on the customer site */
+  .tg-content { font-size: 0.95rem; }
+  .tg-content > * + * { margin-top: 0.5rem; }
+  .tg-content b, .tg-content strong { font-weight: 600; color: hsl(var(--foreground)); }
+  .tg-content i, .tg-content em { font-style: italic; }
+  .tg-content u { text-decoration: underline; }
+  .tg-content s, .tg-content strike, .tg-content del { text-decoration: line-through; opacity: 0.75; }
+  .tg-content a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px; }
+  .tg-content a:hover { color: hsl(var(--primary-glow)); }
+  .tg-content code {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.85em;
+    background: hsl(var(--muted));
+    padding: 0.1em 0.4em;
+    border-radius: 0.35rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .tg-content pre {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    padding: 0.75rem 1rem;
+    border-radius: 0.6rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    font-size: 0.85em;
+  }
+  .tg-content blockquote {
+    margin: 0;
+    padding: 0.6rem 0.9rem;
+    border-left: 3px solid hsl(var(--primary));
+    background: hsl(var(--primary) / 0.07);
+    border-radius: 0.5rem;
+    color: hsl(var(--foreground) / 0.92);
+  }
+  .tg-content blockquote + blockquote { margin-top: 0.6rem; }
+  .tg-content blockquote b { color: hsl(var(--foreground)); }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .text-balance { text-wrap: balance; }
+}

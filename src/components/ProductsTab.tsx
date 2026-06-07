@@ -1,0 +1,1119 @@
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import type { Product } from '@/types/product';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+
+interface ProductsTabProps {
+  products: Product[];
+  onRemove: (id: string) => void;
+  onReorder?: (products: Product[]) => void;
+  onStockChanged?: (productId: string) => void;
+  stockOnly?: boolean;
+}
+
+interface MediaItem {
+  url: string;
+  type: 'image' | 'video';
+}
+
+const InstructionCell = ({ product }: { product: Product }) => {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(product.deliveryInstruction || '');
+  const [savedValue, setSavedValue] = useState(product.deliveryInstruction || '');
+  const [media, setMedia] = useState<MediaItem[]>((product.deliveryMedia as MediaItem[]) || []);
+  const [savedMedia, setSavedMedia] = useState<MediaItem[]>((product.deliveryMedia as MediaItem[]) || []);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const wrapSelection = (openTag: string, closeTag: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = value.substring(start, end);
+    const before = value.substring(0, start);
+    const after = value.substring(end);
+    const newValue = `${before}${openTag}${selected}${closeTag}${after}`;
+    setValue(newValue);
+    setTimeout(() => {
+      ta.focus();
+      if (selected) {
+        ta.selectionStart = start;
+        ta.selectionEnd = start + openTag.length + selected.length + closeTag.length;
+      } else {
+        ta.selectionStart = ta.selectionEnd = start + openTag.length;
+      }
+    }, 0);
+  };
+
+  useEffect(() => {
+    setSavedValue(product.deliveryInstruction || '');
+    setSavedMedia((product.deliveryMedia as MediaItem[]) || []);
+    if (!editing) {
+      setValue(product.deliveryInstruction || '');
+      setMedia((product.deliveryMedia as MediaItem[]) || []);
+    }
+  }, [product.deliveryInstruction, product.deliveryMedia]);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    const newMedia: MediaItem[] = [...media];
+
+    for (const file of Array.from(files)) {
+      const isVideo = file.type.startsWith('video/');
+      const isImage = file.type.startsWith('image/');
+      if (!isVideo && !isImage) {
+        toast.error(`Unsupported file type: ${file.name}`);
+        continue;
+      }
+
+      const ext = file.name.split('.').pop();
+      const path = `${product.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+      const { error } = await supabase.storage.from('instruction-media').upload(path, file);
+      if (error) {
+        toast.error(`Upload failed: ${file.name}`);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage.from('instruction-media').getPublicUrl(path);
+      newMedia.push({ url: urlData.publicUrl, type: isVideo ? 'video' : 'image' });
+    }
+
+    setMedia(newMedia);
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeMedia = (idx: number) => {
+    setMedia(media.filter((_, i) => i !== idx));
+  };
+
+  const handleSave = async () => {
+    const instruction = value.trim() || null;
+    const { error } = await supabase
+      .from('bot_products')
+      .update({
+        delivery_instruction: instruction,
+        delivery_media: media.length > 0 ? JSON.stringify(media) : '[]',
+      })
+      .eq('id', product.id);
+
+    if (error) {
+      toast.error('Failed to save instruction');
+    } else {
+      setSavedValue(instruction || '');
+      setSavedMedia([...media]);
+      toast.success('Instruction saved');
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-1.5 min-w-[280px]">
+        {/* Formatting toolbar */}
+        <div className="flex items-center gap-0.5 border border-border rounded-t-md bg-muted/50 px-1 py-0.5">
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Bold" onClick={() => wrapSelection('<b>', '</b>')}>
+            <Bold className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Italic" onClick={() => wrapSelection('<i>', '</i>')}>
+            <Italic className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Underline" onClick={() => wrapSelection('<u>', '</u>')}>
+            <Underline className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Strikethrough" onClick={() => wrapSelection('<s>', '</s>')}>
+            <Strikethrough className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Code" onClick={() => wrapSelection('<code>', '</code>')}>
+            <Code className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Link" onClick={() => wrapSelection('<a href="">', '</a>')}>
+            <Link className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <Textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="e.g. Login using incognito mode..."
+          className="text-xs min-h-[60px] resize-y rounded-t-none -mt-1.5 border-t-0"
+          autoFocus
+          onKeyDown={(e) => { if (e.key === 'Escape') { setValue(savedValue); setMedia(savedMedia); setEditing(false); } }}
+        />
+
+        {/* Media previews */}
+        {media.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {media.map((m, i) => (
+              <div key={i} className="relative group">
+                {m.type === 'image' ? (
+                  <img src={m.url} alt="" className="h-14 w-14 rounded object-cover border border-border" />
+                ) : (
+                  <div className="h-14 w-14 rounded border border-border bg-muted flex items-center justify-center">
+                    <FileVideo className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => removeMedia(i)}
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            className="hidden"
+            onChange={handleUpload}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 text-xs"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            {uploading ? 'Uploading...' : 'Add Media'}
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 ml-auto text-xs text-success" onClick={handleSave}>
+            <Check className="h-3.5 w-3.5" /> Save
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const hasContent = savedValue || savedMedia.length > 0;
+
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-1.5 rounded px-2 py-1 text-sm hover:bg-muted transition-colors text-left max-w-[240px]"
+      onClick={() => { setValue(savedValue); setMedia(savedMedia); setEditing(true); }}
+    >
+      {hasContent ? (
+        <div className="flex items-center gap-1.5">
+          {savedMedia.length > 0 && (
+            <span className="text-xs text-muted-foreground">📎{savedMedia.length}</span>
+          )}
+          {savedValue ? (
+            <span className="text-xs text-foreground line-clamp-2">{savedValue}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">Media only</span>
+          )}
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground flex items-center gap-1"><Pencil className="h-3 w-3" /> Add</span>
+      )}
+    </button>
+  );
+};
+
+const DescriptionCell = ({ product }: { product: Product }) => {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(product.description || '');
+  const [savedValue, setSavedValue] = useState(product.description || '');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const wrapSelection = (openTag: string, closeTag: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = value.substring(start, end);
+    const before = value.substring(0, start);
+    const after = value.substring(end);
+    const newValue = `${before}${openTag}${selected}${closeTag}${after}`;
+    setValue(newValue);
+    setTimeout(() => {
+      ta.focus();
+      if (selected) {
+        ta.selectionStart = start;
+        ta.selectionEnd = start + openTag.length + selected.length + closeTag.length;
+      } else {
+        ta.selectionStart = ta.selectionEnd = start + openTag.length;
+      }
+    }, 0);
+  };
+
+  useEffect(() => {
+    setSavedValue(product.description || '');
+    if (!editing) setValue(product.description || '');
+  }, [product.description]);
+
+  const handleSave = async () => {
+    const desc = value.trim() || null;
+    const { error } = await supabase
+      .from('bot_products')
+      .update({ description: desc })
+      .eq('id', product.id);
+
+    if (error) {
+      toast.error('Failed to save description');
+    } else {
+      setSavedValue(desc || '');
+      toast.success('Description saved');
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-1.5 min-w-[280px]">
+        <div className="flex items-center gap-0.5 border border-border rounded-t-md bg-muted/50 px-1 py-0.5">
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Bold" onClick={() => wrapSelection('<b>', '</b>')}>
+            <Bold className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Italic" onClick={() => wrapSelection('<i>', '</i>')}>
+            <Italic className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Underline" onClick={() => wrapSelection('<u>', '</u>')}>
+            <Underline className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Strikethrough" onClick={() => wrapSelection('<s>', '</s>')}>
+            <Strikethrough className="h-3.5 w-3.5" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" title="Code" onClick={() => wrapSelection('<code>', '</code>')}>
+            <Code className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <Textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Product description shown in bot..."
+          className="text-xs min-h-[80px] resize-y rounded-t-none -mt-1.5 border-t-0"
+          autoFocus
+          onKeyDown={(e) => { if (e.key === 'Escape') { setValue(savedValue); setEditing(false); } }}
+        />
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="sm" className="h-7 gap-1 ml-auto text-xs text-success" onClick={handleSave}>
+            <Check className="h-3.5 w-3.5" /> Save
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="flex items-center gap-1.5 rounded px-2 py-1 text-sm hover:bg-muted transition-colors text-left max-w-[240px]"
+      onClick={() => { setValue(savedValue); setEditing(true); }}
+    >
+      {savedValue ? (
+        <span className="text-xs text-foreground line-clamp-2">{savedValue}</span>
+      ) : (
+        <span className="text-xs text-muted-foreground flex items-center gap-1"><Pencil className="h-3 w-3" /> Add</span>
+      )}
+    </button>
+  );
+};
+
+const NameCell = ({ product }: { product: Product }) => {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(product.name);
+
+  useEffect(() => {
+    if (!editing) setValue(product.name);
+  }, [product.name]);
+
+  const handleSave = async () => {
+    const newName = value.trim();
+    if (!newName || newName === product.name) { setEditing(false); return; }
+    const { error } = await supabase.from('bot_products').update({ name: newName }).eq('id', product.id);
+    if (error) {
+      toast.error('Failed to update name');
+      setValue(product.name);
+    } else {
+      toast.success('Name updated');
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          className="border border-border rounded px-2 py-1 text-sm bg-background w-full min-w-[120px]"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          autoFocus
+          onBlur={handleSave}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') { setValue(product.name); setEditing(false); } }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="font-medium flex items-center gap-1 hover:bg-muted rounded px-2 py-1 transition-colors"
+      onClick={() => setEditing(true)}
+      title="Click to edit name"
+    >
+      {product.name}
+      <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+    </button>
+  );
+};
+
+const ManualDeliveryCell = ({ product }: { product: Product }) => {
+  const [isManual, setIsManual] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from('bot_products').select('is_manual_delivery').eq('id', product.id).single()
+      .then(({ data }) => {
+        if (data) setIsManual(data.is_manual_delivery);
+        setLoading(false);
+      });
+  }, [product.id]);
+
+  const handleToggle = async (checked: boolean) => {
+    setIsManual(checked);
+    const { error } = await supabase.from('bot_products').update({ is_manual_delivery: checked }).eq('id', product.id);
+    if (error) {
+      toast.error('Failed to update');
+      setIsManual(!checked);
+    } else {
+      toast.success(checked ? 'Manual delivery enabled' : 'Auto delivery enabled');
+    }
+  };
+
+  if (loading) return <span className="text-xs text-muted-foreground">...</span>;
+
+  return (
+    <div className="flex items-center gap-2">
+      <Switch checked={isManual} onCheckedChange={handleToggle} />
+      {isManual && <Hand className="h-3.5 w-3.5 text-warning" />}
+    </div>
+  );
+};
+
+const ActiveCell = ({ product }: { product: Product }) => {
+  const [isActive, setIsActive] = useState<boolean>(product.isActive ?? true);
+
+  useEffect(() => {
+    setIsActive(product.isActive ?? true);
+  }, [product.isActive, product.id]);
+
+  const handleToggle = async (checked: boolean) => {
+    setIsActive(checked);
+    const { error } = await supabase.from('bot_products').update({ is_active: checked }).eq('id', product.id);
+    if (error) {
+      toast.error('Failed to update');
+      setIsActive(!checked);
+    } else {
+      // Update store so UI stays in sync
+      const { useProductStore } = await import('@/store/useProductStore');
+      useProductStore.setState((state) => ({
+        products: state.products.map((p) => (p.id === product.id ? { ...p, isActive: checked } : p)),
+      }));
+      toast.success(checked ? 'Product enabled' : 'Product disabled');
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Switch checked={isActive} onCheckedChange={handleToggle} />
+      <span className={`text-xs ${isActive ? 'text-success' : 'text-muted-foreground'}`}>
+        {isActive ? 'Active' : 'Hidden'}
+      </span>
+    </div>
+  );
+};
+
+const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Product; onStockChanged?: (productId: string) => void; onBack?: () => void }) => {
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [bulkRemoving, setBulkRemoving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'available' | 'sold' | 'all'>('available');
+  const [items, setItems] = useState<Array<{ id: string; data: Record<string, unknown>; status: string; created_at: string; sold_at: string | null; sort_index?: number | null }>>([]);
+  const [totalStockCount, setTotalStockCount] = useState(0);
+  const [availableStockCount, setAvailableStockCount] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const ingestFiles = async (files: File[]) => {
+    const txtFiles = files.filter((f) => f.type === 'text/plain' || /\.txt$/i.test(f.name));
+    if (txtFiles.length === 0) {
+      toast.error('Only .txt files are supported');
+      return;
+    }
+    try {
+      const texts = await Promise.all(txtFiles.map((f) => f.text()));
+      const merged = texts.join('\n').replace(/\r/g, '');
+      setValue((prev) => {
+        const base = prev.trim();
+        return base ? `${base}\n${merged}` : merged;
+      });
+      const lineCount = merged.split('\n').filter((l) => l.trim()).length;
+      toast.success(`Loaded ${lineCount} line(s) from ${txtFiles.length} file(s)`);
+    } catch (err) {
+      toast.error('Failed to read file');
+    }
+  };
+
+  const loadStock = async (filter: 'available' | 'sold' | 'all' = statusFilter) => {
+    setLoading(true);
+    try {
+      let itemQuery = supabase
+        .from('bot_product_stock_items')
+        .select('id,data,status,created_at,sold_at,sort_index', { count: 'exact' })
+        .eq('product_id', product.id);
+
+      if (filter !== 'all') itemQuery = itemQuery.eq('status', filter);
+      if (filter === 'all') itemQuery = itemQuery.order('status', { ascending: true });
+
+      const [itemsResult, totalResult, availableResult] = await Promise.all([
+        itemQuery.order('sort_index', { ascending: true }).order('created_at', { ascending: true }).range(0, 999),
+        supabase.from('bot_product_stock_items').select('id', { count: 'exact', head: true }).eq('product_id', product.id),
+        supabase.from('bot_product_stock_items').select('id', { count: 'exact', head: true }).eq('product_id', product.id).eq('status', 'available'),
+      ]);
+
+      if (itemsResult.error || totalResult.error || availableResult.error) {
+        toast.error('Failed to load stock');
+      } else {
+        setItems((itemsResult.data || []) as Array<{ id: string; data: Record<string, unknown>; status: string; created_at: string; sold_at: string | null; sort_index?: number | null }>);
+        setTotalStockCount(totalResult.count || 0);
+        setAvailableStockCount(availableResult.count || 0);
+      }
+
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (product.stockSource === 'internal') void loadStock();
+  }, [product.id, product.stockSource, statusFilter]);
+
+  useEffect(() => {
+    if (product.stockSource !== 'internal') return;
+    const channel = supabase
+      .channel(`stock-items-${product.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bot_product_stock_items', filter: `product_id=eq.${product.id}` },
+        () => {
+          void loadStock();
+          onStockChanged?.(product.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [product.id, product.stockSource, statusFilter, onStockChanged]);
+
+  useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id && item.status === 'available')));
+  }, [items]);
+
+  const handleAdd = async () => {
+    const rawLines = value.split('\n').map((line) => line.trim()).filter(Boolean);
+    const seen = new Set<string>();
+    const duplicateInPaste = rawLines.length - rawLines.filter((line) => {
+      const key = line.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).length;
+    const lines = Array.from(seen).map((key) => rawLines.find((line) => line.toLowerCase() === key) as string);
+    if (lines.length === 0) return;
+    setSaving(true);
+
+    const { data: existingRows, error: fetchError } = await supabase
+      .from('bot_product_stock_items')
+      .select('data')
+      .eq('product_id', product.id);
+    if (fetchError) {
+      toast.error('Failed to check duplicate stock');
+      setSaving(false);
+      return;
+    }
+
+    const existingValues = new Set(
+      (existingRows || []).flatMap((row) => Object.values((row.data || {}) as Record<string, unknown>).map((item) => String(item).trim().toLowerCase()))
+    );
+    const newLines = lines.filter((line) => !existingValues.has(line.toLowerCase()));
+    const duplicateExisting = lines.length - newLines.length;
+
+    if (newLines.length === 0) {
+      toast.error(`All stock already exists${duplicateInPaste ? ` (${duplicateInPaste} duplicate in paste)` : ''}`);
+      setSaving(false);
+      return;
+    }
+
+    // Use upsert with ignoreDuplicates so DB-level duplicates (unique on product_id+stock_fingerprint)
+    // are silently skipped instead of failing the whole insert.
+    const { data: insertedRows, error } = await supabase
+      .from('bot_product_stock_items')
+      .upsert(
+        newLines.map((line) => ({ product_id: product.id, data: { [product.detailColumns[0] || 'Delivery Info']: line } })),
+        { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true }
+      )
+      .select('id');
+    if (error) {
+      toast.error('Failed to add stock');
+    } else {
+      const insertedCount = (insertedRows || []).length;
+      const dbDuplicates = newLines.length - insertedCount;
+      const totalDuplicates = duplicateExisting + duplicateInPaste + dbDuplicates;
+      if (insertedCount === 0) {
+        toast.error(`All stock already exists${totalDuplicates ? ` (${totalDuplicates} duplicate skipped)` : ''}`);
+        setSaving(false);
+        return;
+      }
+      // Update last_known_stock immediately to prevent the standalone-bot's background
+      // stock-alert checker from sending a duplicate broadcast while the edge function runs.
+      const { count: newTotalStock } = await supabase
+        .from('bot_product_stock_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', product.id)
+        .eq('status', 'available');
+      await supabase.from('bot_products').update({ stock_source: 'internal', last_known_stock: newTotalStock || 0 }).eq('id', product.id);
+      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+        body: { productId: product.id, addedCount: insertedCount, stockItemIds: (insertedRows || []).map((row) => row.id) },
+      });
+      toast.success(`${insertedCount} stock item(s) added${totalDuplicates ? `, ${totalDuplicates} duplicate skipped` : ''}`);
+      if (broadcastError) {
+        toast.error('Stock added, but broadcast could not be started');
+      } else {
+        toast.success('Stock alert broadcast started');
+      }
+      setValue('');
+      setStatusFilter('available');
+      await loadStock('available');
+      onStockChanged?.(product.id);
+    }
+    setSaving(false);
+  };
+
+  const handleRemove = async (itemId: string) => {
+    setRemovingId(itemId);
+    const { error } = await supabase.from('bot_product_stock_items').delete().eq('id', itemId);
+    if (error) {
+      toast.error('Failed to remove stock');
+      setRemovingId(null);
+      return;
+    }
+    toast.success('Stock removed');
+    await loadStock();
+    onStockChanged?.(product.id);
+    setRemovingId(null);
+  };
+
+  const handleBulkRemove = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkRemoving(true);
+    const CHUNK = 200;
+    let removed = 0;
+    for (let i = 0; i < selectedIds.length; i += CHUNK) {
+      const chunk = selectedIds.slice(i, i + CHUNK);
+      const { error } = await supabase
+        .from('bot_product_stock_items')
+        .delete()
+        .in('id', chunk)
+        .eq('status', 'available');
+      if (error) {
+        console.error('Bulk remove failed:', error);
+        toast.error(`Failed to remove selected stock (${removed}/${selectedIds.length} done)`);
+        setBulkRemoving(false);
+        await loadStock();
+        onStockChanged?.(product.id);
+        return;
+      }
+      removed += chunk.length;
+    }
+    toast.success(`${removed} stock item(s) removed`);
+    setSelectedIds([]);
+    await loadStock();
+    onStockChanged?.(product.id);
+    setBulkRemoving(false);
+  };
+
+  const availableCount = availableStockCount;
+  const filteredItems = useMemo(
+    () => items.filter((item) => statusFilter === 'all' || item.status === statusFilter),
+    [items, statusFilter]
+  );
+  const currentFilterTotal = statusFilter === 'all'
+    ? totalStockCount
+    : statusFilter === 'available'
+      ? availableStockCount
+      : Math.max(totalStockCount - availableStockCount, filteredItems.length);
+  const hiddenByLimitCount = Math.max(currentFilterTotal - filteredItems.length, 0);
+  const visibleAvailableIds = filteredItems.filter((item) => item.status === 'available').map((item) => item.id);
+  const allVisibleAvailableSelected = visibleAvailableIds.length > 0 && visibleAvailableIds.every((id) => selectedIds.includes(id));
+
+  if (product.stockSource !== 'internal') return null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {onBack && (
+            <Button variant="ghost" size="sm" className="h-8 gap-1" onClick={onBack}>
+              <ArrowLeft className="h-4 w-4" /> Back
+            </Button>
+          )}
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+            <Boxes className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="font-heading text-base font-semibold truncate">{product.name}</div>
+            <div className="text-xs text-muted-foreground">
+              Available: <span className="text-success font-medium">{availableCount}</span> / Total: {totalStockCount}
+              {hiddenByLimitCount > 0 ? ` · Showing first ${filteredItems.length} ${statusFilter} item(s)` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] min-h-0">
+            <div className="space-y-2 min-h-0">
+              <div
+                className={`relative rounded-md transition ${isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(false);
+                  const files = Array.from(e.dataTransfer?.files || []);
+                  if (files.length > 0) void ingestFiles(files);
+                }}
+              >
+                <Textarea
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder="One delivery item per line — or drag & drop a .txt file here"
+                  className="min-h-[220px] sm:min-h-[360px] lg:min-h-[calc(100dvh-26rem)] text-xs font-mono"
+                />
+                {isDragging && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-primary/10 text-sm font-medium text-primary">
+                    📄 Drop .txt file to load
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  id={`stock-file-${product.id}`}
+                  type="file"
+                  accept=".txt,text/plain"
+                  multiple
+                  className="hidden"
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) await ingestFiles(files);
+                    e.target.value = '';
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => document.getElementById(`stock-file-${product.id}`)?.click()}
+                  disabled={saving}
+                >
+                  📄 Upload .txt
+                </Button>
+                <Button className="flex-1" onClick={handleAdd} disabled={saving || !value.trim()}>
+                  {saving ? 'Adding...' : 'Add Stock'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex min-h-[260px] flex-col rounded-md border border-border overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
+                <div className="flex rounded-md border border-border bg-background p-0.5">
+                  {(['available', 'sold', 'all'] as const).map((filter) => (
+                    <Button
+                      key={filter}
+                      type="button"
+                      size="sm"
+                      variant={statusFilter === filter ? 'secondary' : 'ghost'}
+                      className="h-6 px-2 text-xs capitalize"
+                      onClick={() => setStatusFilter(filter)}
+                    >
+                      {filter}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 text-xs"
+                    disabled={filteredItems.length === 0}
+                    onClick={() => {
+                      const lines = filteredItems.map((item) => Object.values(item.data || {}).join(' | '));
+                      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${product.name}-${statusFilter}-${Date.now()}.txt`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast.success(`Exported ${filteredItems.length} item(s)`);
+                    }}
+                  >
+                    <Download className="h-3.5 w-3.5" /> Export TXT
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1 text-xs"
+                    disabled={filteredItems.length === 0}
+                    onClick={() => {
+                      const headers = Array.from(new Set(filteredItems.flatMap((it) => Object.keys(it.data || {}))));
+                      const rows = [['Status', ...headers].join(',')];
+                      filteredItems.forEach((it) => {
+                        const cols = headers.map((h) => `"${String((it.data as Record<string, unknown>)?.[h] ?? '').replace(/"/g, '""')}"`);
+                        rows.push([it.status, ...cols].join(','));
+                      });
+                      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${product.name}-${statusFilter}-${Date.now()}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast.success(`Exported ${filteredItems.length} item(s)`);
+                    }}
+                  >
+                    <Download className="h-3.5 w-3.5" /> Export CSV
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="h-7 text-xs text-destructive" disabled={selectedIds.length === 0 || bulkRemoving}>
+                        Remove Selected ({selectedIds.length})
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remove selected stock items?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete {selectedIds.length} available stock item(s).
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleBulkRemove}>
+                          Remove Selected
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+              <div className="grid grid-cols-[28px_1fr_86px_68px] gap-2 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                <Checkbox
+                  checked={allVisibleAvailableSelected}
+                  disabled={visibleAvailableIds.length === 0}
+                  onCheckedChange={(checked) => {
+                    setSelectedIds((current) => checked
+                      ? Array.from(new Set([...current, ...visibleAvailableIds]))
+                      : current.filter((id) => !visibleAvailableIds.includes(id))
+                    );
+                  }}
+                  aria-label="Select visible available stock"
+                />
+                <span>Stock</span>
+                <span>Status</span>
+                <span className="text-right">Action</span>
+              </div>
+              <div className="min-h-[280px] max-h-[calc(100dvh-22rem)] flex-1 overflow-y-auto overscroll-contain sm:max-h-[calc(100dvh-18rem)]">
+                {loading ? (
+                  <div className="p-4 text-sm text-muted-foreground">Loading...</div>
+                ) : totalStockCount === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">No stock added yet.</div>
+                ) : filteredItems.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground">No {statusFilter} stock found.</div>
+                ) : filteredItems.map((item) => {
+                  const text = Object.values(item.data || {}).join(' | ');
+                  const isAvailable = item.status === 'available';
+                  return (
+                    <div key={item.id} className="grid grid-cols-[28px_1fr_86px_68px] gap-2 border-b border-border/60 px-3 py-2 text-xs last:border-b-0">
+                      <Checkbox
+                        checked={selectedIds.includes(item.id)}
+                        disabled={!isAvailable}
+                        onCheckedChange={(checked) => {
+                          setSelectedIds((current) => checked ? [...current, item.id] : current.filter((id) => id !== item.id));
+                        }}
+                        aria-label={`Select ${text}`}
+                      />
+                      <code className="break-all text-foreground">{text}</code>
+                      <span className={isAvailable ? 'text-success' : 'text-muted-foreground'}>{item.status}</span>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10" disabled={removingId === item.id}>
+                            Remove
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove this stock item?</AlertDialogTitle>
+                            <AlertDialogDescription className="break-all">
+                              This will permanently delete this {item.status} stock item: {text}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => handleRemove(item.id)}>
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+    </div>
+  );
+};
+
+const SortableRow = ({ product, onRemove, onStockChanged }: { product: Product; onRemove: (id: string) => void; onStockChanged?: (productId: string) => void }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: product.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style} className="group">
+      <TableCell className="w-8">
+        <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-foreground touch-none">
+          <GripVertical className="h-4 w-4" />
+        </button>
+      </TableCell>
+      <TableCell>
+        <NameCell product={product} />
+      </TableCell>
+      <TableCell>
+        <ActiveCell product={product} />
+      </TableCell>
+      <TableCell>
+        <ManualDeliveryCell product={product} />
+      </TableCell>
+      <TableCell>
+        <DescriptionCell product={product} />
+      </TableCell>
+      <TableCell>
+        <InstructionCell product={product} />
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+          onClick={() => onRemove(product.id)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+};
+
+const ProductsTab = ({ products, onRemove, onReorder, onStockChanged, stockOnly = false }: ProductsTabProps) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+
+  const [managedProductId, setManagedProductId] = useState<string | null>(null);
+
+  const visibleProducts = stockOnly ? products.filter((product) => product.stockSource === 'internal' && !product.isManualDelivery && (product.isActive ?? true)) : products;
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = products.findIndex((p) => p.id === active.id);
+    const newIndex = products.findIndex((p) => p.id === over.id);
+    const reordered = arrayMove(products, oldIndex, newIndex);
+
+    // Update UI immediately
+    onReorder?.(reordered);
+
+    // Save new sort_order to DB
+    const updates = reordered.map((p, i) =>
+      supabase.from('bot_products').update({ sort_order: i + 1 }).eq('id', p.id)
+    );
+
+    const results = await Promise.all(updates);
+    const hasError = results.some(r => r.error);
+    if (hasError) {
+      toast.error('Failed to save order');
+    } else {
+      toast.success('Order saved');
+    }
+  };
+
+  // Detail page view (Manage Stock for one product)
+  if (stockOnly && managedProductId) {
+    const managed = visibleProducts.find((p) => p.id === managedProductId);
+    if (managed) {
+      return (
+        <InternalStockCell
+          product={managed}
+          onStockChanged={onStockChanged}
+          onBack={() => setManagedProductId(null)}
+        />
+      );
+    }
+    // fallback if product disappeared
+    setManagedProductId(null);
+  }
+
+  // Stock list view: card grid for easier scanning
+  if (stockOnly) {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {visibleProducts.length === 0 ? (
+          <div className="col-span-full rounded-lg border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
+            No products available for stock management.
+          </div>
+        ) : visibleProducts.map((p) => {
+          const isLow = p.stock <= 3;
+          const isOut = p.stock === 0;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setManagedProductId(p.id)}
+              className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-primary/50 hover:shadow-md hover:-translate-y-0.5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary group-hover:bg-primary/15">
+                  <Package className="h-5 w-5" />
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  isOut ? 'bg-destructive/15 text-destructive' : isLow ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success'
+                }`}>
+                  {isOut ? 'Out' : isLow ? 'Low' : 'In stock'}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <div className="font-heading text-sm font-semibold truncate">{p.name}</div>
+                <div className="mt-1 flex items-baseline justify-between gap-2">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold tabular-nums">{p.stock}</span>
+                    <span className="text-xs text-muted-foreground">available</span>
+                  </div>
+                  {p.price > 0 && (
+                    <span className="text-xs font-semibold text-primary tabular-nums">
+                      {Number(p.price).toFixed(2)} USDT
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-auto flex items-center justify-between border-t border-border/60 pt-2 text-xs text-muted-foreground">
+                <span>Tap to manage</span>
+                <Boxes className="h-3.5 w-3.5" />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-x-auto">
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis]}>
+        <Table className="min-w-[800px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-8"></TableHead>
+              <TableHead className="font-heading">Name</TableHead>
+              <TableHead className="font-heading">Status</TableHead>
+              <TableHead className="font-heading">Manual</TableHead>
+              <TableHead className="font-heading">Description</TableHead>
+              <TableHead className="font-heading">Delivery Instruction</TableHead>
+              <TableHead className="font-heading text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <SortableContext items={visibleProducts.map(p => p.id)} strategy={verticalListSortingStrategy}>
+              {visibleProducts.map((p) => (
+                <SortableRow key={p.id} product={p} onRemove={onRemove} onStockChanged={onStockChanged} />
+              ))}
+            </SortableContext>
+          </TableBody>
+        </Table>
+      </DndContext>
+    </div>
+  );
+};
+
+export default ProductsTab;

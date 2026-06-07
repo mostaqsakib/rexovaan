@@ -1,0 +1,1 @@
+UPDATE bot_flash_sales SET broadcast_attempted = false WHERE broadcast_attempted = true AND (announcement_messages IS NULL OR jsonb_array_length(announcement_messages) = 0) AND is_active = true AND ends_at > now();

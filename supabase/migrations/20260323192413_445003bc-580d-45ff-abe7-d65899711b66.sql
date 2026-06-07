@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_customers ADD COLUMN IF NOT EXISTS pending_action text DEFAULT NULL;

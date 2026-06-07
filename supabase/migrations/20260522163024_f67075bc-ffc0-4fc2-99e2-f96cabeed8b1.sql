@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_customer_pricing ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
