@@ -1,4 +1,4 @@
-// Resolves Telegram custom (premium) emoji ids -> cached Lottie/webp URLs.
+// Resolves Telegram custom (premium) emoji ids -> cached Lottie/webp URLs for the migrated shop.
 // Input:  { ids: string[] }
 // Output: { emojis: Record<id, { url: string | null, fallback: string | null }> }
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
