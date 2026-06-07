@@ -1,4 +1,4 @@
-project_id = "mxcuakzztajvkgtsocln"
+project_id = "eygkdpfjrjwwbiackfpr"
 
 [functions]
   [functions.auth-email-hook]
@@ -30,6 +30,8 @@ project_id = "mxcuakzztajvkgtsocln"
   [functions.bkash-callback]
     verify_jwt = false
   [functions.send-all-email-previews]
+    verify_jwt = false
+  [functions.get-custom-emojis]
     verify_jwt = false
 
 
