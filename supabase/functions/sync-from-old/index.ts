@@ -61,6 +61,7 @@ async function syncTable(table: string, query = '') {
 async function runOnce() {
   const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
   const jobs: Array<{ table: string; query?: string }> = [
+    { table: 'bot_customers' },
     { table: 'bot_products' },
     { table: 'bot_product_pricing' },
     { table: 'bot_product_sources' },
@@ -69,10 +70,7 @@ async function runOnce() {
       table: 'bot_product_stock_items',
       query: `or=(created_at.gte.${since},updated_at.gte.${since},sold_at.gte.${since})`,
     },
-    {
-      table: 'bot_orders',
-      query: `or=(created_at.gte.${since},delivered_at.gte.${since},refunded_at.gte.${since})`,
-    },
+    { table: 'bot_orders' },
   ];
   const results: any[] = [];
   const errors: any[] = [];
