@@ -1,5 +1,5 @@
 // Sync data from OLD Supabase project to NEW Supabase project.
-// Runs on a 1-minute cron. Public endpoint (no JWT) — uses service role keys from env.
+// Cron triggers this every ~10 seconds via staggered pg_cron jobs.
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
 const OLD_URL = Deno.env.get('OLD_SUPABASE_URL')!;
@@ -65,7 +65,10 @@ async function runOnce() {
     { table: 'bot_product_pricing' },
     { table: 'bot_product_sources' },
     { table: 'bot_reseller_orders' },
-    { table: 'bot_product_stock_items', query: `updated_at=gte.${since}` },
+    {
+      table: 'bot_product_stock_items',
+      query: `or=(created_at.gte.${since},updated_at.gte.${since},sold_at.gte.${since})`,
+    },
     {
       table: 'bot_orders',
       query: `or=(created_at.gte.${since},delivered_at.gte.${since},refunded_at.gte.${since})`,
@@ -87,27 +90,17 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   const started = Date.now();
-  const iterations: any[] = [];
-  // Run 6 times with ~10s spacing so this single invocation covers a full minute.
-  const ITERATIONS = 6;
-  const SPACING_MS = 10_000;
-  for (let i = 0; i < ITERATIONS; i++) {
-    const iterStart = Date.now();
-    try {
-      iterations.push({ i, ...(await runOnce()), ms: Date.now() - iterStart });
-    } catch (e) {
-      iterations.push({ i, error: String(e), ms: Date.now() - iterStart });
-    }
-    const elapsed = Date.now() - iterStart;
-    const wait = SPACING_MS - elapsed;
-    if (i < ITERATIONS - 1 && wait > 0) {
-      await new Promise((r) => setTimeout(r, wait));
-    }
+  try {
+    const result = await runOnce();
+    const hasErrors = result.errors.length > 0;
+    return new Response(JSON.stringify({ ok: !hasErrors, duration_ms: Date.now() - started, ...result }), {
+      status: hasErrors ? 207 : 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, duration_ms: Date.now() - started, error: String(e) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
-
-  const body = { ok: true, duration_ms: Date.now() - started, iterations };
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
 });
