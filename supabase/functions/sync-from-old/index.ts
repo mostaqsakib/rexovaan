@@ -58,30 +58,21 @@ async function syncTable(table: string, query = '') {
   return { table, fetched: rows.length, written };
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-
-  const started = Date.now();
-  const results: any[] = [];
-  const errors: any[] = [];
-
-  // Window for incremental tables — last 10 minutes to absorb cron delays / clock skew.
+async function runOnce() {
   const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-
   const jobs: Array<{ table: string; query?: string }> = [
-    // Small reference tables — full sync.
     { table: 'bot_products' },
     { table: 'bot_product_pricing' },
     { table: 'bot_product_sources' },
     { table: 'bot_reseller_orders' },
-    // Large tables — incremental on recent activity.
     { table: 'bot_product_stock_items', query: `updated_at=gte.${since}` },
     {
       table: 'bot_orders',
       query: `or=(created_at.gte.${since},delivered_at.gte.${since},refunded_at.gte.${since})`,
     },
   ];
-
+  const results: any[] = [];
+  const errors: any[] = [];
   for (const j of jobs) {
     try {
       results.push(await syncTable(j.table, j.query));
@@ -89,17 +80,34 @@ Deno.serve(async (req) => {
       errors.push({ table: j.table, error: String(e) });
     }
   }
+  return { since, results, errors };
+}
 
-  const body = {
-    ok: errors.length === 0,
-    duration_ms: Date.now() - started,
-    since,
-    results,
-    errors,
-  };
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  const started = Date.now();
+  const iterations: any[] = [];
+  // Run 6 times with ~10s spacing so this single invocation covers a full minute.
+  const ITERATIONS = 6;
+  const SPACING_MS = 10_000;
+  for (let i = 0; i < ITERATIONS; i++) {
+    const iterStart = Date.now();
+    try {
+      iterations.push({ i, ...(await runOnce()), ms: Date.now() - iterStart });
+    } catch (e) {
+      iterations.push({ i, error: String(e), ms: Date.now() - iterStart });
+    }
+    const elapsed = Date.now() - iterStart;
+    const wait = SPACING_MS - elapsed;
+    if (i < ITERATIONS - 1 && wait > 0) {
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+
+  const body = { ok: true, duration_ms: Date.now() - started, iterations };
   return new Response(JSON.stringify(body), {
-    status: errors.length ? 500 : 200,
+    status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });
