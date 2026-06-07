@@ -52,6 +52,27 @@ function parseJwtClaims(token: string): Record<string, unknown> | null {
   }
 }
 
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBytes = new TextEncoder().encode(a)
+  const bBytes = new TextEncoder().encode(b)
+  if (aBytes.length !== bBytes.length) return false
+
+  let diff = 0
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i]
+  }
+  return diff === 0
+}
+
+function isServiceRoleCaller(token: string, serviceKeys: string[]): boolean {
+  const claims = parseJwtClaims(token)
+  if (claims?.role === 'service_role') return true
+
+  // Supabase projects may expose newer non-JWT service keys. The edge gateway
+  // can accept them, but they cannot be decoded for a role claim.
+  return serviceKeys.some((key) => key.length > 0 && timingSafeEqual(token, key))
+}
+
 // Move a message to the dead letter queue and log the reason.
 async function moveToDlq(
   supabase: ReturnType<typeof createClient>,
@@ -82,6 +103,7 @@ Deno.serve(async (req) => {
   const apiKey = Deno.env.get('LOVABLE_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    || Deno.env.get('NEW_SUPABASE_SERVICE_ROLE_KEY')
 
   if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
     console.error('Missing required environment variables')
@@ -99,12 +121,15 @@ Deno.serve(async (req) => {
     )
   }
 
-  // Defense in depth: verify_jwt=true already requires a valid JWT at the
-  // gateway layer. This adds an explicit role check so only service-role
-  // callers can trigger queue processing.
+  // Defense in depth: verify_jwt=true already requires a valid service key at
+  // the gateway layer. Accept both legacy JWT service-role keys and newer
+  // opaque Supabase service keys that cannot be decoded for a role claim.
   const token = authHeader.slice('Bearer '.length).trim()
-  const claims = parseJwtClaims(token)
-  if (claims?.role !== 'service_role') {
+  const serviceKeys = [
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    Deno.env.get('NEW_SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  ]
+  if (!isServiceRoleCaller(token, serviceKeys)) {
     return new Response(
       JSON.stringify({ error: 'Forbidden' }),
       { status: 403, headers: { 'Content-Type': 'application/json' } }
