@@ -54,10 +54,16 @@ async function upsert(table: string, rows: any[], conflict = 'id'): Promise<numb
 
 type Job = { table: string; query?: string; conflict?: string };
 
-async function runOnce() {
+async function runOnce(fullStock = false) {
   const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-  // Full-sync everything except the big stock_items table (incremental).
+  const stockJob: Job = fullStock
+    ? { table: 'bot_product_stock_items' }
+    : {
+        table: 'bot_product_stock_items',
+        query: `or=(created_at.gte.${since},updated_at.gte.${since},sold_at.gte.${since})`,
+      };
+
   const jobs: Job[] = [
     // Core / customer
     { table: 'bot_customers' },
@@ -71,10 +77,7 @@ async function runOnce() {
     { table: 'bot_products' },
     { table: 'bot_product_pricing' },
     { table: 'bot_product_sources' },
-    {
-      table: 'bot_product_stock_items',
-      query: `or=(created_at.gte.${since},updated_at.gte.${since},sold_at.gte.${since})`,
-    },
+    stockJob,
 
     // Orders
     { table: 'bot_orders' },
@@ -94,7 +97,7 @@ async function runOnce() {
     { table: 'bot_flash_sales' },
     { table: 'bot_broadcast_groups' },
     { table: 'bot_keyword_triggers' },
-    { table: 'bot_button_emojis' },
+    { table: 'bot_button_emojis', conflict: 'button_key' },
     { table: 'bot_custom_emoji_cache', conflict: 'emoji_id' },
     { table: 'telegram_bot_state' },
 
@@ -103,7 +106,7 @@ async function runOnce() {
     { table: 'customer_announcement_reads' },
 
     // Auth / roles
-    { table: 'user_roles' },
+    { table: 'user_roles', conflict: 'user_id,role' },
 
     // Email
     { table: 'email_send_state' },
@@ -111,6 +114,7 @@ async function runOnce() {
     { table: 'email_unsubscribe_tokens' },
     { table: 'suppressed_emails' },
   ];
+
 
   const results: any[] = [];
   const errors: any[] = [];
@@ -131,7 +135,9 @@ Deno.serve(async (req) => {
 
   const started = Date.now();
   try {
-    const result = await runOnce();
+    const url = new URL(req.url);
+    const fullStock = url.searchParams.get('full_stock') === '1';
+    const result = await runOnce(fullStock);
     const hasErrors = result.errors.length > 0;
     return new Response(
       JSON.stringify({ ok: !hasErrors, duration_ms: Date.now() - started, ...result }),
