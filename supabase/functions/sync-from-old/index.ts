@@ -135,7 +135,9 @@ Deno.serve(async (req) => {
 
   const started = Date.now();
   try {
-    const result = await runOnce();
+    const url = new URL(req.url);
+    const fullStock = url.searchParams.get('full_stock') === '1';
+    const result = await runOnce(fullStock);
     const hasErrors = result.errors.length > 0;
     return new Response(
       JSON.stringify({ ok: !hasErrors, duration_ms: Date.now() - started, ...result }),
