@@ -40,9 +40,23 @@ function prefetchMedia(url: string) {
 
 async function fetchEmojis(ids: string[]): Promise<Record<string, EmojiInfo>> {
   if (ids.length === 0) return {};
-  const { data, error } = await supabase.functions.invoke('get-custom-emojis', { body: { ids } });
-  if (error) throw error;
-  return (data as any)?.emojis || {};
+  try {
+    const { data, error } = await supabase.functions.invoke('get-custom-emojis', { body: { ids } });
+    if (!error) return (data as any)?.emojis || {};
+  } catch {
+    // Fall back to the migrated cache table while the edge function is deploying.
+  }
+
+  const { data: cached, error: cacheError } = await supabase
+    .from('bot_custom_emoji_cache')
+    .select('emoji_id, lottie_url, fallback, status')
+    .in('emoji_id', ids);
+  if (cacheError) throw cacheError;
+
+  return (cached || []).reduce<Record<string, EmojiInfo>>((acc, row) => {
+    if (row.status === 'ready') acc[row.emoji_id] = { url: row.lottie_url, fallback: row.fallback };
+    return acc;
+  }, {});
 }
 
 function warmAsset(info: EmojiInfo) {
