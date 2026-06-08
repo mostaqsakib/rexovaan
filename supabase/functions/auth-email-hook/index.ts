@@ -17,12 +17,12 @@ const corsHeaders = {
 }
 
 const EMAIL_SUBJECTS: Record<string, string> = {
-  signup: 'Confirm your email',
-  invite: "You've been invited",
-  magiclink: 'Your login link',
-  recovery: 'Reset your password',
-  email_change: 'Confirm your new email',
-  reauthentication: 'Your verification code',
+  signup: 'Confirm your Rexovaan Shoppie email',
+  invite: "You're invited to Rexovaan Shoppie",
+  magiclink: 'Your Rexovaan Shoppie login link',
+  recovery: 'Reset your Rexovaan Shoppie password',
+  email_change: 'Confirm your Rexovaan Shoppie email change',
+  reauthentication: 'Your Rexovaan Shoppie verification code',
 }
 
 // Template mapping
@@ -36,7 +36,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 }
 
 // Configuration
-const SITE_NAME = "rexovaanshop"
+const SITE_NAME = "Rexovaan Shoppie"
 const SENDER_DOMAIN = "notify.rexovaan.com"
 const ROOT_DOMAIN = "rexovaan.com"
 const FROM_DOMAIN = "rexovaan.com" // Domain shown in From address (may be root or sender subdomain)
