@@ -1,3 +1,7 @@
 project_id = "eygkdpfjrjwwbiackfpr"
-[functions.bootstrap-email-cron]
-verify_jwt = false
+
+[functions]
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.bootstrap-email-cron]
+    verify_jwt = false
