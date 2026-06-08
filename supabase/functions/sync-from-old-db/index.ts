@@ -28,7 +28,7 @@ const TABLES: { name: string; watermark: string; conflict?: string }[] = [
   { name: "bot_keyword_triggers", watermark: "created_at" },
   { name: "bot_notification_settings", watermark: "updated_at" },
   { name: "bot_button_emojis", watermark: "created_at" },
-  { name: "bot_custom_emoji_cache", watermark: "created_at" },
+  { name: "bot_custom_emoji_cache", watermark: "created_at", conflict: "emoji_id" },
   { name: "site_announcements", watermark: "created_at" },
   { name: "telegram_bot_state", watermark: "updated_at" },
 
@@ -93,11 +93,10 @@ async function fetchOldChanges(table: string, col: string, since: string) {
   return all;
 }
 
-async function upsertIntoNew(sb: any, table: string, rows: any[]) {
-  // Chunk to avoid request size limits
+async function upsertIntoNew(sb: any, table: string, rows: any[], conflict = "id") {
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500);
-    const { error } = await sb.from(table).upsert(chunk, { onConflict: "id" });
+    const { error } = await sb.from(table).upsert(chunk, { onConflict: conflict });
     if (error) throw new Error(`Upsert ${table}: ${error.message}`);
   }
 }
@@ -128,7 +127,7 @@ Deno.serve(async (req) => {
       try {
         const rows = await fetchOldChanges(t.name, t.watermark, since);
         if (rows.length) {
-          await upsertIntoNew(sb, t.name, rows);
+          await upsertIntoNew(sb, t.name, rows, t.conflict);
           const newMark = rows[rows.length - 1][t.watermark];
           await sb
             .from("sync_watermarks")
