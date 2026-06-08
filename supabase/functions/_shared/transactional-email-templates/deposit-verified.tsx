@@ -10,12 +10,17 @@ const SITE_NAME = 'Rexovaan Shoppie'
 
 interface DepositVerifiedProps {
   customerName?: string
-  amount?: number
+  amount?: number | string
   via?: string
   txnHash?: string
-  newBalance?: number
-  ltcAmount?: number
-  rate?: number
+  newBalance?: number | string
+  ltcAmount?: number | string
+  rate?: number | string
+}
+
+function formatNumber(value: number | string | undefined, digits = 2): string {
+  const amount = Number(value ?? 0)
+  return Number.isFinite(amount) ? amount.toFixed(digits) : Number(0).toFixed(digits)
 }
 
 const DepositVerifiedEmail = ({
@@ -29,7 +34,7 @@ const DepositVerifiedEmail = ({
 }: DepositVerifiedProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Your deposit of {amount.toFixed(2)} USDT has been verified</Preview>
+    <Preview>Your deposit of {formatNumber(amount)} USDT has been verified</Preview>
     <Body style={main}>
       <Container style={container}>
         <EmailLogo />
@@ -39,16 +44,16 @@ const DepositVerifiedEmail = ({
         </Text>
 
         <Section style={box}>
-          <Text style={meta}><strong>Amount:</strong> {amount.toFixed(2)} USDT</Text>
+          <Text style={meta}><strong>Amount:</strong> {formatNumber(amount)} USDT</Text>
           <Text style={meta}><strong>Via:</strong> {via}</Text>
-          {ltcAmount && rate ? (
+          {Number(ltcAmount) > 0 && Number(rate) > 0 ? (
             <>
-              <Text style={meta}><strong>Sent:</strong> {ltcAmount.toFixed(8)} LTC</Text>
-              <Text style={meta}><strong>Rate:</strong> 1 LTC = {rate.toFixed(2)} USDT</Text>
+              <Text style={meta}><strong>Sent:</strong> {formatNumber(ltcAmount, 8)} LTC</Text>
+              <Text style={meta}><strong>Rate:</strong> 1 LTC = {formatNumber(rate)} USDT</Text>
             </>
           ) : null}
           <Text style={meta}><strong>TxID:</strong> <span style={mono}>{txnHash}</span></Text>
-          <Text style={meta}><strong>New Balance:</strong> {newBalance.toFixed(2)} USDT</Text>
+          <Text style={meta}><strong>New Balance:</strong> {formatNumber(newBalance)} USDT</Text>
         </Section>
 
         <Hr style={hr} />
