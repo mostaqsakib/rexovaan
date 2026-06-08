@@ -93,11 +93,10 @@ async function fetchOldChanges(table: string, col: string, since: string) {
   return all;
 }
 
-async function upsertIntoNew(sb: any, table: string, rows: any[]) {
-  // Chunk to avoid request size limits
+async function upsertIntoNew(sb: any, table: string, rows: any[], conflict = "id") {
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500);
-    const { error } = await sb.from(table).upsert(chunk, { onConflict: "id" });
+    const { error } = await sb.from(table).upsert(chunk, { onConflict: conflict });
     if (error) throw new Error(`Upsert ${table}: ${error.message}`);
   }
 }
