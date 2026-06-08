@@ -19,28 +19,28 @@ const NEW_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // timestamp the table has.
 const TABLES: { name: string; watermark: string; conflict?: string }[] = [
   { name: "bot_settings", watermark: "updated_at" },
-  { name: "bot_products", watermark: "updated_at" },
+  { name: "bot_products", watermark: "created_at" },
   { name: "bot_product_sources", watermark: "updated_at" },
-  { name: "bot_product_pricing", watermark: "updated_at" },
-  { name: "bot_payment_methods", watermark: "updated_at" },
+  { name: "bot_product_pricing", watermark: "created_at" },
+  { name: "bot_payment_methods", watermark: "created_at" },
   { name: "bot_flash_sales", watermark: "updated_at" },
   { name: "bot_broadcast_groups", watermark: "updated_at" },
-  { name: "bot_keyword_triggers", watermark: "updated_at" },
+  { name: "bot_keyword_triggers", watermark: "created_at" },
   { name: "bot_notification_settings", watermark: "updated_at" },
-  { name: "bot_button_emojis", watermark: "updated_at" },
-  { name: "bot_custom_emoji_cache", watermark: "updated_at" },
-  { name: "site_announcements", watermark: "updated_at" },
+  { name: "bot_button_emojis", watermark: "created_at" },
+  { name: "bot_custom_emoji_cache", watermark: "created_at" },
+  { name: "site_announcements", watermark: "created_at" },
   { name: "telegram_bot_state", watermark: "updated_at" },
 
   { name: "bot_customers", watermark: "updated_at" },
   { name: "bot_customer_pricing", watermark: "updated_at" },
-  { name: "customer_announcement_reads", watermark: "created_at" },
+  { name: "customer_announcement_reads", watermark: "read_at" },
 
   { name: "bot_product_stock_items", watermark: "updated_at" },
 
   { name: "bot_orders", watermark: "created_at" },
-  { name: "bot_deposits", watermark: "updated_at" },
-  { name: "bot_withdrawals", watermark: "updated_at" },
+  { name: "bot_deposits", watermark: "created_at" },
+  { name: "bot_withdrawals", watermark: "created_at" },
   { name: "bot_balance_adjustments", watermark: "created_at" },
 
   { name: "bot_referrals", watermark: "created_at" },
