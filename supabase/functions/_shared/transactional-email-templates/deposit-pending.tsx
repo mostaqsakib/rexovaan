@@ -10,9 +10,14 @@ const SITE_NAME = 'Rexovaan Shoppie'
 
 interface DepositPendingProps {
   customerName?: string
-  amount?: number
+  amount?: number | string
   paymentMethod?: string
   txnHash?: string
+}
+
+function formatAmount(value: number | string | undefined): string {
+  const amount = Number(value ?? 0)
+  return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
 }
 
 const DepositPendingEmail = ({
@@ -23,7 +28,7 @@ const DepositPendingEmail = ({
 }: DepositPendingProps) => (
   <Html lang="en" dir="ltr">
     <Head />
-    <Preview>Your deposit of {amount.toFixed(2)} USDT is awaiting review</Preview>
+    <Preview>Your deposit of {formatAmount(amount)} USDT is awaiting review</Preview>
     <Body style={main}>
       <Container style={container}>
         <EmailLogo />
@@ -34,7 +39,7 @@ const DepositPendingEmail = ({
         </Text>
 
         <Section style={box}>
-          <Text style={meta}><strong>Claimed Amount:</strong> {amount.toFixed(2)} USDT</Text>
+          <Text style={meta}><strong>Claimed Amount:</strong> {formatAmount(amount)} USDT</Text>
           <Text style={meta}><strong>Payment Method:</strong> {paymentMethod}</Text>
           <Text style={meta}><strong>TxID:</strong> <span style={mono}>{txnHash}</span></Text>
           <Text style={meta}><strong>Status:</strong> Pending Manual Review</Text>
