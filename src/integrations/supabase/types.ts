@@ -1234,6 +1234,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_watermarks: {
+        Row: {
+          last_error: string | null
+          last_run_at: string | null
+          last_status: string | null
+          last_value: string
+          rows_synced_total: number
+          table_name: string
+          updated_at: string
+          watermark_column: string
+        }
+        Insert: {
+          last_error?: string | null
+          last_run_at?: string | null
+          last_status?: string | null
+          last_value?: string
+          rows_synced_total?: number
+          table_name: string
+          updated_at?: string
+          watermark_column: string
+        }
+        Update: {
+          last_error?: string | null
+          last_run_at?: string | null
+          last_status?: string | null
+          last_value?: string
+          rows_synced_total?: number
+          table_name?: string
+          updated_at?: string
+          watermark_column?: string
+        }
+        Relationships: []
+      }
       telegram_bot_state: {
         Row: {
           id: number
