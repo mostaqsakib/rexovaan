@@ -28,7 +28,7 @@ const TABLES: { name: string; watermark: string; conflict?: string }[] = [
   { name: "bot_keyword_triggers", watermark: "created_at" },
   { name: "bot_notification_settings", watermark: "updated_at" },
   { name: "bot_button_emojis", watermark: "created_at" },
-  { name: "bot_custom_emoji_cache", watermark: "created_at" },
+  { name: "bot_custom_emoji_cache", watermark: "created_at", conflict: "emoji_id" },
   { name: "site_announcements", watermark: "created_at" },
   { name: "telegram_bot_state", watermark: "updated_at" },
 
