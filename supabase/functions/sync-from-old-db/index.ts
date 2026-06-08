@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
       try {
         const rows = await fetchOldChanges(t.name, t.watermark, since);
         if (rows.length) {
-          await upsertIntoNew(sb, t.name, rows);
+          await upsertIntoNew(sb, t.name, rows, t.conflict);
           const newMark = rows[rows.length - 1][t.watermark];
           await sb
             .from("sync_watermarks")
