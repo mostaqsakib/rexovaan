@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     const { initData } = await req.json();
     if (!initData) return new Response(JSON.stringify({ error: 'missing initData' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || Deno.env.get('TELEGRAM_API_KEY');
+    const botToken = Deno.env.get('BOT_TOKEN') || Deno.env.get('TELEGRAM_BOT_TOKEN') || Deno.env.get('TELEGRAM_API_KEY_1') || Deno.env.get('TELEGRAM_API_KEY');
     if (!botToken) return new Response(JSON.stringify({ error: 'bot token missing' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     const verified = await verifyInitData(initData, botToken);
