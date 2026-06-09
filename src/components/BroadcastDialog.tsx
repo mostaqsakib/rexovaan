@@ -93,11 +93,16 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
         mediaUrl = urlData.publicUrl;
       }
 
+      const cleanButtons = productButtons
+        .filter(b => b.productId)
+        .map(b => ({ productId: b.productId, label: b.label.trim() }));
+
       const { data, error } = await supabase.functions.invoke('broadcast-message', {
         body: {
           message: message.trim() || undefined,
           mediaUrl,
           mediaType,
+          productButtons: cleanButtons,
         },
       });
       if (error) throw error;
