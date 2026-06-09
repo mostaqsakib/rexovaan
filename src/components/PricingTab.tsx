@@ -236,13 +236,13 @@ const PricingTab = ({ products: propProducts }: PricingTabProps) => {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-x-auto">
               {productTiers.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-4 text-center">
                   No pricing set. Add a tier to set prices for this product.
                 </p>
               ) : (
-                <Table>
+                <Table className="min-w-[520px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[140px]">Min Qty</TableHead>
