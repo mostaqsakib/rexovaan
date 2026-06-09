@@ -156,9 +156,9 @@ const Index = () => {
 
   return (
     <SidebarProvider defaultOpen>
-      <div className="min-h-screen flex w-full">
+      <div className="flex min-h-screen w-full min-w-0 overflow-x-hidden">
         <AppSidebar activeTab={activeTab} onChange={setActiveTab} pendingCount={pendingCount} />
-        <SidebarInset className="bg-transparent">
+        <SidebarInset className="w-full min-w-0 bg-transparent">
           <Header
             onAddProduct={() => setDialogOpen(true)}
             onRefresh={handleRefresh}
@@ -166,7 +166,7 @@ const Index = () => {
             telegramUser={isTelegramWebApp ? user : null}
             title={TAB_TITLES[activeTab] || 'Console'}
           />
-          <main className="flex-1 min-w-0 px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 max-w-[1400px] w-full mx-auto overflow-x-auto">
+          <main className="w-full min-w-0 max-w-[1400px] flex-1 overflow-x-auto overscroll-x-contain px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
             {activeTab === 'web-orders' && <WebOrdersTab />}
             {activeTab === 'products' && <ProductsTab products={products} onRemove={removeProduct} onReorder={(reordered) => useProductStore.setState({ products: reordered })} onStockChanged={(productId) => void refreshStock(productId)} />}
             {activeTab === 'stock' && <ProductsTab products={products} onRemove={removeProduct} onStockChanged={(productId) => void refreshStock(productId)} stockOnly />}
