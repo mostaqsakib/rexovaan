@@ -171,8 +171,18 @@ Deno.serve(async (req) => {
 
     await admin.from('bot_orders').update({ details, delivered_at: new Date().toISOString() }).eq('id', orderRow.id);
 
-    // Fire-and-forget: notify Web Sales Feed group (anonymous)
-    notifyWebSale(admin, product, quantity).catch((e) => console.error('[WebSalesFeed]', e?.message || e));
+    // Background task: notify Web Sales Feed group (anonymous).
+    // Must use EdgeRuntime.waitUntil — bare promises get killed when the isolate
+    // shuts down right after the response is sent (EarlyDrop).
+    const notifyPromise = notifyWebSale(admin, product, quantity)
+      .catch((e) => console.error('[WebSalesFeed]', e?.message || e));
+    // @ts-ignore - EdgeRuntime is provided by Supabase Edge Runtime
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(notifyPromise);
+    } else {
+      await notifyPromise;
+    }
 
     return new Response(JSON.stringify({ orderId: orderRow.id, details, totalPrice, unitPrice }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
