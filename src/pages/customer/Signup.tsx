@@ -29,14 +29,9 @@ export default function Signup() {
     });
     if (error) { setLoading(false); toast.error(error.message); return; }
 
-    // Create or link bot_customers row
-    if (data.user) {
-      await supabase.from('bot_customers').insert({
-        chat_id: -Math.floor(Math.random() * 1e12), // synthetic negative chat_id for web-only users
-        first_name: name || null,
-        auth_user_id: data.user.id,
-      });
-    }
+    // bot_customers row is created automatically by a server-side trigger
+    // on auth.users insert (handle_new_auth_user_create_customer).
+
     setLoading(false);
     if (data.session) { toast.success('Account created'); navigate(next, { replace: true }); }
     else toast.success('Check your email to verify your account');
