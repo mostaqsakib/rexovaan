@@ -179,7 +179,7 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
   const failureSamples: unknown[] = [];
   for (let i = 0; i < recipients.length; i += 25) {
     const batch = recipients.slice(i, i + 25);
-    const results = await Promise.allSettled(batch.map((recipient) => sendTelegramMessage(recipient.chat_id, message, recipient.isGroup ? groupKeyboard : customerKeyboard, lovableApiKey, telegramApiKey)));
+    const results = await Promise.allSettled(batch.map((recipient) => sendTelegramMessage(recipient.chat_id, message, recipient.isGroup ? groupKeyboard : customerKeyboard, botToken)));
     for (const result of results) {
       if (result.status === "fulfilled" && result.value.ok) sent += 1;
       else {
