@@ -1384,8 +1384,7 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
 
 async function showAdminMenu(chatId, emojiMap, editMessageId) {
   const launchToken = await signAdminLaunchToken(chatId);
-  const webAppUrl = `https://digitalizstockmanager.lovable.app/admin?admin_launch=${encodeURIComponent(launchToken)}`;
-  const newWebAppUrl = `https://www.rexovaan.com/admin?admin_launch=${encodeURIComponent(launchToken)}`;
+  const webAppUrl = `https://www.rexovaan.com/admin?admin_launch=${encodeURIComponent(launchToken)}`;
   const [depRes, wdRes, pendDelRes] = await Promise.all([
     supabase.from("bot_deposits").select("id", { count: "exact", head: true }).eq("status", "pending"),
     supabase.from("bot_withdrawals").select("id", { count: "exact", head: true }).eq("status", "pending"),
@@ -1407,7 +1406,6 @@ async function showAdminMenu(chatId, emojiMap, editMessageId) {
     [{ text: `✏️ Edit Messages`, callback_data: "adm_editmsg" }, { text: `📋 Price List`, callback_data: "adm_pricelist" }],
     [{ text: maintenanceMode ? "🟢 Maintenance OFF" : "🔴 Maintenance ON", callback_data: "adm_maintenance" }],
     [applyEmoji({ text: "🖥️ Open Web Dashboard", web_app: { url: webAppUrl } }, "admin_panel", emojiMap)],
-    [{ text: "🆕 Open New Site Dashboard", web_app: { url: newWebAppUrl } }],
   ];
   await editOrSend(chatId, editMessageId, `🔐 <b>Admin Panel</b>\n\nSelect an option:`, { inline_keyboard: buttons });
 }
