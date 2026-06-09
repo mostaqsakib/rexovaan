@@ -202,7 +202,7 @@ const DepositsTab = () => {
                 <button
                   type="button"
                   onClick={() => setExpanded(isOpen ? null : d.id)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                  className="flex w-full items-center gap-2 flex-wrap px-4 py-3 text-left transition-colors hover:bg-muted/50"
                 >
                   {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   <span className="text-sm font-mono font-semibold">${Number(d.amount).toFixed(2)}</span>
@@ -214,9 +214,9 @@ const DepositsTab = () => {
                     {src}
                   </Badge>
                   <Badge variant="outline" className={`text-[10px] uppercase ${statusClass}`}>{d.status}</Badge>
-                  <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="ml-auto flex items-center gap-2 flex-wrap justify-end text-xs text-muted-foreground">
                     <span className="hidden sm:inline">{custLabel}</span>
-                    <span>{fmtDate(d.created_at)}</span>
+                    <span className="whitespace-nowrap">{fmtDate(d.created_at)}</span>
                   </span>
                 </button>
 
