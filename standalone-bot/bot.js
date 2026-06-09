@@ -5703,7 +5703,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       msg_withdraw: `<code>{balance}</code> — Current balance`,
       msg_referral: `<code>{link}</code> — Referral link\n<code>{ref_24h}</code> — Referrals in 24h\n<code>{ref_7d}</code> — Referrals in 7 days\n<code>{ref_total}</code> — Total referrals\n<code>{earned}</code> — Total earned\n<code>{available}</code> — Available balance\n<code>{transferred}</code> — Transferred amount\n<code>{commission}</code> — Commission %\n<code>{bonus}</code> — First purchase bonus $`,
       msg_notifications: `No placeholders — static message`,
-      msg_stock_alert: `<code>{product}</code> — Product name\n<code>{added}</code> — New stock count\n<code>{stock}</code> — Total available\n<code>{price}</code> — Product price`,
+      msg_stock_alert: `<code>{product}</code> — Product name\n<code>{added}</code> — New stock count\n<code>{stock}</code> — Total available\n<code>{price}</code> — Product price\n<code>{bulk_pricing}</code> — Bulk pricing tiers block (empty if none)`,
       msg_new_product: `<code>{product}</code> — Product name\n<code>{stock}</code> — Available stock\n<code>{price}</code> — Product price\n<code>{description}</code> — Product description`,
       msg_price_up: `<code>{product}</code> — Product name\n<code>{old_price}</code> — Previous price\n<code>{new_price}</code> — New higher price\n<code>{bulk_pricing}</code> — Bulk pricing tiers block (empty if none)`,
       msg_price_down: `<code>{product}</code> — Product name\n<code>{old_price}</code> — Previous price\n<code>{new_price}</code> — New lower price\n<code>{bulk_pricing}</code> — Bulk pricing tiers block (empty if none)`,
