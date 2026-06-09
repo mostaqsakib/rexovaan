@@ -6807,11 +6807,13 @@ async function handleCallback(callbackQuery, emojiMap) {
     if (product.custom_emoji_id) {
       productDisplay = `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji> ${product.name}`;
     }
+    const bulkPricingNew = await formatBulkPricingBlock(product.id);
     const broadcastMsg = replacePlaceholders(newProductTemplate, { 
       product: productDisplay, 
       stock: String(totalStock), 
       price: Number(product.price).toFixed(2),
-      description: product.description || ""
+      description: product.description || "",
+      bulk_pricing: bulkPricingNew
     });
     
     const botUser = await getBotUsername();
