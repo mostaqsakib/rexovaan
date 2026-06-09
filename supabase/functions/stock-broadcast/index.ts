@@ -75,17 +75,21 @@ function standardKeyboard(replyMarkup: unknown) {
   };
 }
 
-async function sendTelegramMessage(chatId: number, text: string, replyMarkup: unknown, lovableApiKey: string, telegramApiKey: string) {
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup: unknown, botToken: string) {
   const body: Record<string, unknown> = { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true };
   if (replyMarkup) body.reply_markup = replyMarkup;
 
-  let res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  let data = await res.json().catch(() => ({}));
+  const post = async () => {
+    const r = await fetch(tgUrl(botToken, "sendMessage"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    return { r, d };
+  };
 
+  let { r: res, d: data } = await post();
   const failed = () => !res.ok || data?.ok === false;
   const isEmojiError = () => {
     const desc = String(data?.description || "").toLowerCase();
@@ -94,12 +98,7 @@ async function sendTelegramMessage(chatId: number, text: string, replyMarkup: un
 
   if (failed() && isEmojiError() && text.includes("<tg-emoji")) {
     body.text = stripCustomEmoji(text);
-    res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    data = await res.json().catch(() => ({}));
+    ({ r: res, d: data } = await post());
   }
 
   if (failed()) {
@@ -107,23 +106,13 @@ async function sendTelegramMessage(chatId: number, text: string, replyMarkup: un
     if (plainText) {
       body.text = plainText;
       delete body.parse_mode;
-      res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      data = await res.json().catch(() => ({}));
+      ({ r: res, d: data } = await post());
     }
   }
 
   if (failed() && replyMarkup) {
     body.reply_markup = standardKeyboard(replyMarkup);
-    res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    data = await res.json().catch(() => ({}));
+    ({ r: res, d: data } = await post());
   }
 
   return { ok: res.ok && data?.ok !== false, data };
