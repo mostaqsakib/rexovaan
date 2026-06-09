@@ -159,11 +159,43 @@ function replacePlaceholder(html, key, value) {
   return html.replace(regex, value);
 }
 
+function stripEmptyPlaceholderLine(html, key) {
+  const lines = String(html || "").split("\n");
+  const placeholderRe = new RegExp(`\\{${key}\\}`, "g");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!placeholderRe.test(line)) { out.push(line); continue; }
+    placeholderRe.lastIndex = 0;
+    const stripped = line.replace(placeholderRe, "").replace(/<[^>]+>/g, "").trim();
+    if (stripped !== "") {
+      out.push(line.replace(placeholderRe, ""));
+      continue;
+    }
+    // Drop preceding emoji-only / blank line(s)
+    while (out.length > 0) {
+      const prev = out[out.length - 1];
+      const prevStripped = prev
+        .replace(/<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>/g, "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/[\u200d\ufe0f]/g, "")
+        .replace(/(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})+/gu, "")
+        .trim();
+      if (prevStripped === "") { out.pop(); continue; }
+      break;
+    }
+    if (i + 1 < lines.length && lines[i + 1].trim() === "") i++;
+  }
+  return out.join("\n");
+}
+
 function replacePlaceholders(html, replacements) {
   let result = prepareTelegramHtml(html);
   for (const [placeholder, value] of Object.entries(replacements)) {
     const key = placeholder.replace(/^\{|\}$/g, '');
-    result = replacePlaceholder(result, key, String(value));
+    const strValue = String(value ?? "");
+    if (strValue === "") result = stripEmptyPlaceholderLine(result, key);
+    result = replacePlaceholder(result, key, strValue);
   }
   return prepareTelegramHtml(result);
 }
