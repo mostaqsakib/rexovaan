@@ -5783,8 +5783,9 @@ async function handleCallback(callbackQuery, emojiMap) {
     const isUp = newPrice > oldPrice;
     await fetchPageMsgs();
     const tplKey = isUp ? "msg_price_up" : "msg_price_down";
-    const defaultUp = `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>${oldPrice.toFixed(2)} USDT</s>\n💎 New: <b>{new_price} USDT</b>\n\n<i>Grab it before it goes higher!</i>`;
-    const defaultDown = `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>${oldPrice.toFixed(2)} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>\n\n<i>Limited time offer — buy now!</i>`;
+    const bulkPricing = await formatBulkPricingBlock(productId);
+    const defaultUp = `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>${oldPrice.toFixed(2)} USDT</s>\n💎 New: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Grab it before it goes higher!</i>`;
+    const defaultDown = `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>${oldPrice.toFixed(2)} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Limited time offer — buy now!</i>`;
     let tpl = cachedPageMsgs[tplKey] || (isUp ? defaultUp : defaultDown);
     const productIcon = product.custom_emoji_id ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji> ` : "";
     if (productIcon) tpl = tpl.replace(/📦\s*(<[^>]+>)?\s*\{product\}/g, "$1{product}");
@@ -5793,6 +5794,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       old_price: oldPrice.toFixed(2),
       new_price: newPrice.toFixed(2),
       price: newPrice.toFixed(2),
+      bulk_pricing: bulkPricing,
     });
     const botUser = await getBotUsername();
     const code = product.short_code || product.id.slice(0, 4).toUpperCase();
