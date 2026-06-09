@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Send, Megaphone, ImagePlus, X, Film, Globe } from 'lucide-react';
+import { Loader2, Send, Megaphone, ImagePlus, X, Film, Globe, Plus, MousePointerClick } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -12,6 +12,9 @@ interface BroadcastDialogProps {
   open: boolean;
   onClose: () => void;
 }
+
+interface ProductOpt { id: string; name: string }
+interface ProductBtn { productId: string; label: string }
 
 const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
   const [message, setMessage] = useState('');
@@ -21,7 +24,21 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
   const [alsoOnSite, setAlsoOnSite] = useState(true);
   const [siteTitle, setSiteTitle] = useState('');
   const [siteSeverity, setSiteSeverity] = useState<'info' | 'success' | 'sale' | 'warning'>('info');
+  const [products, setProducts] = useState<ProductOpt[]>([]);
+  const [productButtons, setProductButtons] = useState<ProductBtn[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    supabase.from('bot_products').select('id,name').eq('is_active', true).order('name')
+      .then(({ data }) => setProducts((data || []) as ProductOpt[]));
+  }, [open]);
+
+  const addButton = () => setProductButtons(b => [...b, { productId: '', label: '' }]);
+  const updateButton = (i: number, patch: Partial<ProductBtn>) =>
+    setProductButtons(b => b.map((x, idx) => idx === i ? { ...x, ...patch } : x));
+  const removeButton = (i: number) =>
+    setProductButtons(b => b.filter((_, idx) => idx !== i));
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,11 +93,16 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
         mediaUrl = urlData.publicUrl;
       }
 
+      const cleanButtons = productButtons
+        .filter(b => b.productId)
+        .map(b => ({ productId: b.productId, label: b.label.trim() }));
+
       const { data, error } = await supabase.functions.invoke('broadcast-message', {
         body: {
           message: message.trim() || undefined,
           mediaUrl,
           mediaType,
+          productButtons: cleanButtons,
         },
       });
       if (error) throw error;
@@ -112,6 +134,7 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
       toast.success(`📢 Broadcast sent! ${data.sent}/${data.total} delivered${data.failed > 0 ? `, ${data.failed} failed` : ''}`);
       setMessage('');
       setSiteTitle('');
+      setProductButtons([]);
       removeMedia();
       onClose();
     } catch (err: any) {
@@ -186,6 +209,48 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
               )}
               {mediaFile ? 'Change' : 'Add Media'}
             </Button>
+          </div>
+
+          {/* Product Buttons */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <MousePointerClick className="h-4 w-4 text-primary" />
+                Product Buttons ({productButtons.length})
+              </label>
+              <Button type="button" variant="outline" size="sm" onClick={addButton} className="gap-1.5 h-7">
+                <Plus className="h-3.5 w-3.5" /> Add
+              </Button>
+            </div>
+            {productButtons.length === 0 && (
+              <p className="text-xs text-muted-foreground">Product select korle oi product er Buy button broadcast er sathe jabe.</p>
+            )}
+            {productButtons.map((b, i) => {
+              const selected = products.find(p => p.id === b.productId);
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    value={b.productId}
+                    onChange={e => updateButton(i, { productId: e.target.value })}
+                    className="h-9 flex-1 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="">— Select product —</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <Input
+                    value={b.label}
+                    onChange={e => updateButton(i, { label: e.target.value })}
+                    placeholder={selected ? `Buy ${selected.name}` : 'Button label (optional)'}
+                    className="h-9 flex-1 min-w-0"
+                  />
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeButton(i)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
 
           {/* Also post on site */}
