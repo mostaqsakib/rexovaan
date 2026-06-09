@@ -279,6 +279,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   })
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const unsubscribeToken = await getOrCreateUnsubscribeToken(supabase, recipientEmail)
   const messageId = crypto.randomUUID()
 
   await supabase.from('email_send_log').insert({
@@ -301,6 +302,7 @@ async function handleWebhook(req: Request): Promise<Response> {
       purpose: 'transactional',
       label: emailType,
       idempotency_key: `${emailType}:${recipientEmail}:${emailData.token_hash || emailData.token || messageId}`,
+      unsubscribe_token: unsubscribeToken,
       queued_at: new Date().toISOString(),
     },
   })
