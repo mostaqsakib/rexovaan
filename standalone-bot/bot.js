@@ -168,6 +168,28 @@ function replacePlaceholders(html, replacements) {
   return prepareTelegramHtml(result);
 }
 
+async function formatBulkPricingBlock(productId) {
+  try {
+    const { data: tiers } = await supabase
+      .from("bot_product_pricing")
+      .select("min_quantity, max_quantity, price")
+      .eq("product_id", productId)
+      .order("min_quantity");
+    if (!tiers || tiers.length < 2) return "";
+    const lines = tiers.map((t) => {
+      const range = t.max_quantity && t.max_quantity > 0
+        ? `${t.min_quantity}-${t.max_quantity}`
+        : `${t.min_quantity}+`;
+      return `• <b>${range}</b> pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`;
+    });
+    return `\n\n📦 <b>Bulk Pricing:</b>\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
+
+
 async function getWelcomeMsg(customerName) {
   await fetchPageMsgs();
   let msg = normalizeTelegramHtml(cachedPageMsgs["welcome_message"] || cachedWelcomeMsg);
