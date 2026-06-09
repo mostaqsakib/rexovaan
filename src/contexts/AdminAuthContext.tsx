@@ -63,7 +63,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<TelegramUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
 
-  const isTelegramWebApp = !!(window.Telegram?.WebApp?.initData && window.Telegram.WebApp.initData.length > 0);
+  // A Telegram launch is identified by the admin_launch query param (signed by the bot)
+  // OR by the Telegram WebApp SDK being available. We check the query param synchronously
+  // because the SDK script is `defer` and may not be ready yet at first render.
+  const launchToken = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('admin_launch')
+    : null;
+  const isTelegramWebApp = !!launchToken || !!(typeof window !== 'undefined' && window.Telegram?.WebApp?.initData && window.Telegram.WebApp.initData.length > 0);
 
   useEffect(() => {
     let mounted = true;
@@ -84,16 +90,24 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       setTimeout(() => { void verify(sess); }, 0);
     });
 
-    const bootstrap = async () => {
-      // Try Telegram WebApp first — exchange initData for a Supabase session
-      if (isTelegramWebApp) {
-        const tg = window.Telegram!.WebApp!;
-        try { tg.ready(); tg.expand(); } catch {}
+    const waitForTelegramSdk = async (timeoutMs = 2500) => {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        if (window.Telegram?.WebApp?.initData) return window.Telegram.WebApp;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return window.Telegram?.WebApp || null;
+    };
 
-        const launchToken = new URLSearchParams(window.location.search).get('admin_launch');
+    const bootstrap = async () => {
+      // Try Telegram WebApp first — exchange initData / launchToken for a Supabase session
+      if (isTelegramWebApp) {
+        const tg = await waitForTelegramSdk();
+        try { tg?.ready(); tg?.expand(); } catch {}
+
         try {
           const { data, error } = await supabase.functions.invoke('telegram-auth', {
-            body: { initData: tg.initData, launchToken },
+            body: { initData: tg?.initData || '', launchToken },
           });
           if (!error && data?.authorized && data.token_hash && data.email) {
             const { data: verifyData } = await supabase.auth.verifyOtp({
@@ -129,7 +143,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
     void bootstrap();
     return () => { mounted = false; sub.subscription.unsubscribe(); };
-  }, [isTelegramWebApp]);
+  }, [isTelegramWebApp, launchToken]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
