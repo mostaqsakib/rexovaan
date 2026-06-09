@@ -5402,23 +5402,32 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
-  if ((data === "adm_products" || data.startsWith("adm_products_p")) && isAdmin(chatId)) {
+  if ((data === "adm_products" || data.startsWith("adm_products_p") || data === "adm_products_all" || data.startsWith("adm_products_all_p")) && isAdmin(chatId)) {
     const PAGE_SIZE = 8;
+    const showAll = data === "adm_products_all" || data.startsWith("adm_products_all_p");
+    const pagePrefix = showAll ? "adm_products_all_p" : "adm_products_p";
     let page = 0;
-    if (data.startsWith("adm_products_p")) {
-      const parsed = parseInt(data.replace("adm_products_p", ""), 10);
+    if (data.startsWith(pagePrefix)) {
+      const parsed = parseInt(data.replace(pagePrefix, ""), 10);
       if (!isNaN(parsed) && parsed >= 0) page = parsed;
     }
-    const { data: products } = await supabase.from("bot_products").select("*").order("sort_order");
+    const { data: allProducts } = await supabase.from("bot_products").select("*").order("sort_order");
+    const products = showAll ? (allProducts || []) : (allProducts || []).filter((p) => p.is_active);
+    const disabledCount = (allProducts || []).filter((p) => !p.is_active).length;
     if (!products || products.length === 0) {
-      await editOrSend(chatId, msgId, "📦 No products yet.", { inline_keyboard: [[{ text: "🆕 Add Stock Product", callback_data: "padd_stock" }, { text: "✋ Add Manual", callback_data: "padd_manual" }], [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+      const emptyButtons = [];
+      if (!showAll && disabledCount > 0) emptyButtons.push([{ text: `👁️ Show disabled (${disabledCount})`, callback_data: "adm_products_all" }]);
+      emptyButtons.push([{ text: "🆕 Add Stock Product", callback_data: "padd_stock" }, { text: "✋ Add Manual", callback_data: "padd_manual" }]);
+      emptyButtons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
+      await editOrSend(chatId, msgId, "📦 No active products.", { inline_keyboard: emptyButtons });
       return;
     }
     const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
     if (page >= totalPages) page = totalPages - 1;
     const startIdx = page * PAGE_SIZE;
     const endIdx = Math.min(startIdx + PAGE_SIZE, products.length);
-    let msg = `📦 <b>Products (${products.length})</b> — Page ${page + 1}/${totalPages}\n\n`;
+    const header = showAll ? `📦 <b>Products (${products.length}, all)</b>` : `📦 <b>Products (${products.length} active)</b>`;
+    let msg = `${header} — Page ${page + 1}/${totalPages}\n\n`;
     const buttons = [];
     for (let idx = startIdx; idx < endIdx; idx++) {
       const p = products[idx];
@@ -5434,10 +5443,15 @@ async function handleCallback(callbackQuery, emojiMap) {
     }
     if (totalPages > 1) {
       const nav = [];
-      if (page > 0) nav.push({ text: "◀️ Prev", callback_data: `adm_products_p${page - 1}` });
+      if (page > 0) nav.push({ text: "◀️ Prev", callback_data: `${pagePrefix}${page - 1}` });
       nav.push({ text: `${page + 1}/${totalPages}`, callback_data: "noop" });
-      if (page < totalPages - 1) nav.push({ text: "Next ▶️", callback_data: `adm_products_p${page + 1}` });
+      if (page < totalPages - 1) nav.push({ text: "Next ▶️", callback_data: `${pagePrefix}${page + 1}` });
       buttons.push(nav);
+    }
+    if (showAll) {
+      buttons.push([{ text: "🙈 Hide disabled", callback_data: "adm_products" }]);
+    } else if (disabledCount > 0) {
+      buttons.push([{ text: `👁️ Show disabled (${disabledCount})`, callback_data: "adm_products_all" }]);
     }
     buttons.push([{ text: "🆕 Add Stock Product", callback_data: "padd_stock" }, { text: "✋ Add Manual", callback_data: "padd_manual" }]);
     buttons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
