@@ -5021,7 +5021,8 @@ async function handleMessage(message, emojiMap) {
     await fetchPageMsgs();
     const stockAlertTemplate = cachedPageMsgs["msg_stock_alert"] || `${alertIcon} <b>{added} new stock added for {product}!</b>\n\n📊 Available: <b>{stock}</b> items\n💰 Price: <b>{price} USDT</b>`;
     const productIconTpl = product.custom_emoji_id ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji> ` : "";
-    const broadcastMsg = replacePlaceholders(stockAlertTemplate, { product: `${productIconTpl}${product.name}`, added: String(addedCount), stock: String(totalStock), price: Number(product.price).toFixed(2) });
+    const bulkPricingStock = await formatBulkPricingBlock(productId);
+    const broadcastMsg = replacePlaceholders(stockAlertTemplate, { product: `${productIconTpl}${product.name}`, added: String(addedCount), stock: String(totalStock), price: Number(product.price).toFixed(2), bulk_pricing: bulkPricingStock });
     const botUser = await getBotUsername();
     const code = product.short_code || product.id.slice(0, 4).toUpperCase();
     const buyBtn = buyNowButton({ text: `Buy ${product.name}`, url: `https://t.me/${botUser}?start=p_${code}` }, emojiMap);
