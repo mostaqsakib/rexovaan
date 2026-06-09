@@ -186,9 +186,9 @@ const WebOrdersTab = () => {
                     {src}
                   </Badge>
                   <Badge variant="outline" className="text-[10px] uppercase">{o.status}</Badge>
-                  <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="ml-auto flex items-center gap-2 flex-wrap justify-end text-xs text-muted-foreground">
                     <span className="hidden sm:inline">{custLabel}</span>
-                    <span>{fmtDate(o.created_at)}</span>
+                    <span className="whitespace-nowrap">{fmtDate(o.created_at)}</span>
                   </span>
                 </button>
 
