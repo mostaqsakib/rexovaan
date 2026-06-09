@@ -134,6 +134,7 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
       toast.success(`📢 Broadcast sent! ${data.sent}/${data.total} delivered${data.failed > 0 ? `, ${data.failed} failed` : ''}`);
       setMessage('');
       setSiteTitle('');
+      setProductButtons([]);
       removeMedia();
       onClose();
     } catch (err: any) {
