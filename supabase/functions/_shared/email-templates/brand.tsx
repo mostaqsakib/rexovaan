@@ -5,7 +5,7 @@ import { Img, Section, Text } from 'npm:@react-email/components@0.0.22'
 
 export const SHOP_NAME = 'Rexovaan Shoppie'
 export const SITE_URL = 'https://rexovaan.com'
-export const LOGO_URL = 'https://mxcuakzztajvkgtsocln.supabase.co/storage/v1/object/public/site-assets/logo-1779634439274.png'
+export const LOGO_URL = 'https://eygkdpfjrjwwbiackfpr.supabase.co/storage/v1/object/public/site-assets/logo-1779634439274.png'
 
 export const BrandHeader = () => (
   <Section style={brandHeader}>
