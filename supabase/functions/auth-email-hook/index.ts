@@ -1,8 +1,7 @@
 import * as React from 'npm:react@18.3.1'
 import { renderAsync } from 'npm:@react-email/components@0.0.22'
-import { parseEmailWebhookPayload } from 'npm:@lovable.dev/email-js'
-import { WebhookError, verifyWebhookRequest } from 'npm:@lovable.dev/webhooks-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0'
 import { SignupEmail } from '../_shared/email-templates/signup.tsx'
 import { InviteEmail } from '../_shared/email-templates/invite.tsx'
 import { MagicLinkEmail } from '../_shared/email-templates/magic-link.tsx'
@@ -78,6 +77,44 @@ const SAMPLE_DATA: Record<string, object> = {
   reauthentication: {
     token: '123456',
   },
+}
+
+type SupabaseAuthHookPayload = {
+  user?: {
+    email?: string
+    new_email?: string
+  }
+  email_data?: {
+    token?: string
+    token_hash?: string
+    token_new?: string
+    token_hash_new?: string
+    redirect_to?: string
+    email_action_type?: string
+    old_email?: string
+  }
+}
+
+function cleanHookSecret(secret: string): string {
+  return secret.replace(/^v1,whsec_/, '')
+}
+
+function getConfirmationUrl(actionType: string, tokenHash?: string, redirectTo?: string): string {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || Deno.env.get('NEW_SUPABASE_URL')
+  if (!supabaseUrl || !tokenHash) {
+    return redirectTo || `https://${ROOT_DOMAIN}`
+  }
+
+  const params = new URLSearchParams({
+    token: tokenHash,
+    type: actionType,
+  })
+
+  if (redirectTo) {
+    params.set('redirect_to', redirectTo)
+  }
+
+  return `${supabaseUrl}/auth/v1/verify?${params.toString()}`
 }
 
 // Preview endpoint handler - returns rendered HTML without sending email
