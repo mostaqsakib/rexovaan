@@ -179,6 +179,10 @@ const PricingTab = ({ products: propProducts }: PricingTabProps) => {
         }
       }
       await supabase.from('bot_products').update({ price: basePrice }).eq('id', productId);
+      // Sync price into global product store so Stock page reflects the update
+      useProductStore.setState((state) => ({
+        products: state.products.map((p) => (p.id === productId ? { ...p, price: basePrice } : p)),
+      }));
       toast.success('Pricing saved!');
       await fetchAll();
     }
