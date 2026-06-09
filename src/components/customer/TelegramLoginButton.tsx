@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+// NOTE: keep effect deps minimal so the widget script does not remount on parent re-renders
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
@@ -25,6 +26,10 @@ export default function TelegramLoginButton({ onSuccess }: Props) {
     });
   }, []);
 
+  // Always-fresh ref to onSuccess so the widget effect doesn't depend on it
+  const onSuccessRef = useRef(onSuccess);
+  useEffect(() => { onSuccessRef.current = onSuccess; }, [onSuccess]);
+
   useEffect(() => {
     if (!botUsername || !containerRef.current) return;
 
@@ -40,7 +45,7 @@ export default function TelegramLoginButton({ onSuccess }: Props) {
           const { error: verifyErr } = await supabase.auth.verifyOtp({ token_hash: token, type: type as any });
           if (verifyErr) throw verifyErr;
           toast.success('Signed in with Telegram');
-          onSuccess?.();
+          onSuccessRef.current?.();
         }
       } catch (e: any) {
         toast.error(e?.message || 'Telegram sign-in failed');
@@ -59,7 +64,7 @@ export default function TelegramLoginButton({ onSuccess }: Props) {
     s.setAttribute('data-onauth', 'onTelegramAuth(user)');
     s.setAttribute('data-request-access', 'write');
     containerRef.current.appendChild(s);
-  }, [botUsername, onSuccess]);
+  }, [botUsername]);
 
   if (!botUsername) {
     return <div className="text-xs text-muted-foreground text-center">Loading Telegram login…</div>;
