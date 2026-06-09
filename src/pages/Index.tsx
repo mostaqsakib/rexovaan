@@ -166,7 +166,7 @@ const Index = () => {
             telegramUser={isTelegramWebApp ? user : null}
             title={TAB_TITLES[activeTab] || 'Console'}
           />
-          <main className="flex-1 min-w-0 px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 max-w-[1400px] w-full mx-auto">
+          <main className="flex-1 min-w-0 px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8 max-w-[1400px] w-full mx-auto overflow-x-auto">
             {activeTab === 'web-orders' && <WebOrdersTab />}
             {activeTab === 'products' && <ProductsTab products={products} onRemove={removeProduct} onReorder={(reordered) => useProductStore.setState({ products: reordered })} onStockChanged={(productId) => void refreshStock(productId)} />}
             {activeTab === 'stock' && <ProductsTab products={products} onRemove={removeProduct} onStockChanged={(productId) => void refreshStock(productId)} stockOnly />}
