@@ -2158,10 +2158,13 @@ async function verifyBinanceTransfer(orderId, apiKey, apiSecret) {
 
           const isInternal = d.transferType === 0 || String(d.txId || "").toLowerCase().includes("internal");
           const coin = String(d.coin || "USDT").toUpperCase();
-          const via = isInternal ? `${coin} Binance Internal` : `${coin} ${d.network || "Binance"}`;
+          const network = normalizeBinanceNetwork(d.network);
+          const via = isInternal
+            ? `${coin} Binance Internal Transfer`
+            : `${coin} ${network || "Binance"}${network ? " Network" : ""}`;
           const usdtAmount = await coinToUsdt(coin, d.amount);
-          console.log(`Binance verified via deposit history: ${d.amount} ${coin} = ${usdtAmount.toFixed(4)} USDT (id=${d.id}, txId=${d.txId}, via=${via})`);
-          return { verified: true, amount: usdtAmount, via };
+          console.log(`Binance verified via deposit history: ${d.amount} ${coin} = ${usdtAmount.toFixed(4)} USDT (id=${d.id}, txId=${d.txId}, network=${d.network}, via=${via})`);
+          return { verified: true, amount: usdtAmount, via, network };
         }
 
         if (/^\d{8,}$/.test(normalizedOrderId)) {
