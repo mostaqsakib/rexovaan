@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Trash2, Save, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product } from '@/types/product';
+import { useProductStore } from '@/store/useProductStore';
 
 interface PricingTier {
   id?: string;
@@ -178,6 +179,10 @@ const PricingTab = ({ products: propProducts }: PricingTabProps) => {
         }
       }
       await supabase.from('bot_products').update({ price: basePrice }).eq('id', productId);
+      // Sync price into global product store so Stock page reflects the update
+      useProductStore.setState((state) => ({
+        products: state.products.map((p) => (p.id === productId ? { ...p, price: basePrice } : p)),
+      }));
       toast.success('Pricing saved!');
       await fetchAll();
     }
