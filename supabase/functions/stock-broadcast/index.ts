@@ -144,7 +144,7 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
 
   let bulkPricingText = "";
   if (bulkTiers && bulkTiers.length > 0) {
-    bulkPricingText = "\n\n📦 <b>Bulk Pricing:</b>\n" + bulkTiers
+    bulkPricingText = bulkTiers
       .map((t) => `• ${t.min_quantity}+ pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`)
       .join("\n");
   }
