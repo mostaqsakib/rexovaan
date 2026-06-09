@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
+const tgUrl = (botToken: string, method: string) => `https://api.telegram.org/bot${botToken}/${method}`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
