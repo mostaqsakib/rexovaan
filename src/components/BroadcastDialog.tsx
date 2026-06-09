@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Send, Megaphone, ImagePlus, X, Film, Globe } from 'lucide-react';
+import { Loader2, Send, Megaphone, ImagePlus, X, Film, Globe, Plus, MousePointerClick } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -12,6 +12,9 @@ interface BroadcastDialogProps {
   open: boolean;
   onClose: () => void;
 }
+
+interface ProductOpt { id: string; name: string }
+interface ProductBtn { productId: string; label: string }
 
 const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
   const [message, setMessage] = useState('');
@@ -21,7 +24,21 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
   const [alsoOnSite, setAlsoOnSite] = useState(true);
   const [siteTitle, setSiteTitle] = useState('');
   const [siteSeverity, setSiteSeverity] = useState<'info' | 'success' | 'sale' | 'warning'>('info');
+  const [products, setProducts] = useState<ProductOpt[]>([]);
+  const [productButtons, setProductButtons] = useState<ProductBtn[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    supabase.from('bot_products').select('id,name').eq('is_active', true).order('name')
+      .then(({ data }) => setProducts((data || []) as ProductOpt[]));
+  }, [open]);
+
+  const addButton = () => setProductButtons(b => [...b, { productId: '', label: '' }]);
+  const updateButton = (i: number, patch: Partial<ProductBtn>) =>
+    setProductButtons(b => b.map((x, idx) => idx === i ? { ...x, ...patch } : x));
+  const removeButton = (i: number) =>
+    setProductButtons(b => b.filter((_, idx) => idx !== i));
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
