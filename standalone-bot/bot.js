@@ -7429,7 +7429,8 @@ async function backgroundStockAlertChecker() {
           await fetchPageMsgs();
           const stockAlertTpl = cachedPageMsgs["msg_stock_alert"] || `${alertIcon} <b>{added} new stock added for {product}!</b>\n\n📊 Available: <b>{stock}</b> items\n💰 Price: <b>{price} USDT</b>`;
           const productIconBg = product.custom_emoji_id ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji> ` : "";
-          const broadcastMsg = replacePlaceholders(stockAlertTpl, { product: `${productIconBg}${product.name}`, added: String(addedCount), stock: String(currentStock), price: Number(product.price).toFixed(2) });
+          const bulkPricingBg = await formatBulkPricingBlock(product.id);
+          const broadcastMsg = replacePlaceholders(stockAlertTpl, { product: `${productIconBg}${product.name}`, added: String(addedCount), stock: String(currentStock), price: Number(product.price).toFixed(2), bulk_pricing: bulkPricingBg });
 
           const botUser = await getBotUsername();
           const code = product.short_code || product.id.slice(0, 4).toUpperCase();
