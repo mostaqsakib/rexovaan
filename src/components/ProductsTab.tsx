@@ -1011,8 +1011,12 @@ const ProductsTab = ({ products, onRemove, onReorder, onStockChanged, stockOnly 
   );
 
   const [managedProductId, setManagedProductId] = useState<string | null>(null);
+  const [showDisabled, setShowDisabled] = useState(false);
 
-  const visibleProducts = stockOnly ? products.filter((product) => product.stockSource === 'internal' && !product.isManualDelivery && (product.isActive ?? true)) : products;
+  const visibleProducts = stockOnly
+    ? products.filter((product) => product.stockSource === 'internal' && !product.isManualDelivery && (product.isActive ?? true))
+    : (showDisabled ? products : products.filter((p) => p.isActive ?? true));
+  const disabledCount = products.filter((p) => (p.isActive ?? true) === false).length;
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
