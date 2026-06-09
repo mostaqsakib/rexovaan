@@ -11,7 +11,7 @@ const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 declare const EdgeRuntime: { waitUntil?: (promise: Promise<unknown>) => void } | undefined;
 
-const PLACEHOLDER_KEYS = new Set(["product", "stock", "price", "added"]);
+const PLACEHOLDER_KEYS = new Set(["product", "stock", "price", "added", "bulk_pricing"]);
 
 function normalizePlaceholderMarkup(html: string) {
   return String(html || "").replace(/\{[^{}]*\}/g, (match) => {
@@ -135,17 +135,32 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
     .eq("status", "available");
   if (countError) throw countError;
 
+  // Fetch bulk pricing tiers
+  const { data: bulkTiers } = await supabase
+    .from("bot_product_pricing")
+    .select("min_quantity, price")
+    .eq("product_id", productId)
+    .order("min_quantity", { ascending: true });
+
+  let bulkPricingText = "";
+  if (bulkTiers && bulkTiers.length > 0) {
+    bulkPricingText = "\n\n📦 <b>Bulk Pricing:</b>\n" + bulkTiers
+      .map((t) => `• ${t.min_quantity}+ pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`)
+      .join("\n");
+  }
+
   const { data: settings } = await supabase.from("bot_settings").select("value").eq("key", "msg_stock_alert").maybeSingle();
   const { data: alertEmoji } = await supabase.from("bot_button_emojis").select("custom_emoji_id,style").eq("button_key", "stock_alert").maybeSingle();
   const alertIcon = alertEmoji?.custom_emoji_id ? `<tg-emoji emoji-id="${alertEmoji.custom_emoji_id}">📢</tg-emoji>` : "📢";
   const productIcon = product.custom_emoji_id ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji> ` : "";
   const actualAddedCount = stockItemIds.length > 0 ? stockItemIds.length : addedCount;
-  const template = settings?.value || `${alertIcon} <b>{added} new stock added for {product}!</b>\n\n📊 Available: <b>{stock}</b> items\n💰 Price: <b>{price} USDT</b>`;
+  const template = settings?.value || `${alertIcon} <b>{added} new stock added for {product}!</b>\n\n📊 Available: <b>{stock}</b> items\n💰 Price: <b>{price} USDT</b>{bulk_pricing}`;
   const message = replacePlaceholders(template, {
     product: `${productIcon}${product.name}`,
     added: String(actualAddedCount),
     stock: String(currentStock || 0),
     price: Number(product.price || 0).toFixed(2),
+    bulk_pricing: bulkPricingText,
   });
   const botUsername = String(Deno.env.get("BOT_USERNAME") || "").replace(/^@/, "");
   const code = product.short_code || product.id.slice(0, 4).toUpperCase();
