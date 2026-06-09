@@ -117,6 +117,44 @@ function getConfirmationUrl(actionType: string, tokenHash?: string, redirectTo?:
   return `${supabaseUrl}/auth/v1/verify?${params.toString()}`
 }
 
+function generateToken(): string {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function getOrCreateUnsubscribeToken(
+  supabase: ReturnType<typeof createClient>,
+  email: string
+): Promise<string> {
+  const normalizedEmail = email.toLowerCase()
+  const { data: existingToken } = await supabase
+    .from('email_unsubscribe_tokens')
+    .select('token')
+    .eq('email', normalizedEmail)
+    .maybeSingle()
+
+  if (existingToken?.token) {
+    return existingToken.token
+  }
+
+  const unsubscribeToken = generateToken()
+  await supabase
+    .from('email_unsubscribe_tokens')
+    .upsert(
+      { token: unsubscribeToken, email: normalizedEmail },
+      { onConflict: 'email', ignoreDuplicates: true }
+    )
+
+  const { data: storedToken } = await supabase
+    .from('email_unsubscribe_tokens')
+    .select('token')
+    .eq('email', normalizedEmail)
+    .maybeSingle()
+
+  return storedToken?.token || unsubscribeToken
+}
+
 // Preview endpoint handler - returns rendered HTML without sending email
 async function handlePreview(req: Request): Promise<Response> {
   const previewCorsHeaders = {
