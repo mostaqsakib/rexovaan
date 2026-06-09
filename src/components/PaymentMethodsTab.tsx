@@ -159,7 +159,7 @@ const PaymentMethodsTab = () => {
                   </Badge>
                 )}
                 <code className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.payment_details}</code>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2 flex-wrap">
                   <Switch checked={m.is_active} onCheckedChange={(v) => handleToggle(m.id, v)} />
                   <Button size="sm" variant="outline" onClick={() => openEdit(m)}><Pencil className="h-3 w-3" /></Button>
                   <Button size="sm" variant="outline" onClick={() => handleDelete(m.id)}><Trash2 className="h-3 w-3" /></Button>

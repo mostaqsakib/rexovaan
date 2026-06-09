@@ -58,7 +58,7 @@ const HistoryTab = ({ orders, onRestore }: HistoryTabProps) => {
             {/* Header row */}
             <button
               type="button"
-              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
+              className="flex w-full items-center gap-2 flex-wrap px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
               onClick={() => setExpandedIdx(isExpanded ? null : idx)}
             >
               {isExpanded ? (
@@ -75,7 +75,7 @@ const HistoryTab = ({ orders, onRestore }: HistoryTabProps) => {
               <span className="text-sm font-semibold text-foreground">
                 x{order.quantity}
               </span>
-              <span className="ml-auto text-sm text-muted-foreground">
+              <span className="ml-auto text-sm text-muted-foreground whitespace-nowrap">
                 {formatDate(order.orderedAt)}
               </span>
             </button>
