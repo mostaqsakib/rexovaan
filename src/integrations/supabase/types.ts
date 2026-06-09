@@ -1346,6 +1346,10 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      get_bot_quick_stats: {
+        Args: { _month: string; _today: string; _week: string }
+        Returns: Json
+      }
       get_product_stock_counts: {
         Args: { _product_ids: string[] }
         Returns: {
