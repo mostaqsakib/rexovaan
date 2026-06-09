@@ -2756,11 +2756,42 @@ function inferVerificationTargets(normalizedTxn, paymentMethodName = "") {
   return { binance: true, bybit: false, bep20: true, trc20: true, ton: true, ltc: true, bkash: false };
 }
 
+function normalizeBinanceNetwork(network) {
+  const n = String(network || "").trim().toUpperCase();
+  if (!n) return "";
+  // Map Binance internal chain codes -> friendly network names
+  const map = {
+    BSC: "BEP20",
+    BNB: "BEP20",
+    "BNB SMART CHAIN": "BEP20",
+    BEP20: "BEP20",
+    BEP2: "BEP2",
+    TRX: "TRC20",
+    TRON: "TRC20",
+    TRC20: "TRC20",
+    ETH: "ERC20",
+    ERC20: "ERC20",
+    ETHEREUM: "ERC20",
+    MATIC: "Polygon",
+    POLYGON: "Polygon",
+    ARBITRUM: "Arbitrum",
+    ARB: "Arbitrum",
+    OP: "Optimism",
+    OPTIMISM: "Optimism",
+    SOL: "Solana",
+    SOLANA: "Solana",
+    TON: "TON",
+    AVAX: "Avalanche",
+    AVAXC: "Avalanche C-Chain",
+  };
+  return map[n] || n;
+}
+
 function formatVerificationVia(via) {
   const label = String(via || "").trim();
   if (!label) return "Auto Verification";
   if (/\b(USDT|LTC|BDT|TON)\b/i.test(label)) return label;
-  if (/BEP20|TRC20/i.test(label)) return `USDT ${label.toUpperCase()}`;
+  if (/BEP20|TRC20|ERC20/i.test(label)) return `USDT ${label.toUpperCase()}`;
   if (/^TON$/i.test(label)) return "USDT TON";
   if (/^LTC$/i.test(label)) return "LTC Network";
   if (/bKash/i.test(label)) return "BDT bKash";
