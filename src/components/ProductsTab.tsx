@@ -1011,8 +1011,12 @@ const ProductsTab = ({ products, onRemove, onReorder, onStockChanged, stockOnly 
   );
 
   const [managedProductId, setManagedProductId] = useState<string | null>(null);
+  const [showDisabled, setShowDisabled] = useState(false);
 
-  const visibleProducts = stockOnly ? products.filter((product) => product.stockSource === 'internal' && !product.isManualDelivery && (product.isActive ?? true)) : products;
+  const visibleProducts = stockOnly
+    ? products.filter((product) => product.stockSource === 'internal' && !product.isManualDelivery && (product.isActive ?? true))
+    : (showDisabled ? products : products.filter((p) => p.isActive ?? true));
+  const disabledCount = products.filter((p) => (p.isActive ?? true) === false).length;
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -1109,7 +1113,16 @@ const ProductsTab = ({ products, onRemove, onReorder, onStockChanged, stockOnly 
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-x-auto">
+    <div className="space-y-3">
+      {disabledCount > 0 && (
+        <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+          <span>{disabledCount} disabled hidden</span>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowDisabled((v) => !v)}>
+            {showDisabled ? 'Hide disabled' : 'Show disabled'}
+          </Button>
+        </div>
+      )}
+      <div className="rounded-lg border border-border bg-card overflow-x-auto">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis]}>
         <Table className="min-w-[800px]">
           <TableHeader>
@@ -1132,6 +1145,7 @@ const ProductsTab = ({ products, onRemove, onReorder, onStockChanged, stockOnly 
           </TableBody>
         </Table>
       </DndContext>
+      </div>
     </div>
   );
 };
