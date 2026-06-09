@@ -5435,7 +5435,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       topBuyersText += `\n📅 <b>Top Buyers (This Month)</b>\n` + formatTopBuyers(monthlyTopBuyers);
     }
 
-    const firstOrderDate = firstOrderRes.data?.[0]?.created_at;
+    // firstOrderDate already set from RPC above
     const botStartedStr = firstOrderDate ? new Date(firstOrderDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "N/A";
 
     const statsMsg = `📊 <b>Quick Stats</b>\n\n` +
