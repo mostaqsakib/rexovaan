@@ -1549,7 +1549,7 @@ function decryptApiKey(encryptedValue) {
 
 function getResellerApiBase() {
   const url = envGet("SUPABASE_URL").replace(/\/$/, "");
-  return url ? `${url}/functions/v1/reseller-api` : "https://mxcuakzztajvkgtsocln.supabase.co/functions/v1/reseller-api";
+  return url ? `${url}/functions/v1/reseller-api` : "https://eygkdpfjrjwwbiackfpr.supabase.co/functions/v1/reseller-api";
 }
 
 async function getCustomerReseller(customerId) {

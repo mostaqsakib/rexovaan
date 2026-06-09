@@ -18,7 +18,7 @@ interface Reseller {
   created_at: string;
 }
 
-const apiBase = 'https://mxcuakzztajvkgtsocln.supabase.co/functions/v1/reseller-api';
+const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reseller-api`;
 
 const ResellersTab = () => {
   const [resellers, setResellers] = useState<Reseller[]>([]);
