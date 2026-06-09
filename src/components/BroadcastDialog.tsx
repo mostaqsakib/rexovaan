@@ -211,6 +211,48 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
             </Button>
           </div>
 
+          {/* Product Buttons */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <MousePointerClick className="h-4 w-4 text-primary" />
+                Product Buttons ({productButtons.length})
+              </label>
+              <Button type="button" variant="outline" size="sm" onClick={addButton} className="gap-1.5 h-7">
+                <Plus className="h-3.5 w-3.5" /> Add
+              </Button>
+            </div>
+            {productButtons.length === 0 && (
+              <p className="text-xs text-muted-foreground">Product select korle oi product er Buy button broadcast er sathe jabe.</p>
+            )}
+            {productButtons.map((b, i) => {
+              const selected = products.find(p => p.id === b.productId);
+              return (
+                <div key={i} className="flex items-center gap-2">
+                  <select
+                    value={b.productId}
+                    onChange={e => updateButton(i, { productId: e.target.value })}
+                    className="h-9 flex-1 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="">— Select product —</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <Input
+                    value={b.label}
+                    onChange={e => updateButton(i, { label: e.target.value })}
+                    placeholder={selected ? `Buy ${selected.name}` : 'Button label (optional)'}
+                    className="h-9 flex-1 min-w-0"
+                  />
+                  <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeButton(i)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+
           {/* Also post on site */}
           <div className="space-y-2 border-t border-border pt-3">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
