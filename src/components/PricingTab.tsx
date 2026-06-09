@@ -209,11 +209,11 @@ const PricingTab = ({ products: propProducts }: PricingTabProps) => {
         const meta = sourceMeta[product.id];
         return (
           <Card key={product.id} className="border-border bg-card">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <div className="flex flex-col gap-1">
-                <CardTitle className="text-lg font-heading">{product.name}</CardTitle>
+            <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-1 min-w-0">
+                <CardTitle className="text-lg font-heading break-words">{product.name}</CardTitle>
                 {meta?.sourcePrice !== null && meta?.sourcePrice !== undefined && (
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
                       Source cost: {meta.sourcePrice.toFixed(2)} USDT
                     </span>
@@ -221,7 +221,7 @@ const PricingTab = ({ products: propProducts }: PricingTabProps) => {
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 <Button variant="outline" size="sm" onClick={() => addTier(product.id)} className="gap-1.5">
                   <Plus className="h-3.5 w-3.5" /> Add Tier
                 </Button>
