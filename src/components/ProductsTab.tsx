@@ -1145,6 +1145,7 @@ const ProductsTab = ({ products, onRemove, onReorder, onStockChanged, stockOnly 
           </TableBody>
         </Table>
       </DndContext>
+      </div>
     </div>
   );
 };
