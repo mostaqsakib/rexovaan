@@ -316,7 +316,7 @@ const CustomersTab = () => {
                   <Badge variant="destructive" className="font-mono text-xs">🚫 Banned</Badge>
                 )}
                 <span className="text-xs text-muted-foreground">ID: {c.chat_id}</span>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="w-full sm:w-auto sm:ml-auto flex items-center gap-2 flex-wrap">
                   <Button
                     size="sm"
                     variant="outline"
