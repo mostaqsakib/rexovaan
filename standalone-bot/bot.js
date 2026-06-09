@@ -1385,7 +1385,7 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
 async function showAdminMenu(chatId, emojiMap, editMessageId) {
   const launchToken = await signAdminLaunchToken(chatId);
   const webAppUrl = `https://digitalizstockmanager.lovable.app/admin?admin_launch=${encodeURIComponent(launchToken)}`;
-  const newWebAppUrl = `https://rexovaanshop.lovable.app/admin?admin_launch=${encodeURIComponent(launchToken)}`;
+  const newWebAppUrl = `https://www.rexovaan.com/admin?admin_launch=${encodeURIComponent(launchToken)}`;
   const [depRes, wdRes, pendDelRes] = await Promise.all([
     supabase.from("bot_deposits").select("id", { count: "exact", head: true }).eq("status", "pending"),
     supabase.from("bot_withdrawals").select("id", { count: "exact", head: true }).eq("status", "pending"),
