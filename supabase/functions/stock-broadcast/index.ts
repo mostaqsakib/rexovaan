@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
+const tgUrl = (botToken: string, method: string) => `https://api.telegram.org/bot${botToken}/${method}`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,17 +75,21 @@ function standardKeyboard(replyMarkup: unknown) {
   };
 }
 
-async function sendTelegramMessage(chatId: number, text: string, replyMarkup: unknown, lovableApiKey: string, telegramApiKey: string) {
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup: unknown, botToken: string) {
   const body: Record<string, unknown> = { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true };
   if (replyMarkup) body.reply_markup = replyMarkup;
 
-  let res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  let data = await res.json().catch(() => ({}));
+  const post = async () => {
+    const r = await fetch(tgUrl(botToken, "sendMessage"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    return { r, d };
+  };
 
+  let { r: res, d: data } = await post();
   const failed = () => !res.ok || data?.ok === false;
   const isEmojiError = () => {
     const desc = String(data?.description || "").toLowerCase();
@@ -94,12 +98,7 @@ async function sendTelegramMessage(chatId: number, text: string, replyMarkup: un
 
   if (failed() && isEmojiError() && text.includes("<tg-emoji")) {
     body.text = stripCustomEmoji(text);
-    res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    data = await res.json().catch(() => ({}));
+    ({ r: res, d: data } = await post());
   }
 
   if (failed()) {
@@ -107,34 +106,23 @@ async function sendTelegramMessage(chatId: number, text: string, replyMarkup: un
     if (plainText) {
       body.text = plainText;
       delete body.parse_mode;
-      res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      data = await res.json().catch(() => ({}));
+      ({ r: res, d: data } = await post());
     }
   }
 
   if (failed() && replyMarkup) {
     body.reply_markup = standardKeyboard(replyMarkup);
-    res = await fetch(`${GATEWAY_URL}/sendMessage`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${lovableApiKey}`, "X-Connection-Api-Key": telegramApiKey, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    data = await res.json().catch(() => ({}));
+    ({ r: res, d: data } = await post());
   }
 
   return { ok: res.ok && data?.ok !== false, data };
 }
 
 async function broadcastStock(productId: string, addedCount: number, stockItemIds: string[] = []) {
-  const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-  const telegramApiKey = Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY");
+  const botToken = Deno.env.get("BOT_TOKEN");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!lovableApiKey || !telegramApiKey || !supabaseUrl || !serviceKey) throw new Error("Missing backend configuration");
+  if (!botToken || !supabaseUrl || !serviceKey) throw new Error("Missing backend configuration");
 
   const supabase = createClient(supabaseUrl, serviceKey);
   const { data: product, error: productError } = await supabase.from("bot_products").select("id,name,price,custom_emoji_id,short_code").eq("id", productId).single();
@@ -191,7 +179,7 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
   const failureSamples: unknown[] = [];
   for (let i = 0; i < recipients.length; i += 25) {
     const batch = recipients.slice(i, i + 25);
-    const results = await Promise.allSettled(batch.map((recipient) => sendTelegramMessage(recipient.chat_id, message, recipient.isGroup ? groupKeyboard : customerKeyboard, lovableApiKey, telegramApiKey)));
+    const results = await Promise.allSettled(batch.map((recipient) => sendTelegramMessage(recipient.chat_id, message, recipient.isGroup ? groupKeyboard : customerKeyboard, botToken)));
     for (const result of results) {
       if (result.status === "fulfilled" && result.value.ok) sent += 1;
       else {
