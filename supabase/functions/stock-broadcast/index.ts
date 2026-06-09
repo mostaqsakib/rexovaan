@@ -37,8 +37,43 @@ function normalizeTelegramHtml(html: string) {
   return result;
 }
 
+function stripEmptyPlaceholderLine(html: string, key: string) {
+  const lines = String(html || "").split("\n");
+  const placeholderRe = new RegExp(`\\{${key}\\}`, "g");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!placeholderRe.test(line)) { out.push(line); continue; }
+    placeholderRe.lastIndex = 0;
+    const stripped = line.replace(placeholderRe, "").replace(/<[^>]+>/g, "").trim();
+    if (stripped !== "") {
+      out.push(line.replace(placeholderRe, ""));
+      continue;
+    }
+    while (out.length > 0) {
+      const prev = out[out.length - 1];
+      const prevStripped = prev
+        .replace(/<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>/g, "")
+        .replace(/<[^>]+>/g, "")
+        .replace(/[\u200d\ufe0f]/g, "")
+        .replace(/(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})+/gu, "")
+        .trim();
+      if (prevStripped === "") { out.pop(); continue; }
+      break;
+    }
+    if (i + 1 < lines.length && lines[i + 1].trim() === "") i++;
+  }
+  return out.join("\n");
+}
+
 function replacePlaceholders(template: string, values: Record<string, string>) {
-  return Object.entries(values).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, value), normalizeTelegramHtml(template));
+  let result = normalizeTelegramHtml(template);
+  for (const [key, value] of Object.entries(values)) {
+    const strValue = String(value ?? "");
+    if (strValue === "") result = stripEmptyPlaceholderLine(result, key);
+    result = result.replaceAll(`{${key}}`, strValue);
+  }
+  return result;
 }
 
 function stripCustomEmoji(html: string) {
