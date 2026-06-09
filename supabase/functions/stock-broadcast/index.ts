@@ -119,11 +119,10 @@ async function sendTelegramMessage(chatId: number, text: string, replyMarkup: un
 }
 
 async function broadcastStock(productId: string, addedCount: number, stockItemIds: string[] = []) {
-  const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-  const telegramApiKey = Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY");
+  const botToken = Deno.env.get("BOT_TOKEN");
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!lovableApiKey || !telegramApiKey || !supabaseUrl || !serviceKey) throw new Error("Missing backend configuration");
+  if (!botToken || !supabaseUrl || !serviceKey) throw new Error("Missing backend configuration");
 
   const supabase = createClient(supabaseUrl, serviceKey);
   const { data: product, error: productError } = await supabase.from("bot_products").select("id,name,price,custom_emoji_id,short_code").eq("id", productId).single();
