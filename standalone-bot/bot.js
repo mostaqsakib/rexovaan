@@ -76,6 +76,7 @@ const PLACEHOLDER_KEYS = new Set([
   "original",
   "savings",
   "countdown",
+  "bulk_pricing",
 ]);
 let cachedPageMsgs = {};
 let pageMsgsLastFetch = 0;
