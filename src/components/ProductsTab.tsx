@@ -518,27 +518,47 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const loadStock = async (filter: 'available' | 'sold' | 'all' = statusFilter) => {
     setLoading(true);
     try {
-      let itemQuery = supabase
-        .from('bot_product_stock_items')
-        .select('id,data,status,created_at,sold_at,sort_index', { count: 'exact' })
-        .eq('product_id', product.id);
 
-      if (filter !== 'all') itemQuery = itemQuery.eq('status', filter);
-      if (filter === 'all') itemQuery = itemQuery.order('status', { ascending: true });
 
-      const [itemsResult, totalResult, availableResult] = await Promise.all([
-        itemQuery.order('sort_index', { ascending: true }).order('created_at', { ascending: true }).range(0, 999),
+
+      const buildItemsQuery = () => {
+        let q = supabase
+          .from('bot_product_stock_items')
+          .select('id,data,status,created_at,sold_at,sort_index')
+          .eq('product_id', product.id);
+        if (filter !== 'all') q = q.eq('status', filter);
+        if (filter === 'all') q = q.order('status', { ascending: true });
+        return q.order('sort_index', { ascending: true }).order('created_at', { ascending: true });
+      };
+
+      const PAGE = 1000;
+      const allItems: Array<{ id: string; data: Record<string, unknown>; status: string; created_at: string; sold_at: string | null; sort_index?: number | null }> = [];
+      let from = 0;
+      let pageErr: unknown = null;
+      // Fetch all pages (Supabase caps at 1000 per request)
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { data, error } = await buildItemsQuery().range(from, from + PAGE - 1);
+        if (error) { pageErr = error; break; }
+        const rows = (data || []) as typeof allItems;
+        allItems.push(...rows);
+        if (rows.length < PAGE) break;
+        from += PAGE;
+      }
+
+      const [totalResult, availableResult] = await Promise.all([
         supabase.from('bot_product_stock_items').select('id', { count: 'exact', head: true }).eq('product_id', product.id),
         supabase.from('bot_product_stock_items').select('id', { count: 'exact', head: true }).eq('product_id', product.id).eq('status', 'available'),
       ]);
 
-      if (itemsResult.error || totalResult.error || availableResult.error) {
+      if (pageErr || totalResult.error || availableResult.error) {
         toast.error('Failed to load stock');
       } else {
-        setItems((itemsResult.data || []) as Array<{ id: string; data: Record<string, unknown>; status: string; created_at: string; sold_at: string | null; sort_index?: number | null }>);
+        setItems(allItems);
         setTotalStockCount(totalResult.count || 0);
         setAvailableStockCount(availableResult.count || 0);
       }
+
 
     } finally {
       setLoading(false);
