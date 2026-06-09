@@ -518,13 +518,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const loadStock = async (filter: 'available' | 'sold' | 'all' = statusFilter) => {
     setLoading(true);
     try {
-      let itemQuery = supabase
-        .from('bot_product_stock_items')
-        .select('id,data,status,created_at,sold_at,sort_index', { count: 'exact' })
-        .eq('product_id', product.id);
 
-      if (filter !== 'all') itemQuery = itemQuery.eq('status', filter);
-      if (filter === 'all') itemQuery = itemQuery.order('status', { ascending: true });
+
 
       const buildItemsQuery = () => {
         let q = supabase
