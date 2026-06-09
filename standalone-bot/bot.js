@@ -5368,67 +5368,39 @@ async function handleCallback(callbackQuery, emojiMap) {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthISO = monthStart.toISOString();
 
-    const [custRes, ordRes, wdRes, todayOrdRes, todayRevRes, totalRevRes, weekOrdRes, weekRevRes, monthOrdRes, monthRevRes, newCustTodayRes, newCustWeekRes, newCustMonthRes, topProductsRes, monthTopProductsRes, weekTopProductsRes, topBuyersRes, monthTopBuyersRes, firstOrderRes] = await Promise.all([
+    const [custRes, wdRes, newCustTodayRes, newCustWeekRes, newCustMonthRes, statsRpc] = await Promise.all([
       supabase.from("bot_customers").select("id", { count: "exact", head: true }),
-      supabase.from("bot_orders").select("id", { count: "exact", head: true }),
       supabase.from("bot_withdrawals").select("id", { count: "exact", head: true }).eq("status", "pending"),
-      supabase.from("bot_orders").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
-      supabase.from("bot_orders").select("total_price").gte("created_at", todayISO),
-      supabase.from("bot_orders").select("total_price"),
-      // Weekly
-      supabase.from("bot_orders").select("id", { count: "exact", head: true }).gte("created_at", weekISO),
-      supabase.from("bot_orders").select("total_price").gte("created_at", weekISO),
-      // Monthly
-      supabase.from("bot_orders").select("id", { count: "exact", head: true }).gte("created_at", monthISO),
-      supabase.from("bot_orders").select("total_price").gte("created_at", monthISO),
-      // New customers
       supabase.from("bot_customers").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
       supabase.from("bot_customers").select("id", { count: "exact", head: true }).gte("created_at", weekISO),
       supabase.from("bot_customers").select("id", { count: "exact", head: true }).gte("created_at", monthISO),
-      // Top products (all time)
-      supabase.from("bot_orders").select("product_name, quantity, total_price"),
-      // Top products (this month)
-      supabase.from("bot_orders").select("product_name, quantity, total_price").gte("created_at", monthISO),
-      // Top products (this week)
-      supabase.from("bot_orders").select("product_name, quantity, total_price").gte("created_at", weekISO),
-      // Top buyers (all orders with customer info)
-      supabase.from("bot_orders").select("customer_id, quantity, total_price, customer:bot_customers(first_name, username, chat_id)"),
-      // Top buyers (this month)
-      supabase.from("bot_orders").select("customer_id, quantity, total_price, customer:bot_customers(first_name, username, chat_id)").gte("created_at", monthISO),
-      // First order date
-      supabase.from("bot_orders").select("created_at").order("created_at", { ascending: true }).limit(1),
+      supabase.rpc("get_bot_quick_stats", { _today: todayISO, _week: weekISO, _month: monthISO }),
     ]);
 
-    const todayRevenue = (todayRevRes.data || []).reduce((s, r) => s + Number(r.total_price), 0);
-    const totalRevenue = (totalRevRes.data || []).reduce((s, r) => s + Number(r.total_price), 0);
-    const weekRevenue = (weekRevRes.data || []).reduce((s, r) => s + Number(r.total_price), 0);
-    const monthRevenue = (monthRevRes.data || []).reduce((s, r) => s + Number(r.total_price), 0);
-
-    // Helper to aggregate top products
-    function aggregateTopProducts(orders) {
-      const map = {};
-      for (const ord of (orders || [])) {
-        const name = ord.product_name || "Unknown";
-        if (!map[name]) map[name] = { qty: 0, revenue: 0 };
-        map[name].qty += Number(ord.quantity);
-        map[name].revenue += Number(ord.total_price);
-      }
-      return Object.entries(map).sort((a, b) => b[1].qty - a[1].qty).slice(0, 5);
-    }
-
-    const topProducts = aggregateTopProducts(topProductsRes.data);
-    const monthlyTopProducts = aggregateTopProducts(monthTopProductsRes.data);
+    const stats = statsRpc.data || {};
+    const rev = stats.rev || {};
+    const totalRevenue = Number(rev.total_revenue || 0);
+    const todayRevenue = Number(rev.today_revenue || 0);
+    const weekRevenue = Number(rev.week_revenue || 0);
+    const monthRevenue = Number(rev.month_revenue || 0);
+    const ordRes = { count: Number(rev.total_orders || 0) };
+    const todayOrdRes = { count: Number(rev.today_orders || 0) };
+    const weekOrdRes = { count: Number(rev.week_orders || 0) };
+    const monthOrdRes = { count: Number(rev.month_orders || 0) };
+    const firstOrderDate = rev.first_order_at || null;
 
     function formatTopProducts(list) {
       let text = "";
-      list.forEach(([name, info], i) => {
+      (list || []).forEach((info, i) => {
         const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-        text += `${medal} ${name}\n   📦 ${info.qty} sold • 💵 ${info.revenue.toFixed(2)} USDT\n`;
+        text += `${medal} ${info.product_name || "Unknown"}\n   📦 ${Number(info.qty)} sold • 💵 ${Number(info.revenue).toFixed(2)} USDT\n`;
       });
       return text;
     }
 
-    const weeklyTopProducts = aggregateTopProducts(weekTopProductsRes.data);
+    const topProducts = stats.top_all || [];
+    const weeklyTopProducts = stats.top_week || [];
+    const monthlyTopProducts = stats.top_month || [];
 
     let topProductsText = "";
     if (topProducts.length > 0) {
@@ -5441,35 +5413,19 @@ async function handleCallback(callbackQuery, emojiMap) {
       topProductsText += `\n📅 <b>Top Selling (This Month)</b>\n` + formatTopProducts(monthlyTopProducts);
     }
 
-    // Aggregate top buyers helper
-    function aggregateTopBuyers(orders) {
-      const map = {};
-      for (const ord of (orders || [])) {
-        const cid = ord.customer_id;
-        if (!map[cid]) {
-          const c = ord.customer || {};
-          const displayName = c.first_name || c.username || `ID:${String(c.chat_id || cid).slice(0,8)}`;
-          map[cid] = { name: displayName, username: c.username || null, orders: 0, qty: 0, spent: 0 };
-        }
-        map[cid].orders += 1;
-        map[cid].qty += Number(ord.quantity);
-        map[cid].spent += Number(ord.total_price);
-      }
-      return Object.entries(map).sort((a, b) => b[1].spent - a[1].spent).slice(0, 5);
-    }
-
     function formatTopBuyers(list) {
       let text = "";
-      list.forEach(([_, info], i) => {
+      (list || []).forEach((info, i) => {
         const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+        const displayName = info.first_name || info.username || `ID:${String(info.chat_id || info.customer_id || "").slice(0,8)}`;
         const uname = info.username ? ` (@${info.username})` : "";
-        text += `${medal} ${info.name}${uname}\n   🛒 ${info.orders} orders • 📦 ${info.qty} items • 💵 ${info.spent.toFixed(2)} USDT\n`;
+        text += `${medal} ${displayName}${uname}\n   🛒 ${Number(info.orders)} orders • 📦 ${Number(info.qty)} items • 💵 ${Number(info.spent).toFixed(2)} USDT\n`;
       });
       return text;
     }
 
-    const topBuyers = aggregateTopBuyers(topBuyersRes.data);
-    const monthlyTopBuyers = aggregateTopBuyers(monthTopBuyersRes.data);
+    const topBuyers = stats.buyers_all || [];
+    const monthlyTopBuyers = stats.buyers_month || [];
 
     let topBuyersText = "";
     if (topBuyers.length > 0) {
@@ -5479,7 +5435,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       topBuyersText += `\n📅 <b>Top Buyers (This Month)</b>\n` + formatTopBuyers(monthlyTopBuyers);
     }
 
-    const firstOrderDate = firstOrderRes.data?.[0]?.created_at;
+    // firstOrderDate already set from RPC above
     const botStartedStr = firstOrderDate ? new Date(firstOrderDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "N/A";
 
     const statsMsg = `📊 <b>Quick Stats</b>\n\n` +
