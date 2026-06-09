@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Trash2, Save, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Product } from '@/types/product';
+import { useProductStore } from '@/store/useProductStore';
 
 interface PricingTier {
   id?: string;
