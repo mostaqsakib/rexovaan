@@ -11,7 +11,7 @@ const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 
 declare const EdgeRuntime: { waitUntil?: (promise: Promise<unknown>) => void } | undefined;
 
-const PLACEHOLDER_KEYS = new Set(["product", "stock", "price", "added"]);
+const PLACEHOLDER_KEYS = new Set(["product", "stock", "price", "added", "bulk_pricing"]);
 
 function normalizePlaceholderMarkup(html: string) {
   return String(html || "").replace(/\{[^{}]*\}/g, (match) => {
