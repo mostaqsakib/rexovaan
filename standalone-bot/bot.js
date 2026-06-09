@@ -168,6 +168,28 @@ function replacePlaceholders(html, replacements) {
   return prepareTelegramHtml(result);
 }
 
+async function formatBulkPricingBlock(productId) {
+  try {
+    const { data: tiers } = await supabase
+      .from("bot_product_pricing")
+      .select("min_quantity, max_quantity, price")
+      .eq("product_id", productId)
+      .order("min_quantity");
+    if (!tiers || tiers.length < 2) return "";
+    const lines = tiers.map((t) => {
+      const range = t.max_quantity && t.max_quantity > 0
+        ? `${t.min_quantity}-${t.max_quantity}`
+        : `${t.min_quantity}+`;
+      return `• <b>${range}</b> pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`;
+    });
+    return `\n\n📦 <b>Bulk Pricing:</b>\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
+
+
 async function getWelcomeMsg(customerName) {
   await fetchPageMsgs();
   let msg = normalizeTelegramHtml(cachedPageMsgs["welcome_message"] || cachedWelcomeMsg);
@@ -4571,8 +4593,9 @@ async function handleMessage(message, emojiMap) {
     const isUp = newPrice > oldPrice;
     await fetchPageMsgs();
     const tplKey = isUp ? "msg_price_up" : "msg_price_down";
-    const defaultUp = `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>${oldPrice.toFixed(2)} USDT</s>\n💎 New: <b>{new_price} USDT</b>\n\n<i>Grab it before it goes higher!</i>`;
-    const defaultDown = `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>${oldPrice.toFixed(2)} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>\n\n<i>Limited time offer — buy now!</i>`;
+    const bulkPricing = await formatBulkPricingBlock(productId);
+    const defaultUp = `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>${oldPrice.toFixed(2)} USDT</s>\n💎 New: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Grab it before it goes higher!</i>`;
+    const defaultDown = `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>${oldPrice.toFixed(2)} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Limited time offer — buy now!</i>`;
     let tpl = cachedPageMsgs[tplKey] || (isUp ? defaultUp : defaultDown);
     const productIcon = product.custom_emoji_id ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji> ` : "";
     if (productIcon) tpl = tpl.replace(/📦\s*(<[^>]+>)?\s*\{product\}/g, "$1{product}");
@@ -4581,6 +4604,7 @@ async function handleMessage(message, emojiMap) {
       old_price: oldPrice.toFixed(2),
       new_price: newPrice.toFixed(2),
       price: newPrice.toFixed(2),
+      bulk_pricing: bulkPricing,
     });
     const botUser = await getBotUsername();
     const code = product.short_code || product.id.slice(0, 4).toUpperCase();
@@ -5655,8 +5679,8 @@ async function handleCallback(callbackQuery, emojiMap) {
       msg_notifications: `🔔 <b>Notifications</b>\n\nCustomize your notification preferences:`,
       msg_stock_alert: `📢 <b>{added} new stock added for {product}!</b>\n\n📊 Available: <b>{stock}</b> items\n💰 Price: <b>{price} USDT</b>`,
       msg_new_product: `🆕 <b>New Product Available!</b>\n\n📦 <b>{product}</b>\n💰 Price: <b>{price} USDT</b>\n📊 Stock: <b>{stock}</b>`,
-      msg_price_up: `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>{old_price} USDT</s>\n💎 New: <b>{new_price} USDT</b>\n\n<i>Grab it before it goes higher!</i>`,
-      msg_price_down: `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>{old_price} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>\n\n<i>Limited time offer — buy now!</i>`,
+      msg_price_up: `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>{old_price} USDT</s>\n💎 New: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Grab it before it goes higher!</i>`,
+      msg_price_down: `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>{old_price} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Limited time offer — buy now!</i>`,
       msg_keyword_reply: `✅ <b>Available now!</b> Tap below to buy:`,
       msg_pay_balance_confirm: `💰 <b>Pay with Balance</b>\n\n{product}\n🔢 Quantity: <b>{quantity}</b>\n🧾 Subtotal: <b>{subtotal} {currency}</b>\n💵 Final: <b>{final} {currency}</b>\n\n💰 Balance: <b>{balance}</b>\n📊 After: <b>{after}</b>\n\n⚡ <i>Once confirmed, your items will be delivered instantly.</i>\n\n<b>Confirm balance deduction?</b>`,
       msg_order_summary: `📋 <b>Order Summary</b>\n\n{product}\n🔢 Qty: <b>{quantity}</b>\n💵 Price: <b>\${price}</b> each\n💰 Total: <b>\${total} {currency}</b>{balance_section}{payment_hint}{pay_later_section}`,
@@ -5681,8 +5705,8 @@ async function handleCallback(callbackQuery, emojiMap) {
       msg_notifications: `No placeholders — static message`,
       msg_stock_alert: `<code>{product}</code> — Product name\n<code>{added}</code> — New stock count\n<code>{stock}</code> — Total available\n<code>{price}</code> — Product price`,
       msg_new_product: `<code>{product}</code> — Product name\n<code>{stock}</code> — Available stock\n<code>{price}</code> — Product price\n<code>{description}</code> — Product description`,
-      msg_price_up: `<code>{product}</code> — Product name\n<code>{old_price}</code> — Previous price\n<code>{new_price}</code> — New higher price`,
-      msg_price_down: `<code>{product}</code> — Product name\n<code>{old_price}</code> — Previous price\n<code>{new_price}</code> — New lower price`,
+      msg_price_up: `<code>{product}</code> — Product name\n<code>{old_price}</code> — Previous price\n<code>{new_price}</code> — New higher price\n<code>{bulk_pricing}</code> — Bulk pricing tiers block (empty if none)`,
+      msg_price_down: `<code>{product}</code> — Product name\n<code>{old_price}</code> — Previous price\n<code>{new_price}</code> — New lower price\n<code>{bulk_pricing}</code> — Bulk pricing tiers block (empty if none)`,
       msg_keyword_reply: `<code>{product}</code> — First matched product name\n<code>{products}</code> — All matched product names (comma-separated)\n<code>{count}</code> — Number of matched products`,
       msg_pay_balance_confirm: `<code>{product}</code> — Product (with emoji + name)\n<code>{quantity}</code> — Quantity\n<code>{subtotal}</code> — Subtotal $\n<code>{final}</code> — Final $\n<code>{balance}</code> — Current balance $\n<code>{after}</code> — Balance after purchase $\n<code>{currency}</code> — Currency code\n<code>{price}</code> — Unit price $`,
       msg_order_summary: `<code>{product}</code> — Product (with emoji + name)\n<code>{quantity}</code> — Quantity\n<code>{price}</code> — Unit price $\n<code>{total}</code> — Total $\n<code>{currency}</code> — Currency code\n<code>{balance_section}</code> — Auto balance info block (or empty)\n<code>{payment_hint}</code> — "Pay remaining via:" or "Choose method:" hint\n<code>{pay_later_section}</code> — Pay Later info block (or empty)`,
@@ -5759,8 +5783,9 @@ async function handleCallback(callbackQuery, emojiMap) {
     const isUp = newPrice > oldPrice;
     await fetchPageMsgs();
     const tplKey = isUp ? "msg_price_up" : "msg_price_down";
-    const defaultUp = `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>${oldPrice.toFixed(2)} USDT</s>\n💎 New: <b>{new_price} USDT</b>\n\n<i>Grab it before it goes higher!</i>`;
-    const defaultDown = `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>${oldPrice.toFixed(2)} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>\n\n<i>Limited time offer — buy now!</i>`;
+    const bulkPricing = await formatBulkPricingBlock(productId);
+    const defaultUp = `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>${oldPrice.toFixed(2)} USDT</s>\n💎 New: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Grab it before it goes higher!</i>`;
+    const defaultDown = `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>${oldPrice.toFixed(2)} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>{bulk_pricing}\n\n<i>Limited time offer — buy now!</i>`;
     let tpl = cachedPageMsgs[tplKey] || (isUp ? defaultUp : defaultDown);
     const productIcon = product.custom_emoji_id ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji> ` : "";
     if (productIcon) tpl = tpl.replace(/📦\s*(<[^>]+>)?\s*\{product\}/g, "$1{product}");
@@ -5769,6 +5794,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       old_price: oldPrice.toFixed(2),
       new_price: newPrice.toFixed(2),
       price: newPrice.toFixed(2),
+      bulk_pricing: bulkPricing,
     });
     const botUser = await getBotUsername();
     const code = product.short_code || product.id.slice(0, 4).toUpperCase();
