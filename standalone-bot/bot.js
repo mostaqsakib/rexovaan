@@ -5031,11 +5031,12 @@ async function handleMessage(message, emojiMap) {
   }
 
   if (customer.pending_action === "admin_broadcast" && isAdmin(chatId)) {
-    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
     const htmlText = normalizeTelegramHtml(entitiesToHtml(rawText, message.entities));
-    await sendMessage(chatId, `📢 Broadcasting... Please wait.`);
-    const { total, sent, failed } = await broadcastToAll(htmlText);
-    await sendMessage(chatId, `✅ <b>Broadcast Complete!</b>\n\n📤 Sent: <b>${sent}</b>\n❌ Failed: <b>${failed}</b>\n👥 Total: <b>${total}</b>`, { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    await supabase.from("bot_customers").update({
+      pending_action: "admin_broadcast_pickprod",
+      pending_inputs: { text: htmlText, productIds: [] },
+    }).eq("id", customer.id);
+    await showBroadcastProductPicker(chatId, null, []);
     return;
   }
 
