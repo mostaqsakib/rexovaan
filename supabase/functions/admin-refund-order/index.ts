@@ -59,10 +59,10 @@ Deno.serve(async (req) => {
     }
 
     // 3. Delete Telegram delivery messages from customer's chat
-    const { data: customer } = await supabase.from("bot_customers").select("chat_id").eq("id", order.customer_id).maybeSingle();
+    const { data: customer } = await supabase.from("bot_customers").select("*").eq("id", order.customer_id).maybeSingle();
     const msgIds: number[] = Array.isArray(order.delivery_message_ids) ? order.delivery_message_ids : [];
     let deleted = 0;
-    if (customer?.chat_id && msgIds.length) {
+    if (customer?.chat_id && customer.chat_id > 0 && msgIds.length) {
       for (const mid of msgIds) {
         const r = await tgDelete(Number(customer.chat_id), Number(mid));
         if (r?.ok) deleted++;
@@ -76,14 +76,23 @@ Deno.serve(async (req) => {
       refund_note: note || null,
     }).eq("id", order.id);
 
-    // 5. Notify customer (best-effort)
-    if (customer?.chat_id && TELEGRAM_API) {
-      const text = `↩️ <b>Order Refunded</b>\n\nProduct: <b>${order.product_name}</b> × ${order.quantity}\nRefunded: <b>${Number(order.total_price).toFixed(2)} USDT</b> to your balance${note ? `\n\nNote: ${note}` : ""}`;
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: customer.chat_id, text, parse_mode: "HTML", disable_web_page_preview: true }),
-      }).catch(() => {});
+    // 5. Notify customer over Telegram + email (best-effort)
+    if (customer) {
+      const tgText = `↩️ <b>Order Refunded</b>\n\nProduct: <b>${order.product_name}</b> × ${order.quantity}\nRefunded: <b>${Number(order.total_price).toFixed(2)} USDT</b> to your balance${note ? `\n\nNote: ${note}` : ""}`;
+      await notifyCustomer(supabase, {
+        customer,
+        telegram: { text: tgText },
+        email: {
+          templateName: "order-refunded",
+          templateData: {
+            customerName: customer.first_name,
+            productName: order.product_name,
+            quantity: order.quantity,
+            amount: order.total_price,
+            note: note || undefined,
+          },
+        },
+      });
     }
 
     return new Response(JSON.stringify({ ok: true, deleted_messages: deleted, total_messages: msgIds.length }), {
