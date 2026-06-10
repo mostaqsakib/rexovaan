@@ -5,6 +5,7 @@ import { useCustomerAuth } from '@/contexts/CustomerAuthContext';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import BindEmailCard from '@/components/customer/BindEmailCard';
+import BindTelegramCard from '@/components/customer/BindTelegramCard';
 
 export default function Account() {
   const { user, customer, signOut, loading } = useCustomerAuth();
@@ -49,6 +50,11 @@ export default function Account() {
       </div>
 
       <BindEmailCard currentEmail={user.email} />
+      <BindTelegramCard
+        currentChatId={customer?.chat_id as number | undefined}
+        currentUsername={customer?.username as string | undefined}
+        onBound={() => window.location.reload()}
+      />
 
       <div className="grid sm:grid-cols-2 gap-3">
         <Button asChild variant="outline" className="h-auto py-4 justify-start gap-3"><Link to="/account/orders"><ClipboardList className="h-5 w-5 text-primary" /> Order history</Link></Button>

@@ -995,6 +995,30 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_telegram_bind_codes: {
+        Row: {
+          auth_user_id: string
+          code: string
+          created_at: string
+          expires_at: string
+          used_at: string | null
+        }
+        Insert: {
+          auth_user_id: string
+          code: string
+          created_at?: string
+          expires_at?: string
+          used_at?: string | null
+        }
+        Update: {
+          auth_user_id?: string
+          code?: string
+          created_at?: string
+          expires_at?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       bot_withdrawals: {
         Row: {
           admin_note: string | null
@@ -1311,6 +1335,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bind_telegram_to_customer: {
+        Args: {
+          _auth_user_id: string
+          _chat_id: number
+          _first_name: string
+          _username: string
+        }
+        Returns: {
+          message: string
+          status: string
+        }[]
+      }
       claim_pending_delivery_order: {
         Args: { _new_status: string; _order_id: string }
         Returns: {

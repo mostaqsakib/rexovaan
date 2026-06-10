@@ -4489,6 +4489,40 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  // /bind <CODE>  → link this Telegram account to a web account that generated <CODE>
+  if (text?.startsWith("/bind")) {
+    const parts = text.trim().split(/\s+/);
+    const code = (parts[1] || "").toUpperCase();
+    if (!code) {
+      await sendMessage(chatId, "Usage: <code>/bind &lt;CODE&gt;</code>\n\nGenerate a code from your web account → Account page → Bind Telegram.", { parse_mode: "HTML" });
+      return;
+    }
+    try {
+      const resp = await fetch(`${process.env.SUPABASE_URL}/functions/v1/bot-bind-telegram-confirm`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          code,
+          chat_id: chatId,
+          username: msg?.from?.username || null,
+          first_name: msg?.from?.first_name || null,
+        }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        await sendMessage(chatId, `❌ ${data?.error || "Failed to bind"}`);
+      } else {
+        await sendMessage(chatId, "✅ Your Telegram is now linked to your web account. You can use either to access the same balance and orders.");
+      }
+    } catch (e) {
+      await sendMessage(chatId, `❌ Bind failed: ${e.message}`);
+    }
+    return;
+  }
+
   if (text === "/start" || text?.startsWith("/start ")) {
     // Deep linking: /start p_<short_code> → directly show product details
     const startParam = text.split(" ")[1];
