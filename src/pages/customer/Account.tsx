@@ -5,6 +5,7 @@ import { useCustomerAuth } from '@/contexts/CustomerAuthContext';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import BindEmailCard from '@/components/customer/BindEmailCard';
+import BindTelegramCard from '@/components/customer/BindTelegramCard';
 
 export default function Account() {
   const { user, customer, signOut, loading } = useCustomerAuth();
