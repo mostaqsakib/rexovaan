@@ -177,11 +177,15 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
     .eq("product_id", productId)
     .order("min_quantity", { ascending: true });
 
+  const { data: bulkEmoji } = await supabase.from("bot_button_emojis").select("custom_emoji_id").eq("button_key", "bulk_pricing").maybeSingle();
+  const bulkIcon = bulkEmoji?.custom_emoji_id ? `<tg-emoji emoji-id="${bulkEmoji.custom_emoji_id}">🛍️</tg-emoji>` : "🛍️";
+
   let bulkPricingText = "";
   if (bulkTiers && bulkTiers.length > 0) {
-    bulkPricingText = bulkTiers
+    const tiersText = bulkTiers
       .map((t) => `• ${t.min_quantity}+ pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`)
       .join("\n");
+    bulkPricingText = `\n\n${bulkIcon} <b>Bulk Pricing:</b>\n\n${tiersText}`;
   }
 
   const { data: settings } = await supabase.from("bot_settings").select("value").eq("key", "msg_stock_alert").maybeSingle();
