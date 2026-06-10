@@ -476,6 +476,24 @@ async function broadcastToChats(chatIds, text, replyMarkup) {
   return { total: ids.length, sent, failed, messageIds };
 }
 
+async function showBroadcastProductPicker(chatId, msgId, selectedIds) {
+  const { data: prods } = await supabase.from("bot_products").select("id, name, short_code, custom_emoji_id, is_active").eq("is_active", true).order("sort_order");
+  const selected = new Set((selectedIds || []).map(String));
+  const rows = [];
+  for (const p of (prods || [])) {
+    const mark = selected.has(p.id) ? "✅" : "▫️";
+    rows.push([productSelectButton(p, `${mark} ${p.name}`, `adm_bcast_toggle_${p.id}`)]);
+  }
+  rows.push([
+    { text: `📤 Send ${selected.size ? `(${selected.size} btn)` : "without buttons"}`, callback_data: selected.size ? "adm_bcast_send" : "adm_bcast_skip" },
+  ]);
+  rows.push([{ text: "❌ Cancel", callback_data: "adm_bcast_cancel" }]);
+  const txt = `🔘 <b>Attach Product Buttons</b>\n\nTap products to toggle Buy buttons. Selected: <b>${selected.size}</b>\n\nPress <b>Send</b> when done.`;
+  if (msgId) await editOrSend(chatId, msgId, txt, { inline_keyboard: rows });
+  else await sendMessage(chatId, txt, { inline_keyboard: rows });
+}
+
+
 // ── Flash Sales helpers ──
 async function getActiveFlashSale(productId) {
   const { data } = await supabase
