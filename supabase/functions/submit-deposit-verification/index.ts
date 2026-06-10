@@ -91,11 +91,12 @@ interface VerifyTargets {
   binance: boolean; bybit: boolean; bep20: boolean; trc20: boolean; ton: boolean; ltc: boolean;
 }
 
-function inferVerificationTargets(_normalizedTxn: string, _paymentMethodName = ""): VerifyTargets {
-  // All deposits (every payment method) are verified exclusively via Binance API,
-  // since every receive address belongs to the same Binance account.
-  return { binance: true, bybit: false, bep20: false, trc20: false, ton: false, ltc: false };
+function inferVerificationTargets(_normalizedTxn: string, paymentMethodName = ""): VerifyTargets {
+  // Bybit Pay → Bybit API. Everything else (BEP20, TRC20, TON, LTC, Binance Pay) → Binance API only.
+  const isBybit = paymentMethodName.toLowerCase().includes("bybit");
+  return { binance: !isBybit, bybit: isBybit, bep20: false, trc20: false, ton: false, ltc: false };
 }
+
 
 
 const STABLECOINS = new Set(["USDT","USDC","FDUSD","BUSD","DAI","TUSD","USDP"]);
