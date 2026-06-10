@@ -91,30 +91,12 @@ interface VerifyTargets {
   binance: boolean; bybit: boolean; bep20: boolean; trc20: boolean; ton: boolean; ltc: boolean;
 }
 
-function inferVerificationTargets(normalizedTxn: string, paymentMethodName = ""): VerifyTargets {
-  const txn = normalizedTxn.trim();
-  const method = paymentMethodName.toLowerCase();
-  const isBybitMethod = method.includes("bybit");
-  const isBkashMethod = method.includes("bkash") || method.includes("বিকাশ");
-
-  const hinted: VerifyTargets = {
-    binance: !isBybitMethod && !isBkashMethod,
-    bybit: isBybitMethod,
-    bep20: method.includes("bep20") || method.includes("bsc"),
-    trc20: method.includes("trc20") || method.includes("tron"),
-    ton: /(^|\s)ton(\s|$)/.test(method),
-    ltc: method.includes("ltc") || method.includes("litecoin"),
-  };
-  if (Object.values(hinted).some(Boolean)) return hinted;
-
-  if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(txn)) return { binance: false, bybit: true, bep20: false, trc20: false, ton: false, ltc: false };
-  if (isBybitOrderLikeId(txn)) return { binance: false, bybit: true, bep20: false, trc20: false, ton: false, ltc: false };
-  if (/^\d{8,}$/.test(txn)) return { binance: true, bybit: false, bep20: false, trc20: false, ton: false, ltc: false };
-  if (/^0x[a-fA-F0-9]{20,}$/.test(txn)) return { binance: true, bybit: false, bep20: true, trc20: false, ton: false, ltc: false };
-  if (/^[a-fA-F0-9]{32,128}$/.test(txn)) return { binance: true, bybit: false, bep20: true, trc20: true, ton: false, ltc: true };
-  if (/^[A-Za-z0-9_-]{40,128}$/.test(txn)) return { binance: true, bybit: false, bep20: false, trc20: false, ton: true, ltc: false };
-  return { binance: true, bybit: false, bep20: true, trc20: true, ton: true, ltc: true };
+function inferVerificationTargets(_normalizedTxn: string, _paymentMethodName = ""): VerifyTargets {
+  // All deposits (every payment method) are verified exclusively via Binance API,
+  // since every receive address belongs to the same Binance account.
+  return { binance: true, bybit: false, bep20: false, trc20: false, ton: false, ltc: false };
 }
+
 
 const STABLECOINS = new Set(["USDT","USDC","FDUSD","BUSD","DAI","TUSD","USDP"]);
 async function coinToUsdt(coin: string, amount: number | string): Promise<number> {
