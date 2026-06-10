@@ -24,6 +24,34 @@ async function getBkashToken(): Promise<string | null> {
   return data.id_token || null;
 }
 
+const SITE_URL = (Deno.env.get("SITE_URL") || "https://rexovaan.com").replace(/\/$/, "");
+
+function redirectHTML(source: string | null, status: "success" | "cancel" | "failed", message: string, extra: Record<string, string> = {}) {
+  const isWeb = source === "web";
+  let target = "";
+  if (isWeb) {
+    const params = new URLSearchParams({ bkash: status, msg: message, ...extra });
+    target = `${SITE_URL}/deposit?${params.toString()}`;
+  } else {
+    const botUsername = Deno.env.get("BOT_USERNAME") || "";
+    target = botUsername ? `https://t.me/${botUsername}` : "";
+  }
+  const safeMsg = message.replace(/</g, "&lt;");
+  const color = status === "success" ? "#16a34a" : status === "cancel" ? "#f59e0b" : "#dc2626";
+  const icon = status === "success" ? "✅" : status === "cancel" ? "⚠️" : "❌";
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>bKash Payment</title>
+<style>body{margin:0;background:#0b0b12;color:#fff;font-family:system-ui,-apple-system,sans-serif;display:grid;place-items:center;min-height:100vh;padding:20px}
+.card{background:#15151f;border:1px solid #ffffff14;border-radius:16px;padding:28px;max-width:420px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+.icon{font-size:48px;margin-bottom:8px}.title{font-size:20px;font-weight:700;margin:8px 0;color:${color}}
+.msg{color:#b4b4c0;font-size:14px;margin-bottom:18px}.spin{font-size:12px;color:#7a7a86}</style></head>
+<body><div class="card"><div class="icon">${icon}</div><div class="title">bKash ${status === "success" ? "Payment Successful" : status === "cancel" ? "Payment Cancelled" : "Payment Failed"}</div>
+<div class="msg">${safeMsg}</div><div class="spin">Redirecting…</div></div>
+<script>(function(){var t=${JSON.stringify(target)};if(window.Telegram&&window.Telegram.WebApp){try{window.Telegram.WebApp.close();}catch(e){}}
+if(t){setTimeout(function(){window.location.href=t;},1500);}else{try{window.close();}catch(e){}}})();</script>
+</body></html>`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -46,16 +74,18 @@ Deno.serve(async (req) => {
     .eq("txn_hash", `bkash_${paymentID}`)
     .maybeSingle();
 
-  if (!deposit || !paymentID) {
-    return new Response(generateHTML("❌ Payment not found or already processed."), {
+  const source = deposit?.source ?? "web";
+  const htmlResp = (status: "success" | "cancel" | "failed", message: string, extra: Record<string, string> = {}) =>
+    new Response(redirectHTML(source, status, message, extra), {
       headers: { ...corsHeaders, "Content-Type": "text/html" },
     });
+
+  if (!deposit || !paymentID) {
+    return htmlResp("failed", "Payment not found or already processed.");
   }
 
   if (deposit.status === "verified") {
-    return new Response(generateHTML("✅ Payment already processed. You can close this window."), {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
-    });
+    return htmlResp("success", "Payment already processed.");
   }
 
   const { data: customer } = await supabase
@@ -65,14 +95,13 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (status !== "success") {
-    // Payment cancelled or failed — keep a retryable status so a later success callback can still be processed.
+    // Payment cancelled or failed
     await supabase
       .from("bot_deposits")
       .update({ status: status === "cancel" ? "bkash_cancelled" : "rejected" })
       .eq("id", deposit.id)
       .neq("status", "verified");
-    
-    // Notify user via Telegram
+
     const chatId = customer?.chat_id;
     if (chatId) {
       await sendTelegram("sendMessage", {
@@ -82,17 +111,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(generateHTML("❌ Payment was cancelled. You can close this window."), {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
-    });
+    if (status === "cancel") return htmlResp("cancel", "You cancelled the payment. You can try again.");
+    return htmlResp("failed", "Payment failed. Please try again.");
   }
 
   // Execute the payment
   const token = await getBkashToken();
   if (!token) {
-    return new Response(generateHTML("❌ Server error. Please contact support."), {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
-    });
+    return htmlResp("failed", "Server error. Please contact support.");
   }
 
   const appKey = Deno.env.get("BKASH_APP_KEY")!;
@@ -112,7 +138,7 @@ Deno.serve(async (req) => {
 
   if (execData.statusCode !== "0000" && execData.transactionStatus !== "Completed") {
     await supabase.from("bot_deposits").update({ status: "rejected" }).eq("id", deposit.id);
-    
+
     const chatId = customer?.chat_id;
     if (chatId) {
       await sendTelegram("sendMessage", {
@@ -122,9 +148,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(generateHTML("❌ Payment failed. Please try again."), {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
-    });
+    return htmlResp("failed", execData.statusMessage || "Payment could not be completed.");
   }
 
   // Payment successful!
@@ -143,8 +167,6 @@ Deno.serve(async (req) => {
   const hasPendingProduct = deposit.pending_product_id && deposit.pending_quantity;
 
   if (hasPendingProduct) {
-    // Has pending product — set to "pending" with real trxID so the bot's
-    // background checker picks it up and handles delivery automatically
     const { data: updatedDeposit } = await supabase
       .from("bot_deposits")
       .update({
@@ -158,9 +180,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!updatedDeposit) {
-      return new Response(generateHTML("✅ Payment already processed."), {
-        headers: { ...corsHeaders, "Content-Type": "text/html" },
-      });
+      return htmlResp("success", "Payment already processed.");
     }
 
     const chatId = customer?.chat_id;
@@ -172,7 +192,6 @@ Deno.serve(async (req) => {
       });
     }
   } else {
-    // Regular deposit — credit balance directly
     const { data: updatedDeposit } = await supabase
       .from("bot_deposits")
       .update({
@@ -187,9 +206,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!updatedDeposit) {
-      return new Response(generateHTML("✅ Payment already processed."), {
-        headers: { ...corsHeaders, "Content-Type": "text/html" },
-      });
+      return htmlResp("success", "Payment already processed.");
     }
 
     const currentBalance = Number(customer?.balance || 0);
@@ -220,8 +237,9 @@ Deno.serve(async (req) => {
     }
   }
 
-  return new Response(generateHTML("✅ Payment successful! You can close this window and return to Telegram."), {
-    headers: { ...corsHeaders, "Content-Type": "text/html" },
+  return htmlResp("success", `Paid ৳${bdtAmount.toFixed(2)} BDT — $${usdtAmount.toFixed(2)} added to your balance.`, {
+    amount: String(usdtAmount),
+    trx: trxID,
   });
 });
 
@@ -242,28 +260,3 @@ async function sendTelegram(method: string, body: Record<string, unknown>) {
   });
 }
 
-function generateHTML(_message: string): string {
-  const botUsername = Deno.env.get("BOT_USERNAME") || "";
-  const tgLink = botUsername ? `https://t.me/${botUsername}` : "";
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>bKash Payment</title>
-  <style>body{margin:0;background:#f5f5f5;}</style>
-</head>
-<body>
-  <script>
-    (function() {
-      if (window.Telegram && window.Telegram.WebApp) {
-        window.Telegram.WebApp.close();
-      }
-      try { window.close(); } catch(e) {}
-      var tgLink = "${tgLink}";
-      if (tgLink) { window.location.href = tgLink; }
-    })();
-  </script>
-</body>
-</html>`;
-}
