@@ -42,19 +42,22 @@ export default function Deposit() {
     const bkash = searchParams.get('bkash');
     if (!bkash) return;
     const msg = searchParams.get('msg') || '';
-    if (bkash === 'success') {
-      toast.success('bKash payment successful!', { description: msg || undefined, duration: 6000 });
-      refreshCustomer();
-    } else if (bkash === 'cancel') {
-      toast.warning('bKash payment cancelled', { description: msg || 'You cancelled the payment.', duration: 6000 });
-    } else {
-      toast.error('bKash payment failed', { description: msg || 'Please try again.', duration: 6000 });
-    }
+    (async () => {
+      if (bkash === 'success') {
+        try { await refreshCustomer(); } catch { /* ignore */ }
+        toast.success('bKash payment successful! Balance updated.', { description: msg || undefined, duration: 6000 });
+      } else if (bkash === 'cancel') {
+        toast.warning('bKash payment cancelled', { description: msg || 'You cancelled the payment.', duration: 6000 });
+      } else {
+        toast.error('bKash payment failed', { description: msg || 'Please try again.', duration: 6000 });
+      }
+    })();
     const next = new URLSearchParams(searchParams);
     ['bkash', 'msg', 'amount', 'trx'].forEach((k) => next.delete(k));
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [selected, setSelected] = useState<PaymentMethod | null>(null);
   const [loading, setLoading] = useState(true);
