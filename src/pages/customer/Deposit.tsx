@@ -33,9 +33,28 @@ export default function Deposit() {
   const { user, customer, loading: authLoading, refreshCustomer } = useCustomerAuth();
   const { format } = useCurrency();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const prefillAmount = searchParams.get('amount');
   const nextUrl = searchParams.get('next');
+
+  // Handle bKash callback redirect (?bkash=success|cancel|failed&msg=...)
+  useEffect(() => {
+    const bkash = searchParams.get('bkash');
+    if (!bkash) return;
+    const msg = searchParams.get('msg') || '';
+    if (bkash === 'success') {
+      toast.success('bKash payment successful!', { description: msg || undefined, duration: 6000 });
+      refreshCustomer();
+    } else if (bkash === 'cancel') {
+      toast.warning('bKash payment cancelled', { description: msg || 'You cancelled the payment.', duration: 6000 });
+    } else {
+      toast.error('bKash payment failed', { description: msg || 'Please try again.', duration: 6000 });
+    }
+    const next = new URLSearchParams(searchParams);
+    ['bkash', 'msg', 'amount', 'trx'].forEach((k) => next.delete(k));
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [selected, setSelected] = useState<PaymentMethod | null>(null);
   const [loading, setLoading] = useState(true);
