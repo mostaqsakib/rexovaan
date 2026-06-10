@@ -5839,10 +5839,50 @@ async function handleCallback(callbackQuery, emojiMap) {
   }
 
   if (data === "adm_broadcast" && isAdmin(chatId)) {
-    await supabase.from("bot_customers").update({ pending_action: "admin_broadcast" }).eq("chat_id", chatId);
-    await editOrSend(chatId, msgId, `📢 <b>Broadcast Mode</b>\n\nType your broadcast message now. It will be sent to all bot users.\n\nHTML formatting: <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>\n\n❌ /cancel to cancel`);
+    await supabase.from("bot_customers").update({ pending_action: "admin_broadcast", pending_inputs: null }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `📢 <b>Broadcast Mode</b>\n\nType your broadcast message now. After that you can attach product buttons.\n\nHTML formatting: <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>\n\n❌ /cancel to cancel`);
     return;
   }
+
+  if (data.startsWith("adm_bcast_toggle_") && isAdmin(chatId)) {
+    const pid = data.replace("adm_bcast_toggle_", "");
+    const pending = customer.pending_inputs && typeof customer.pending_inputs === "object" ? customer.pending_inputs : {};
+    const ids = Array.isArray(pending.productIds) ? pending.productIds.slice() : [];
+    const idx = ids.indexOf(pid);
+    if (idx >= 0) ids.splice(idx, 1); else ids.push(pid);
+    await supabase.from("bot_customers").update({ pending_inputs: { ...pending, productIds: ids } }).eq("id", customer.id);
+    await showBroadcastProductPicker(chatId, msgId, ids);
+    return;
+  }
+
+  if ((data === "adm_bcast_send" || data === "adm_bcast_skip") && isAdmin(chatId)) {
+    const pending = customer.pending_inputs && typeof customer.pending_inputs === "object" ? customer.pending_inputs : {};
+    const htmlText = pending.text || "";
+    const ids = data === "adm_bcast_send" && Array.isArray(pending.productIds) ? pending.productIds : [];
+    await supabase.from("bot_customers").update({ pending_action: null, pending_inputs: null }).eq("id", customer.id);
+    if (!htmlText) { await editOrSend(chatId, msgId, "❌ Broadcast text missing.", { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] }); return; }
+    let replyMarkup;
+    if (ids.length > 0) {
+      const { data: prods } = await supabase.from("bot_products").select("id, name, short_code, custom_emoji_id").in("id", ids);
+      const botUser = await getBotUsername();
+      const rows = (prods || []).map((p) => {
+        const code = p.short_code || p.id.slice(0, 4).toUpperCase();
+        return [buyNowButton({ text: `Buy ${p.name}`, url: `https://t.me/${botUser}?start=p_${code}` }, emojiMap)];
+      });
+      if (rows.length > 0) replyMarkup = { inline_keyboard: rows };
+    }
+    await editOrSend(chatId, msgId, `📢 Broadcasting...`);
+    const { total, sent, failed } = await broadcastToAll(htmlText, replyMarkup);
+    await sendMessage(chatId, `✅ <b>Broadcast Complete!</b>\n\n📤 Sent: <b>${sent}</b>\n❌ Failed: <b>${failed}</b>\n👥 Total: <b>${total}</b>${ids.length ? `\n🔘 Buttons: <b>${ids.length}</b>` : ""}`, { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+  }
+
+  if (data === "adm_bcast_cancel" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: null, pending_inputs: null }).eq("id", customer.id);
+    await editOrSend(chatId, msgId, "❌ Broadcast cancelled.", { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+  }
+
 
   if (data === "adm_newstock" && isAdmin(chatId)) {
     const { data: prods } = await supabase.from("bot_products").select("id, name, custom_emoji_id").eq("is_active", true).order("sort_order");
