@@ -23,12 +23,13 @@ export default function ProductDetail() {
 
   useEffect(() => {
     (async () => {
-      let query = supabase.from('bot_products').select('*').eq('is_active', true).limit(1);
+      const safeCols = 'id,name,description,price,short_code,last_known_stock,is_manual_delivery,custom_emoji_id,is_active';
+      let query = supabase.from('bot_products').select(safeCols).eq('is_active', true).limit(1);
       // try short_code first, then id
       const { data: byCode } = await query.eq('short_code', (code || '').toUpperCase()).maybeSingle();
-      let p = byCode;
+      let p: any = byCode;
       if (!p) {
-        const { data: byId } = await supabase.from('bot_products').select('*').eq('id', code).maybeSingle();
+        const { data: byId } = await supabase.from('bot_products').select(safeCols).eq('id', code).maybeSingle();
         p = byId;
       }
       setProduct(p);
