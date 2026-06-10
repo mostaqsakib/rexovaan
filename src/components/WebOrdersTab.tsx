@@ -95,12 +95,17 @@ const WebOrdersTab = () => {
     if (sourceFilter !== 'all' && getOrderSource(o) !== sourceFilter) return false;
     if (!q.trim()) return true;
     const s = q.toLowerCase();
+    const detailsText = getOrderDetails(o)
+      .map((d: any) => Object.values(d || {}).join(' '))
+      .join(' ')
+      .toLowerCase();
     return (
       o.product_name.toLowerCase().includes(s) ||
       (o.customer?.username || '').toLowerCase().includes(s) ||
       (o.customer?.first_name || '').toLowerCase().includes(s) ||
       String(o.customer?.chat_id || '').includes(s) ||
-      o.id.toLowerCase().includes(s)
+      o.id.toLowerCase().includes(s) ||
+      detailsText.includes(s)
     );
   });
 
