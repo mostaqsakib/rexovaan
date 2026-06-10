@@ -179,9 +179,10 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
 
   let bulkPricingText = "";
   if (bulkTiers && bulkTiers.length > 0) {
-    bulkPricingText = bulkTiers
+    const tierLines = bulkTiers
       .map((t) => `• ${t.min_quantity}+ pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`)
       .join("\n");
+    bulkPricingText = `<b>BULK DISCOUNT:</b>\n\n${tierLines}`;
   }
 
   const { data: settings } = await supabase.from("bot_settings").select("value").eq("key", "msg_stock_alert").maybeSingle();
