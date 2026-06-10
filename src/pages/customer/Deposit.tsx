@@ -191,10 +191,13 @@ export default function Deposit() {
     setPendingDeposit(null);
     try { await refreshCustomer(); } catch { /* ignore */ }
     if (nextUrl) {
-      toast.success('Payment received — completing your order…');
+      toast.success(`Payment of $${info.amount.toFixed(2)} received — completing your order…`);
       setTimeout(() => navigate(nextUrl), 1500);
+    } else {
+      toast.success(`Payment of $${info.amount.toFixed(2)} received! Balance updated.`, { duration: 6000 });
     }
   };
+
 
   const submitDeposit = async () => {
     const parsedAmount = Number(amount);
