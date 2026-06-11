@@ -178,8 +178,12 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
     .order("min_quantity", { ascending: true });
 
   let bulkPricingText = "";
-  if (bulkTiers && bulkTiers.length > 0) {
-    const tierLines = bulkTiers
+  const basePrice = Number(product.price || 0);
+  const meaningfulTiers = (bulkTiers || []).filter(
+    (t) => Number(t.min_quantity) > 1 && Number(t.price) < basePrice
+  );
+  if (meaningfulTiers.length > 0) {
+    const tierLines = meaningfulTiers
       .map((t) => `• ${t.min_quantity}+ pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`)
       .join("\n");
     bulkPricingText = `<b>BULK DISCOUNT:</b>\n\n${tierLines}`;
