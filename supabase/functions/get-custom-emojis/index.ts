@@ -9,29 +9,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY = 'https://connector-gateway.lovable.dev/telegram';
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY')!;
-const TELEGRAM_API_KEY = (Deno.env.get('TELEGRAM_API_KEY_1') || Deno.env.get('TELEGRAM_API_KEY'))!;
+const BOT_TOKEN = Deno.env.get('BOT_TOKEN')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const tgHeaders = {
-  'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-  'X-Connection-Api-Key': TELEGRAM_API_KEY,
-  'Content-Type': 'application/json',
-};
-
 async function tg(method: string, body: any) {
-  const r = await fetch(`${GATEWAY}/${method}`, { method: 'POST', headers: tgHeaders, body: JSON.stringify(body) });
+  const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
   const j = await r.json();
   if (!r.ok || !j.ok) throw new Error(`${method}: ${JSON.stringify(j)}`);
   return j.result;
 }
 
 async function downloadFile(filePath: string): Promise<Uint8Array> {
-  const r = await fetch(`${GATEWAY}/file/${filePath}`, {
-    headers: { 'Authorization': `Bearer ${LOVABLE_API_KEY}`, 'X-Connection-Api-Key': TELEGRAM_API_KEY },
-  });
+  const r = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`);
   if (!r.ok) throw new Error(`download failed ${r.status}`);
   return new Uint8Array(await r.arrayBuffer());
 }
