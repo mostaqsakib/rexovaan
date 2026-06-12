@@ -172,11 +172,49 @@ export default function LinkCheckerTab() {
           </Card>
 
 
+          {jobs.filter(j => j.status === 'running').map(j => {
+            const pct = j.total > 0 ? Math.round((j.checked / j.total) * 100) : 0;
+            return (
+              <Card key={j.id} className="border-primary/50">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" /> Running Job — {productName(j.product_id)}</CardTitle>
+                  <Button size="sm" variant="ghost" onClick={() => cancelJob(j.id)}>Cancel</Button>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Progress value={pct} />
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                    <span>{j.checked}/{j.total} checked</span>
+                    <span className="text-success">✓ {j.valid_count} valid</span>
+                    <span className="text-destructive">✗ {j.invalid_count} invalid</span>
+                    {j.error_count > 0 && <span className="text-warning">! {j.error_count} errors</span>}
+                    <span className="ml-auto">{new Date(j.created_at).toLocaleString()}</span>
+                  </div>
+                  {j.error_text && <div className="text-xs text-destructive">{j.error_text}</div>}
+                </CardContent>
+              </Card>
+            );
+          })}
+
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Recent Jobs</CardTitle><Button size="sm" variant="ghost" onClick={loadAll}><RefreshCw className="h-4 w-4" /></Button></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Other Jobs</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={async () => {
+                  if (!confirm('Delete all completed / cancelled / failed jobs?')) return;
+                  const toDelete = jobs.filter(j => j.status !== 'running' && j.status !== 'queued');
+                  for (const j of toDelete) {
+                    await supabase.from('link_check_items').delete().eq('job_id', j.id);
+                    await supabase.from('link_check_jobs').delete().eq('id', j.id);
+                  }
+                  toast.success('Cleared old jobs');
+                  void loadAll();
+                }}><Trash2 className="h-4 w-4 mr-1" /> Clear Old</Button>
+                <Button size="sm" variant="ghost" onClick={loadAll}><RefreshCw className="h-4 w-4" /></Button>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-3">
-              {jobs.length === 0 && <div className="text-sm text-muted-foreground">No jobs yet.</div>}
-              {jobs.map(j => {
+              {jobs.filter(j => j.status !== 'running').length === 0 && <div className="text-sm text-muted-foreground">No other jobs.</div>}
+              {jobs.filter(j => j.status !== 'running').map(j => {
                 const pct = j.total > 0 ? Math.round((j.checked / j.total) * 100) : 0;
                 return (
                   <div key={j.id} className="rounded-lg border p-3 space-y-2">
@@ -184,7 +222,7 @@ export default function LinkCheckerTab() {
                       <div className="font-medium">{productName(j.product_id)}</div>
                       <div className="flex items-center gap-2">
                         <Badge variant={j.status === 'completed' ? 'default' : j.status === 'failed' ? 'destructive' : 'secondary'}>{j.status}</Badge>
-                        {(j.status === 'queued' || j.status === 'running') && <Button size="sm" variant="ghost" onClick={() => cancelJob(j.id)}>Cancel</Button>}
+                        {j.status === 'queued' && <Button size="sm" variant="ghost" onClick={() => cancelJob(j.id)}>Cancel</Button>}
                       </div>
                     </div>
                     <Progress value={pct} />
