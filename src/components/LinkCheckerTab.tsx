@@ -141,6 +141,32 @@ export default function LinkCheckerTab() {
           </Card>
 
           <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><InfinityIcon className="h-4 w-4" /> Auto-Loop (continuous check)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="text-xs text-muted-foreground mb-2">
+                Toggle a product ON — worker will automatically re-check its full stock forever. When one round ends, it immediately starts the next. No manual click needed. (Telegram alert only sent when invalid links are found.)
+              </div>
+              {products.map(p => (
+                <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="font-medium text-sm">{p.name}</div>
+                  <Switch
+                    checked={!!p.link_check_auto}
+                    onCheckedChange={async (v) => {
+                      const { error } = await supabase.from('bot_products').update({ link_check_auto: v }).eq('id', p.id);
+                      if (error) { toast.error(error.message); return; }
+                      toast.success(v ? 'Auto-loop ON' : 'Auto-loop OFF');
+                      void loadAll();
+                    }}
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Recent Jobs</CardTitle><Button size="sm" variant="ghost" onClick={loadAll}><RefreshCw className="h-4 w-4" /></Button></CardHeader>
             <CardContent className="space-y-3">
               {jobs.length === 0 && <div className="text-sm text-muted-foreground">No jobs yet.</div>}
