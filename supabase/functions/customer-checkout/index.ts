@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const GATEWAY_URL = 'https://connector-gateway.lovable.dev/telegram';
+
 
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -28,9 +28,8 @@ async function notifyWebSale(admin: any, product: any, qty: number) {
   const groupId = rawId ? Number(rawId) : null;
   if (!groupId) return;
 
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  const TELEGRAM_API_KEY = Deno.env.get('TELEGRAM_API_KEY_1') || Deno.env.get('TELEGRAM_API_KEY');
-  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) return;
+  const BOT_TOKEN = Deno.env.get('BOT_TOKEN');
+  if (!BOT_TOKEN) return;
 
   const icon = product.custom_emoji_id
     ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji>`
@@ -42,15 +41,15 @@ async function notifyWebSale(admin: any, product: any, qty: number) {
   const tpl = map.msg_recent_sale_web || `🛍️ Someone just bought <b>{quantity}× {product}</b> from the website`;
   const text = applyTemplate(tpl, vars);
 
-  await fetch(`${GATEWAY_URL}/sendMessage`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      'X-Connection-Api-Key': TELEGRAM_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ chat_id: groupId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-  });
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: groupId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+    });
+  } catch (e) {
+    console.error('notifyWebSale failed', e);
+  }
 }
 
 
