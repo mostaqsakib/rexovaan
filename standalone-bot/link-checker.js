@@ -241,20 +241,63 @@ async function runJob(job) {
   }).eq('id', job.id);
 
   if (finalJob) {
-    const { data: prod } = await supabase.from('bot_products').select('name').eq('id', job.product_id).single();
-    await notifyAdmin(
-      `✅ <b>Link check complete</b>\n\n` +
-      `Product: <b>${prod?.name || job.product_id}</b>\n` +
-      `Total: ${finalJob.total}\n` +
-      `Valid: ${finalJob.valid_count}\n` +
-      `Invalid (removed): ${finalJob.invalid_count}\n` +
-      `Errors: ${finalJob.error_count}`
-    );
+    const { data: prod } = await supabase.from('bot_products').select('name, link_check_auto').eq('id', job.product_id).single();
+    // In auto-loop mode, only notify when invalid links were found (avoid spam).
+    const shouldNotify = !prod?.link_check_auto || finalJob.invalid_count > 0;
+    if (shouldNotify) {
+      await notifyAdmin(
+        `✅ <b>Link check complete</b>${prod?.link_check_auto ? ' (auto-loop)' : ''}\n\n` +
+        `Product: <b>${prod?.name || job.product_id}</b>\n` +
+        `Total: ${finalJob.total}\n` +
+        `Valid: ${finalJob.valid_count}\n` +
+        `Invalid (removed): ${finalJob.invalid_count}\n` +
+        `Errors: ${finalJob.error_count}`
+      );
+    }
+  }
+}
+
+async function autoEnqueueIfNeeded() {
+  // For every product with link_check_auto=true, ensure a queued/running job exists.
+  const { data: autoProducts } = await supabase
+    .from('bot_products')
+    .select('id, name')
+    .eq('link_check_auto', true)
+    .eq('is_active', true);
+  if (!autoProducts || autoProducts.length === 0) return;
+
+  // Pick active cookie once
+  const { data: cookie } = await supabase
+    .from('google_account_cookies')
+    .select('id')
+    .eq('is_active', true).eq('expired', false)
+    .limit(1).maybeSingle();
+  if (!cookie) return; // can't auto-loop without cookies
+
+  for (const p of autoProducts) {
+    const { data: existing } = await supabase
+      .from('link_check_jobs')
+      .select('id')
+      .eq('product_id', p.id)
+      .in('status', ['queued', 'running'])
+      .limit(1);
+    if (existing && existing.length > 0) continue;
+
+    await supabase.from('link_check_jobs').insert({
+      product_id: p.id,
+      cookie_id: cookie.id,
+      concurrency: 2,
+      delay_ms: 5000,
+      status: 'queued',
+    });
+    console.log(`[checker] auto-enqueued job for ${p.name}`);
   }
 }
 
 async function poll() {
   try {
+    await autoEnqueueIfNeeded();
+
     const { data, error } = await supabase
       .from('link_check_jobs')
       .select('*')

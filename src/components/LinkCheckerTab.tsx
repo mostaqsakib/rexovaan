@@ -11,10 +11,11 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Trash2, Download, Plus, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Trash2, Download, Plus, RefreshCw, AlertCircle, CheckCircle2, Infinity as InfinityIcon } from 'lucide-react';
 
 type Cookie = { id: string; label: string; is_active: boolean; expired: boolean; last_verified_at: string | null; created_at: string };
-type Product = { id: string; name: string; is_manual_delivery: boolean | null };
+type Product = { id: string; name: string; is_manual_delivery: boolean | null; link_check_auto?: boolean };
 type Job = { id: string; product_id: string; status: string; total: number; checked: number; valid_count: number; invalid_count: number; error_count: number; error_text: string | null; created_at: string; started_at: string | null; finished_at: string | null; concurrency: number; delay_ms: number };
 type InvalidStock = { id: string; product_id: string; data: any; invalid_reason: string | null; invalidated_at: string | null };
 
@@ -32,7 +33,7 @@ export default function LinkCheckerTab() {
   const loadAll = async () => {
     const [c, p, j, inv] = await Promise.all([
       supabase.from('google_account_cookies').select('*').order('created_at', { ascending: false }),
-      supabase.from('bot_products').select('id, name, is_manual_delivery').eq('is_active', true).order('name'),
+      supabase.from('bot_products').select('id, name, is_manual_delivery, link_check_auto').eq('is_active', true).order('name'),
       supabase.from('link_check_jobs').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('bot_product_stock_items').select('id, product_id, data, invalid_reason, invalidated_at').eq('status', 'invalid').order('invalidated_at', { ascending: false }).limit(500),
     ]);
@@ -138,6 +139,32 @@ export default function LinkCheckerTab() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><InfinityIcon className="h-4 w-4" /> Auto-Loop (continuous check)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="text-xs text-muted-foreground mb-2">
+                Toggle a product ON — worker will automatically re-check its full stock forever. When one round ends, it immediately starts the next. No manual click needed. (Telegram alert only sent when invalid links are found.)
+              </div>
+              {products.map(p => (
+                <div key={p.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="font-medium text-sm">{p.name}</div>
+                  <Switch
+                    checked={!!p.link_check_auto}
+                    onCheckedChange={async (v) => {
+                      const { error } = await supabase.from('bot_products').update({ link_check_auto: v }).eq('id', p.id);
+                      if (error) { toast.error(error.message); return; }
+                      toast.success(v ? 'Auto-loop ON' : 'Auto-loop OFF');
+                      void loadAll();
+                    }}
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Recent Jobs</CardTitle><Button size="sm" variant="ghost" onClick={loadAll}><RefreshCw className="h-4 w-4" /></Button></CardHeader>
