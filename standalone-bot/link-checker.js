@@ -241,15 +241,19 @@ async function runJob(job) {
   }).eq('id', job.id);
 
   if (finalJob) {
-    const { data: prod } = await supabase.from('bot_products').select('name').eq('id', job.product_id).single();
-    await notifyAdmin(
-      `✅ <b>Link check complete</b>\n\n` +
-      `Product: <b>${prod?.name || job.product_id}</b>\n` +
-      `Total: ${finalJob.total}\n` +
-      `Valid: ${finalJob.valid_count}\n` +
-      `Invalid (removed): ${finalJob.invalid_count}\n` +
-      `Errors: ${finalJob.error_count}`
-    );
+    const { data: prod } = await supabase.from('bot_products').select('name, link_check_auto').eq('id', job.product_id).single();
+    // In auto-loop mode, only notify when invalid links were found (avoid spam).
+    const shouldNotify = !prod?.link_check_auto || finalJob.invalid_count > 0;
+    if (shouldNotify) {
+      await notifyAdmin(
+        `✅ <b>Link check complete</b>${prod?.link_check_auto ? ' (auto-loop)' : ''}\n\n` +
+        `Product: <b>${prod?.name || job.product_id}</b>\n` +
+        `Total: ${finalJob.total}\n` +
+        `Valid: ${finalJob.valid_count}\n` +
+        `Invalid (removed): ${finalJob.invalid_count}\n` +
+        `Errors: ${finalJob.error_count}`
+      );
+    }
   }
 }
 
