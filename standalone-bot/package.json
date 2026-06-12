@@ -4,10 +4,14 @@
   "type": "module",
   "scripts": {
     "start": "node bot.js",
-    "dev": "node --watch bot.js"
+    "dev": "node --watch bot.js",
+    "checker": "node link-checker.js",
+    "start:all": "node bot.js & node link-checker.js & wait",
+    "postinstall": "playwright install chromium --with-deps || playwright install chromium || true"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "playwright": "^1.48.0"
   }
 }

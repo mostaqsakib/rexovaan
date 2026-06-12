@@ -1,4 +1,4 @@
-import { ShoppingCart, Package, PackageCheck, History, Bot, DollarSign, Users, ArrowUpCircle, ArrowDownCircle, CreditCard, Sparkles, Settings, Gift, KeyRound, MessagesSquare, Server, Flame, FormInput, ClipboardList, Zap, LayoutDashboard, Tag, Globe, Megaphone } from 'lucide-react';
+import { ShoppingCart, Package, PackageCheck, History, Bot, DollarSign, Users, ArrowUpCircle, ArrowDownCircle, CreditCard, Sparkles, Settings, Gift, KeyRound, MessagesSquare, Server, Flame, FormInput, ClipboardList, Zap, LayoutDashboard, Tag, Globe, Megaphone, Link2 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
@@ -37,6 +37,7 @@ const AppSidebar = ({ activeTab, onChange, pendingCount = 0 }: AppSidebarProps) 
         { id: 'special-pricing', label: 'Special Pricing', icon: Tag },
         { id: 'flash', label: 'Flash Sales', icon: Flame },
         { id: 'inputs', label: 'Cust. Inputs', icon: FormInput },
+        { id: 'link-checker', label: 'Link Checker', icon: Link2 },
       ],
     },
     {
