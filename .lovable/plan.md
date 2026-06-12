@@ -1,67 +1,120 @@
-# Full Proper Security Fix
+# Gemini Link Checker — Implementation Plan
 
-Goal: Remove the hardcoded PIN, give the admin a real Supabase login, and lock every admin table so the anon key cannot read or write it. Customer-facing data stays reachable through existing customer auth and a few intentionally public reads.
+## Overview
+Bulk-validate Gemini activation links (`one.google.com/activate-plan/...`) from a product's internal stock using a headless browser. Invalid links auto-remove from available stock (silently) and get archived for review. Cookie-based Google auth with Telegram alert on expiry.
 
-## 1. Database — roles + lock policies
+## Architecture
 
-**New:**
-- `app_role` enum (`admin`, `customer`)
-- `user_roles` table (user_id, role) — RLS enabled, only service role writes
-- `has_role(uuid, app_role)` SECURITY DEFINER function
+```text
+[Admin Panel UI]                    [Supabase DB]                  [Railway Worker]
+ - Cookie manager     ─────────►    google_cookies                 standalone-bot/
+ - Select product                   link_check_jobs       ◄──────► link-checker.js
+ - Start/stop job                   link_check_items                (Playwright)
+ - Progress + results               (invalid archive in                │
+ - Download invalid TXT             bot_product_stock_items            │
+                                     status='invalid')                 ▼
+                                                                  one.google.com
+```
 
-**Rewrite policies on every admin-only table** (drop `USING (true)` / public ALL policies, replace with `has_role(auth.uid(), 'admin')`):
+## Decision Recap (confirmed)
+1. Cookies: one-time manual export, stored in DB (long-lived).
+2. Invalid storage: extend `bot_product_stock_items` — set `status='invalid'` (silently removed from `available`), keep row for archive/restore.
+3. Worker: in `standalone-bot/` (separate `link-checker.js` process, same Railway service).
+4. Cookie expiry → Telegram notification to `ADMIN_CHAT_ID`.
+5. Invalid items auto-disappear from active stock; admin can review/clear later in a new tab.
 
-- `bot_customers`, `bot_orders`, `bot_deposits`, `bot_withdrawals`
-- `bot_resellers`, `bot_reseller_orders`, `bot_reseller_balance_transactions`
-- `bot_product_sources` (contains API keys — currently leakable)
-- `bot_product_stock_items` (contains sold license codes)
-- `bot_balance_adjustments`, `bot_referrals`, `bot_referral_earnings`
-- `bot_settings` — admin write; keep narrow public read only for `site_logo_url`, `site_shop_name`, `dollar_rate_bdt`
-- `bot_button_emojis`, `bot_broadcast_groups`, `bot_keyword_triggers`, `bot_customer_pricing` (admin write), `bot_custom_emoji_cache` (admin write), `bot_flash_sales` (admin write), `bot_payment_methods` (admin write), `bot_product_pricing` (admin write), `bot_products` (admin write), `site_announcements` (admin write), `telegram_bot_state`
-- Storage bucket `custom-emojis`: only admin can upload/delete (public read stays)
+## Database Changes (migration)
 
-Customer policies (`current_customer_id()`) stay as-is — those are already correct.
+**New table: `google_account_cookies`**
+- `id uuid pk`, `label text` (e.g. "main account"), `cookies_json jsonb`, `is_active bool default true`, `last_verified_at`, `expired bool default false`, `created_at`, `updated_at`.
+- RLS: admin only.
 
-## 2. Admin login flow
+**New table: `link_check_jobs`**
+- `id`, `product_id` (fk bot_products), `cookie_id` (fk google_account_cookies), `status` (`queued|running|completed|failed|cancelled`), `concurrency int default 2`, `delay_ms int default 5000`, `total int`, `checked int`, `valid_count int`, `invalid_count int`, `error_text`, `started_at`, `finished_at`, `created_at`.
+- RLS: admin only.
 
-- New `/admin/login` page → email + password via `supabase.auth.signInWithPassword`
-- After login, `AdminAuthContext` checks `has_role(uid, 'admin')`; if not → sign out + Access Denied
-- Remove hardcoded PIN `3695` and the `sessionStorage` PIN bypass entirely
-- Bootstrap: I'll create one admin user (you give me the email) and insert their `user_roles` row
+**New table: `link_check_items`** (per-link audit log per job)
+- `id`, `job_id` (fk), `stock_item_id` (fk bot_product_stock_items, nullable), `url text`, `status` (`pending|valid|invalid|error|skipped`), `reason text`, `checked_at`.
+- RLS: admin only.
 
-## 3. Telegram WebApp admin flow
+**Extend `bot_product_stock_items`**
+- The existing `status` column already supports `available|sold`. Add new allowed value `invalid`.
+- Add columns: `invalid_reason text`, `invalidated_at timestamptz`, `invalidated_job_id uuid`.
+- All existing queries that filter `status='available'` already exclude invalid items → silent removal works for free.
 
-`telegram-auth` edge function currently just returns `{ authorized: true }`. Upgrade it to:
-- Validate Telegram initData (already does)
-- If admin chat_id matches `ADMIN_CHAT_ID`, mint a Supabase session for the linked admin auth user (`admin.generateLink` → exchange to session) and return it
-- Frontend calls `supabase.auth.setSession(...)` with returned tokens
+**Worker queue helper RPC** (security definer): `claim_next_link_check_item(_job_id)` — picks next pending item, sets to in-progress, returns row. Avoids race when 2 workers run in parallel.
 
-This way Telegram-launched admin gets the same authenticated Supabase session as browser login — all queries Just Work under the new RLS.
+**RPC `mark_stock_item_invalid(_item_id, _reason, _job_id)`** — flips status to invalid and writes audit fields.
 
-## 4. Edge functions
+## Worker (`standalone-bot/link-checker.js`)
 
-Most admin edge functions (`admin-*`) already use service role internally, so they're fine. I'll add `has_role` verification at the top of each one (currently they trust the caller).
+Separate Node process (added to Railway start command alongside bot.js, or run as `npm run checker`).
 
-## 5. Frontend cleanup
+Flow:
+1. Poll `link_check_jobs` where `status='queued'` every 5s.
+2. Claim job → set `running`.
+3. Load active cookie row from `google_account_cookies`.
+4. Launch Playwright Chromium (`headless: true`, realistic user-agent), inject cookies via `context.addCookies()`.
+5. Build item list: pull all `available` stock items for product, extract the link from `data` JSON (need to know which column holds the URL — see open question), upsert into `link_check_items` as `pending`.
+6. Run a worker pool of `concurrency` (default 2):
+   - Navigate to link, wait for network idle + content selector.
+   - Detection rules:
+     - URL contains `accounts.google.com/signin` → **COOKIES EXPIRED**: mark `google_account_cookies.expired=true`, send Telegram alert via gateway, abort job with `failed`.
+     - Page text contains "Subscription already in use" / "already redeemed" / "not available" → **invalid** → call `mark_stock_item_invalid` + log.
+     - Page has "Activate plan" / accept button visible → **valid** → log only.
+     - Anything else → `error` (do not delete stock).
+   - Sleep `delay_ms` between checks.
+7. Update `link_check_jobs` counters in real time (UI polls/realtime).
+8. On finish → set `completed`, send Telegram summary to admin.
 
-- Delete PIN UI from `src/pages/Index.tsx`
-- Add `src/pages/AdminLogin.tsx`
-- Update `AdminAuthContext` to use Supabase session + role check
-- No changes needed in 30+ admin tab components — they already use `supabase` client; once the session is authenticated as admin, RLS allows the queries
+Dependencies to add in `standalone-bot/package.json`: `playwright`. Railway image will need `npx playwright install chromium --with-deps` in postinstall.
 
-## What you need to provide
+## Admin Panel UI (new tab "Link Checker")
 
-1. **Admin email + initial password** for the bootstrap admin account
-2. Confirm: should existing Telegram admin (chat_id from `ADMIN_CHAT_ID` secret) be auto-linked to this same account on first WebApp launch? (Recommended: yes)
+New file: `src/components/LinkCheckerTab.tsx` + add to `src/pages/Index.tsx` sidebar + TAB_TITLES.
 
-## Risk & rollout
+Sections:
+1. **Google Cookies** card
+   - List saved cookies with label, status (active/expired), last verified.
+   - "Add cookies" dialog: paste JSON exported from a Chrome cookie-editor extension (EditThisCookie / Cookie-Editor) for `one.google.com` + `google.com` + `accounts.google.com`.
+   - Delete / set active.
+2. **Start Check** card
+   - Product dropdown (only products with internal stock).
+   - Concurrency (1–2), delay (3–10s).
+   - "Start" → inserts a queued job.
+3. **Active job** card
+   - Progress bar (`checked / total`), live valid/invalid counts (Supabase realtime on `link_check_jobs`).
+   - Cancel button.
+4. **History** table — past jobs, click to expand items.
+5. **Invalid archive** tab inside the page
+   - Lists `bot_product_stock_items` where `status='invalid'`, grouped by product.
+   - Filter, "Download TXT" (one URL per line), "Clear" (delete rows so admin can re-add fresh stock).
 
-- Big migration — I'll do it in one transactional migration so policies don't get half-applied
-- After deploy: PIN no longer works. You log in with email/password on `/admin/login`, or open the Telegram WebApp (seamless).
-- If anything breaks, the migration is reversible by restoring old policies.
+## Telegram Alerts
+Reuse existing gateway pattern (`notify-customer.ts` style). Send to `ADMIN_CHAT_ID`:
+- Cookies expired: "⚠️ Google cookies expired. Re-upload to continue link checks."
+- Job complete: "✅ {product} check done: {valid} valid, {invalid} invalid (removed from stock)."
+- Job failed: "❌ Link check failed: {reason}."
 
-## Estimated scope
-- 1 large DB migration (~200 lines SQL)
-- 1 edge function update (`telegram-auth`)
-- 1 new page, 1 rewritten context, 1 cleaned Index page
-- ~6–8 admin edge functions get a `has_role` guard added
+## Files Touched
+
+**New**
+- `supabase/migrations/<ts>_link_checker.sql` (3 tables + column extensions + RPCs + grants + RLS)
+- `src/components/LinkCheckerTab.tsx`
+- `src/components/LinkCheckerCookieDialog.tsx`
+- `src/components/LinkCheckerInvalidArchive.tsx`
+- `standalone-bot/link-checker.js`
+- `standalone-bot/README-LINK-CHECKER.md` (cookie export how-to)
+
+**Edited**
+- `src/pages/Index.tsx` (sidebar entry, route)
+- `src/components/AppSidebar.tsx` (nav item)
+- `standalone-bot/package.json` (add `playwright`, add `checker` script, postinstall for browsers)
+- `standalone-bot/RAILWAY_DEPLOY_GUIDE.md` (notes for running checker process)
+
+## Open Question (need 1 confirmation before build)
+
+**Which field inside `bot_product_stock_items.data` JSON holds the activation URL?**
+The `data` column is a free-form JSON object (one entry per stock row). For "Jio Gemini Ai Pro 18m" what's the key name — e.g. `link`, `url`, `activation_link`, or is it the only value in the JSON? I need this so the worker knows what to extract. (If unsure, paste one example row's JSON from that product.)
+
+Once you confirm the key name, I'll switch to build mode and ship everything.
