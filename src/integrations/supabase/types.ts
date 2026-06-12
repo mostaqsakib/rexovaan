@@ -620,6 +620,9 @@ export type Database = {
           created_at: string
           data: Json
           id: string
+          invalid_reason: string | null
+          invalidated_at: string | null
+          invalidated_job_id: string | null
           product_id: string
           sold_at: string | null
           sold_order_id: string | null
@@ -632,6 +635,9 @@ export type Database = {
           created_at?: string
           data?: Json
           id?: string
+          invalid_reason?: string | null
+          invalidated_at?: string | null
+          invalidated_job_id?: string | null
           product_id: string
           sold_at?: string | null
           sold_order_id?: string | null
@@ -644,6 +650,9 @@ export type Database = {
           created_at?: string
           data?: Json
           id?: string
+          invalid_reason?: string | null
+          invalidated_at?: string | null
+          invalidated_job_id?: string | null
           product_id?: string
           sold_at?: string | null
           sold_order_id?: string | null
@@ -1189,6 +1198,159 @@ export type Database = {
         }
         Relationships: []
       }
+      google_account_cookies: {
+        Row: {
+          cookies_json: Json
+          created_at: string
+          expired: boolean
+          id: string
+          is_active: boolean
+          label: string
+          last_verified_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          cookies_json: Json
+          created_at?: string
+          expired?: boolean
+          id?: string
+          is_active?: boolean
+          label: string
+          last_verified_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cookies_json?: Json
+          created_at?: string
+          expired?: boolean
+          id?: string
+          is_active?: boolean
+          label?: string
+          last_verified_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      link_check_items: {
+        Row: {
+          checked_at: string | null
+          created_at: string
+          id: string
+          job_id: string
+          reason: string | null
+          status: string
+          stock_item_id: string | null
+          url: string
+        }
+        Insert: {
+          checked_at?: string | null
+          created_at?: string
+          id?: string
+          job_id: string
+          reason?: string | null
+          status?: string
+          stock_item_id?: string | null
+          url: string
+        }
+        Update: {
+          checked_at?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string
+          reason?: string | null
+          status?: string
+          stock_item_id?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "link_check_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "link_check_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "link_check_items_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "bot_product_stock_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      link_check_jobs: {
+        Row: {
+          checked: number
+          concurrency: number
+          cookie_id: string | null
+          created_at: string
+          delay_ms: number
+          error_count: number
+          error_text: string | null
+          finished_at: string | null
+          id: string
+          invalid_count: number
+          product_id: string
+          started_at: string | null
+          status: string
+          total: number
+          updated_at: string
+          valid_count: number
+        }
+        Insert: {
+          checked?: number
+          concurrency?: number
+          cookie_id?: string | null
+          created_at?: string
+          delay_ms?: number
+          error_count?: number
+          error_text?: string | null
+          finished_at?: string | null
+          id?: string
+          invalid_count?: number
+          product_id: string
+          started_at?: string | null
+          status?: string
+          total?: number
+          updated_at?: string
+          valid_count?: number
+        }
+        Update: {
+          checked?: number
+          concurrency?: number
+          cookie_id?: string | null
+          created_at?: string
+          delay_ms?: number
+          error_count?: number
+          error_text?: string | null
+          finished_at?: string | null
+          id?: string
+          invalid_count?: number
+          product_id?: string
+          started_at?: string | null
+          status?: string
+          total?: number
+          updated_at?: string
+          valid_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "link_check_jobs_cookie_id_fkey"
+            columns: ["cookie_id"]
+            isOneToOne: false
+            referencedRelation: "google_account_cookies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "link_check_jobs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "bot_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_announcements: {
         Row: {
           body: string | null
@@ -1347,6 +1509,14 @@ export type Database = {
           status: string
         }[]
       }
+      claim_next_link_check_item: {
+        Args: { _job_id: string }
+        Returns: {
+          id: string
+          stock_item_id: string
+          url: string
+        }[]
+      }
       claim_pending_delivery_order: {
         Args: { _new_status: string; _order_id: string }
         Returns: {
@@ -1412,6 +1582,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      mark_link_check_result: {
+        Args: { _item_id: string; _reason: string; _result: string }
+        Returns: undefined
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
