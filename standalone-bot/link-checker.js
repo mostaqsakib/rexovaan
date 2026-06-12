@@ -98,7 +98,9 @@ async function checkUrl(context, url) {
       return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
     }
 
-    const body = (await page.content()).toLowerCase();
+    // Use VISIBLE text only (innerText) — page.content() includes <script> bundles
+    // which often contain strings like "something went wrong" even on valid pages.
+    const bodyText = (await page.evaluate(() => document.body?.innerText || '')).toLowerCase();
 
     const invalidMarkers = [
       'already in use',
@@ -107,13 +109,14 @@ async function checkUrl(context, url) {
       'no longer valid',
       'no longer available',
       'this offer is not available',
-      'subscription is not available',
-      'something went wrong',
+      'this offer is no longer',
       'link has expired',
       'offer has expired',
+      'this link is not valid',
+      'this code has already been',
     ];
     for (const m of invalidMarkers) {
-      if (body.includes(m)) return { result: 'invalid', reason: m };
+      if (bodyText.includes(m)) return { result: 'invalid', reason: m };
     }
 
     const validMarkers = [
@@ -123,13 +126,17 @@ async function checkUrl(context, url) {
       'redeem',
       'start your',
       'try google',
+      'claim offer',
+      'claim your',
+      'one ai premium',
+      'google ai pro',
     ];
     for (const m of validMarkers) {
-      if (body.includes(m)) return { result: 'valid', reason: m };
+      if (bodyText.includes(m)) return { result: 'valid', reason: m };
     }
 
     // Fallback: unknown page state — treat as error so stock isn't deleted.
-    return { result: 'error', reason: `unknown page (status ${resp?.status() || '?'})` };
+    return { result: 'error', reason: `unknown page (status ${resp?.status() || '?'}, len ${bodyText.length})` };
   } catch (e) {
     return { result: 'error', reason: e.message.slice(0, 200) };
   } finally {
