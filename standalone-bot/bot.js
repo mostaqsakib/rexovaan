@@ -1,5 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
 import crypto from "crypto";
+
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = WebSocket;
+}
 
 // ── Config ──
 const BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
