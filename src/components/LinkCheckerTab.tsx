@@ -27,7 +27,7 @@ export default function LinkCheckerTab() {
   const [cookieDialogOpen, setCookieDialogOpen] = useState(false);
   const [productId, setProductId] = useState<string>('');
   const [concurrency, setConcurrency] = useState(3);
-  const [delayMs, setDelayMs] = useState(5000);
+  const [delayMs, setDelayMs] = useState(2000);
   const [starting, setStarting] = useState(false);
 
   // Only allow this specific product in the Link Checker UI.
