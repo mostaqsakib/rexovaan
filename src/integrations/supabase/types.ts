@@ -677,6 +677,7 @@ export type Database = {
           is_active: boolean
           is_manual_delivery: boolean
           last_known_stock: number
+          link_check_auto: boolean
           name: string
           price: number
           sheet_gid: number | null
@@ -703,6 +704,7 @@ export type Database = {
           is_active?: boolean
           is_manual_delivery?: boolean
           last_known_stock?: number
+          link_check_auto?: boolean
           name: string
           price?: number
           sheet_gid?: number | null
@@ -729,6 +731,7 @@ export type Database = {
           is_active?: boolean
           is_manual_delivery?: boolean
           last_known_stock?: number
+          link_check_auto?: boolean
           name?: string
           price?: number
           sheet_gid?: number | null
