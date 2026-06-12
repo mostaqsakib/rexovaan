@@ -26,6 +26,7 @@ import GroupsKeywordsTab from '@/components/GroupsKeywordsTab';
 import SourcesTab from '@/components/SourcesTab';
 import FlashSalesTab from '@/components/FlashSalesTab';
 import AnnouncementsTab from '@/components/AnnouncementsTab';
+import LinkCheckerTab from '@/components/LinkCheckerTab';
 import BroadcastDialog from '@/components/BroadcastDialog';
 import AddProductDialog from '@/components/AddProductDialog';
 import { useProductStore } from '@/store/useProductStore';
