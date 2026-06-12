@@ -26,7 +26,7 @@ export default function LinkCheckerTab() {
   const [invalidStock, setInvalidStock] = useState<InvalidStock[]>([]);
   const [cookieDialogOpen, setCookieDialogOpen] = useState(false);
   const [productId, setProductId] = useState<string>('');
-  const [concurrency, setConcurrency] = useState(2);
+  const [concurrency, setConcurrency] = useState(3);
   const [delayMs, setDelayMs] = useState(5000);
   const [starting, setStarting] = useState(false);
 
