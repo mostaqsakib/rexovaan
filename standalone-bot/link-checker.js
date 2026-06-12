@@ -85,55 +85,75 @@ async function markCookiesExpired(cookieId) {
   await supabase.from('google_account_cookies').update({ expired: true, is_active: false }).eq('id', cookieId);
 }
 
+const INVALID_MARKERS = [
+  'already in use',
+  'already been redeemed',
+  'already redeemed',
+  'no longer valid',
+  'no longer available',
+  'this offer is not available',
+  'this offer is no longer',
+  'link has expired',
+  'offer has expired',
+  'this link is not valid',
+  'this code has already been',
+];
+
+const VALID_MARKERS = [
+  'activate plan',
+  'get started',
+  'accept and continue',
+  'redeem',
+  'start your',
+  'try google',
+  'claim offer',
+  'claim your',
+  'one ai premium',
+  'google ai pro',
+];
+
 // Check a single URL. Returns { result: 'valid'|'invalid'|'error'|'cookies_expired', reason }
 async function checkUrl(context, url) {
   const page = await context.newPage();
   try {
-    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    // Wait for client-side render a bit
-    await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+    // Block heavy resources we don't need to decide valid/invalid.
+    await page.route('**/*', (route) => {
+      const t = route.request().resourceType();
+      if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') {
+        return route.abort();
+      }
+      return route.continue();
+    });
+
+    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     const finalUrl = page.url();
 
     if (/accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(finalUrl)) {
       return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
     }
 
-    // Use VISIBLE text only (innerText) — page.content() includes <script> bundles
-    // which often contain strings like "something went wrong" even on valid pages.
-    const bodyText = (await page.evaluate(() => document.body?.innerText || '')).toLowerCase();
-
-    const invalidMarkers = [
-      'already in use',
-      'already been redeemed',
-      'already redeemed',
-      'no longer valid',
-      'no longer available',
-      'this offer is not available',
-      'this offer is no longer',
-      'link has expired',
-      'offer has expired',
-      'this link is not valid',
-      'this code has already been',
-    ];
-    for (const m of invalidMarkers) {
-      if (bodyText.includes(m)) return { result: 'invalid', reason: m };
+    // Poll innerText for known markers — return as soon as we have a verdict.
+    // Much faster than waiting for networkidle (which often hits the 20s ceiling).
+    const deadline = Date.now() + 12000;
+    let bodyText = '';
+    let verdict = null;
+    while (Date.now() < deadline) {
+      bodyText = (await page.evaluate(() => document.body?.innerText || '').catch(() => '')).toLowerCase();
+      for (const m of INVALID_MARKERS) {
+        if (bodyText.includes(m)) { verdict = { result: 'invalid', reason: m }; break; }
+      }
+      if (verdict) break;
+      for (const m of VALID_MARKERS) {
+        if (bodyText.includes(m)) { verdict = { result: 'valid', reason: m }; break; }
+      }
+      if (verdict) break;
+      // Re-check sign-in redirect after client-side nav
+      if (/accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(page.url())) {
+        return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
+      }
+      await new Promise(r => setTimeout(r, 400));
     }
-
-    const validMarkers = [
-      'activate plan',
-      'get started',
-      'accept and continue',
-      'redeem',
-      'start your',
-      'try google',
-      'claim offer',
-      'claim your',
-      'one ai premium',
-      'google ai pro',
-    ];
-    for (const m of validMarkers) {
-      if (bodyText.includes(m)) return { result: 'valid', reason: m };
-    }
+    if (verdict) return verdict;
 
     // Fallback: unknown page state — treat as error so stock isn't deleted.
     return { result: 'error', reason: `unknown page (status ${resp?.status() || '?'}, len ${bodyText.length})` };
@@ -143,6 +163,7 @@ async function checkUrl(context, url) {
     await page.close().catch(() => {});
   }
 }
+
 
 async function runJob(job) {
   console.log(`[checker] starting job ${job.id} for product ${job.product_id}`);
