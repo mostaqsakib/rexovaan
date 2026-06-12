@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Trash2, Download, Plus, RefreshCw, AlertCircle, CheckCircle2, Infinity as InfinityIcon } from 'lucide-react';
 
 type Cookie = { id: string; label: string; is_active: boolean; expired: boolean; last_verified_at: string | null; created_at: string };
-type Product = { id: string; name: string; is_manual_delivery: boolean | null };
+type Product = { id: string; name: string; is_manual_delivery: boolean | null; link_check_auto?: boolean };
 type Job = { id: string; product_id: string; status: string; total: number; checked: number; valid_count: number; invalid_count: number; error_count: number; error_text: string | null; created_at: string; started_at: string | null; finished_at: string | null; concurrency: number; delay_ms: number };
 type InvalidStock = { id: string; product_id: string; data: any; invalid_reason: string | null; invalidated_at: string | null };
 
