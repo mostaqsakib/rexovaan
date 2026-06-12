@@ -286,7 +286,11 @@ Deno.serve(async (req) => {
         for (let i = 0; i < orderDetails.length; i += CHUNK_SIZE) {
           const chunk = orderDetails.slice(i, i + CHUNK_SIZE);
           let msg = `📦 <b>Items${orderDetails.length > CHUNK_SIZE ? ` (${i + 1}-${i + chunk.length} of ${qty})` : ''}:</b>\n\n`;
-          for (const item of chunk) msg += `<code>${Object.values(item).join(" | ")}</code>\n`;
+          for (let j = 0; j < chunk.length; j++) {
+            const item = chunk[j];
+            const numPrefix = orderDetails.length > 1 ? `${i + j + 1}. ` : '';
+            msg += `<code>${numPrefix}${Object.values(item).join(" | ")}</code>\n`;
+          }
           await sendTelegramMessage(customer.chat_id, msg);
         }
 
