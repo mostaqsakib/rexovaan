@@ -1,0 +1,1 @@
+UPDATE bot_product_stock_items SET status='available', invalid_reason=NULL, invalidated_at=NULL WHERE status='invalid' AND invalid_reason='something went wrong';
