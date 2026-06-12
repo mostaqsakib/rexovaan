@@ -202,16 +202,69 @@ async function runJob(job) {
   const concurrency = Math.max(1, Math.min(2, job.concurrency || 2));
   const delay = Math.max(0, job.delay_ms || 5000);
 
+  // Top-up: enqueue any newly-added available stock items that aren't already in this job.
+  async function topUpNewStock() {
+    const { data: existing } = await supabase
+      .from('link_check_items')
+      .select('stock_item_id')
+      .eq('job_id', job.id);
+    const existingIds = new Set((existing || []).map(r => r.stock_item_id).filter(Boolean));
+
+    const { data: current } = await supabase
+      .from('bot_product_stock_items')
+      .select('id, data')
+      .eq('product_id', job.product_id)
+      .eq('status', 'available');
+
+    const fresh = (current || [])
+      .filter(s => !existingIds.has(s.id))
+      .map(s => ({ stock_item_id: s.id, url: extractUrl(s.data) }))
+      .filter(x => x.url);
+
+    if (fresh.length === 0) return 0;
+
+    const newRows = fresh.map(i => ({ job_id: job.id, stock_item_id: i.stock_item_id, url: i.url, status: 'pending' }));
+    for (let i = 0; i < newRows.length; i += 500) {
+      const slice = newRows.slice(i, i + 500);
+      const { error } = await supabase.from('link_check_items').insert(slice);
+      if (error) { console.error('[checker] top-up insert error', error); return 0; }
+    }
+    // Bump job.total so the progress bar reflects the new items
+    const { data: jobRow } = await supabase.from('link_check_jobs').select('total').eq('id', job.id).single();
+    await supabase.from('link_check_jobs').update({ total: (jobRow?.total || 0) + fresh.length, updated_at: new Date().toISOString() }).eq('id', job.id);
+    console.log(`[checker] topped up ${fresh.length} newly-added stock items into job ${job.id}`);
+    return fresh.length;
+  }
+
+  let lastTopUp = Date.now();
+  const TOP_UP_INTERVAL_MS = 30000;
+
   async function worker() {
     while (!aborted) {
       // Check job status (cancellation)
       const { data: cur } = await supabase.from('link_check_jobs').select('status').eq('id', job.id).single();
       if (cur && (cur.status === 'cancelled' || cur.status === 'failed')) { aborted = true; abortReason = abortReason || cur.status; break; }
 
+      // Periodic top-up while running
+      if (Date.now() - lastTopUp > TOP_UP_INTERVAL_MS) {
+        lastTopUp = Date.now();
+        await topUpNewStock().catch(e => console.error('[checker] topUp err', e));
+      }
+
       const { data: claimed, error: claimErr } = await supabase.rpc('claim_next_link_check_item', { _job_id: job.id });
       if (claimErr) { console.error('[checker] claim error', claimErr); break; }
-      const item = Array.isArray(claimed) ? claimed[0] : claimed;
-      if (!item) break; // queue empty
+      let item = Array.isArray(claimed) ? claimed[0] : claimed;
+
+      if (!item) {
+        // Queue empty — try one final top-up before giving up
+        const added = await topUpNewStock().catch(() => 0);
+        lastTopUp = Date.now();
+        if (added > 0) {
+          const { data: retry } = await supabase.rpc('claim_next_link_check_item', { _job_id: job.id });
+          item = Array.isArray(retry) ? retry[0] : retry;
+        }
+        if (!item) break; // truly empty
+      }
 
       const res = await checkUrl(context, item.url);
       if (res.result === 'cookies_expired') {
