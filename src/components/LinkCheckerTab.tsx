@@ -131,8 +131,8 @@ export default function LinkCheckerTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Concurrency (1-2)</Label>
-                  <Input type="number" min={1} max={2} value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} />
+                  <Label>Concurrency (1-6)</Label>
+                  <Input type="number" min={1} max={6} value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} />
                 </div>
                 <div>
                   <Label>Delay between checks (ms)</Label>
