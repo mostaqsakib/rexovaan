@@ -104,7 +104,9 @@ export default function Checkout() {
   if (!product) return <div className="premium-card p-8 text-center text-muted-foreground">Product unavailable.</div>;
 
   if (result) {
-    const text = result.details.map(d => Object.values(d).join(' | ')).join('\n');
+    const text = result.details.map((d, i) =>
+      result.details.length > 1 ? `${i + 1}. ${Object.values(d).join(' | ')}` : Object.values(d).join(' | ')
+    ).join('\n');
     return (
       <div className="space-y-6 max-w-2xl mx-auto">
         <div className="premium-card gradient-border p-6 text-center space-y-3">
