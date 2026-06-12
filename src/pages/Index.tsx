@@ -42,6 +42,7 @@ const TAB_TITLES: Record<string, string> = {
   flash: 'Flash Sales',
   pending: 'Pending Deliveries',
   inputs: 'Customer Inputs',
+  'link-checker': 'Link Checker',
   history: 'Order History',
   
   customers: 'Customers',
