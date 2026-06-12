@@ -30,6 +30,12 @@ export default function LinkCheckerTab() {
   const [delayMs, setDelayMs] = useState(5000);
   const [starting, setStarting] = useState(false);
 
+  // Only allow this specific product in the Link Checker UI.
+  const isAllowedProduct = (name: string) => {
+    const n = (name || '').toLowerCase();
+    return n.includes('jio') && n.includes('gemini') && n.includes('18');
+  };
+
   const loadAll = async () => {
     const [c, p, j, inv] = await Promise.all([
       supabase.from('google_account_cookies').select('*').order('created_at', { ascending: false }),
@@ -38,7 +44,7 @@ export default function LinkCheckerTab() {
       supabase.from('bot_product_stock_items').select('id, product_id, data, invalid_reason, invalidated_at').eq('status', 'invalid').order('invalidated_at', { ascending: false }).limit(500),
     ]);
     setCookies((c.data as Cookie[]) || []);
-    setProducts((p.data as Product[]) || []);
+    setProducts(((p.data as Product[]) || []).filter(prod => isAllowedProduct(prod.name)));
     setJobs((j.data as Job[]) || []);
     setInvalidStock((inv.data as InvalidStock[]) || []);
   };
