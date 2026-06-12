@@ -1,5 +1,5 @@
-# Playwright's official image — Chromium + all system deps preinstalled.
-FROM mcr.microsoft.com/playwright:v1.48.0-jammy
+# Playwright's official image — keep this version matched with package.json.
+FROM mcr.microsoft.com/playwright:v1.60.0-noble
 
 WORKDIR /app
 
