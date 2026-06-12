@@ -113,10 +113,14 @@ const VALID_MARKERS = [
 ];
 
 // Check a single URL. Returns { result: 'valid'|'invalid'|'error'|'cookies_expired', reason }
+// IMPORTANT: invalid pages on Google often ALSO contain valid-looking text like "Activate plan"
+// in the header. So we must:
+//   1. Always check invalid markers first (they win over valid markers).
+//   2. Never return 'valid' early — wait for the page to fully settle so any late-loading
+//      "already in use" text has a chance to appear before we declare valid.
 async function checkUrl(context, url) {
   const page = await context.newPage();
   try {
-    // Block heavy resources we don't need to decide valid/invalid.
     await page.route('**/*', (route) => {
       const t = route.request().resourceType();
       if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') {
@@ -126,37 +130,46 @@ async function checkUrl(context, url) {
     });
 
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    const finalUrl = page.url();
 
-    if (/accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(finalUrl)) {
+    const isSignIn = (u) => /accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(u);
+    if (isSignIn(page.url())) {
       return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
     }
 
-    // Poll innerText for known markers — return as soon as we have a verdict.
-    // Much faster than waiting for networkidle (which often hits the 20s ceiling).
-    const deadline = Date.now() + 12000;
-    let bodyText = '';
-    let verdict = null;
-    while (Date.now() < deadline) {
-      bodyText = (await page.evaluate(() => document.body?.innerText || '').catch(() => '')).toLowerCase();
-      for (const m of INVALID_MARKERS) {
-        if (bodyText.includes(m)) { verdict = { result: 'invalid', reason: m }; break; }
-      }
-      if (verdict) break;
-      for (const m of VALID_MARKERS) {
-        if (bodyText.includes(m)) { verdict = { result: 'valid', reason: m }; break; }
-      }
-      if (verdict) break;
-      // Re-check sign-in redirect after client-side nav
-      if (/accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(page.url())) {
-        return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
-      }
+    const scan = async () => {
+      const t = (await page.evaluate(() => document.body?.innerText || '').catch(() => '')).toLowerCase();
+      for (const m of INVALID_MARKERS) if (t.includes(m)) return { text: t, hit: { result: 'invalid', reason: m } };
+      return { text: t, hit: null };
+    };
+
+    // Phase 1 (up to 8s): return immediately if ANY invalid marker shows up.
+    const invalidDeadline = Date.now() + 8000;
+    let lastText = '';
+    while (Date.now() < invalidDeadline) {
+      if (isSignIn(page.url())) return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
+      const { text, hit } = await scan();
+      lastText = text;
+      if (hit) return hit;
       await new Promise(r => setTimeout(r, 400));
     }
-    if (verdict) return verdict;
 
-    // Fallback: unknown page state — treat as error so stock isn't deleted.
-    return { result: 'error', reason: `unknown page (status ${resp?.status() || '?'}, len ${bodyText.length})` };
+    // Phase 2: wait for network to settle so any lazy "already in use" text loads.
+    try { await page.waitForLoadState('networkidle', { timeout: 8000 }); } catch {}
+    await new Promise(r => setTimeout(r, 1500)); // extra settle
+
+    // Final invalid re-check after settle.
+    {
+      const { text, hit } = await scan();
+      lastText = text;
+      if (hit) return hit;
+    }
+
+    // Only NOW consider valid markers.
+    for (const m of VALID_MARKERS) {
+      if (lastText.includes(m)) return { result: 'valid', reason: m };
+    }
+
+    return { result: 'error', reason: `unknown page (status ${resp?.status() || '?'}, len ${lastText.length})` };
   } catch (e) {
     return { result: 'error', reason: e.message.slice(0, 200) };
   } finally {
