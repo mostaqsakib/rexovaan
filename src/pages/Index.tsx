@@ -177,6 +177,7 @@ const Index = () => {
             {activeTab === 'flash' && <FlashSalesTab />}
             {activeTab === 'pending' && <PendingDeliveriesTab />}
             {activeTab === 'inputs' && <CustomerInputsTab />}
+            {activeTab === 'link-checker' && <LinkCheckerTab />}
             {activeTab === 'history' && <HistoryTab orders={orderHistory} onRestore={async (order) => { try { await restoreOrder(order); toast.success(`${order.productName} - ${order.quantity} item(s) restored!`); } catch (err) { toast.error(err instanceof Error ? err.message : 'Restore failed'); } }} />}
             
             {activeTab === 'customers' && <CustomersTab />}
