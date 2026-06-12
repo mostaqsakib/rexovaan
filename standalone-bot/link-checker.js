@@ -220,7 +220,7 @@ async function runJob(job) {
 
   let aborted = false;
   let abortReason = '';
-  const concurrency = Math.max(1, Math.min(2, job.concurrency || 2));
+  const concurrency = Math.max(1, Math.min(6, job.concurrency || 3));
   const delay = Math.max(0, job.delay_ms || 5000);
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
