@@ -37,6 +37,7 @@ const AppSidebar = ({ activeTab, onChange, pendingCount = 0 }: AppSidebarProps) 
         { id: 'special-pricing', label: 'Special Pricing', icon: Tag },
         { id: 'flash', label: 'Flash Sales', icon: Flame },
         { id: 'inputs', label: 'Cust. Inputs', icon: FormInput },
+        { id: 'link-checker', label: 'Link Checker', icon: Link2 },
       ],
     },
     {
