@@ -26,8 +26,8 @@ export default function LinkCheckerTab() {
   const [invalidStock, setInvalidStock] = useState<InvalidStock[]>([]);
   const [cookieDialogOpen, setCookieDialogOpen] = useState(false);
   const [productId, setProductId] = useState<string>('');
-  const [concurrency, setConcurrency] = useState(2);
-  const [delayMs, setDelayMs] = useState(5000);
+  const [concurrency, setConcurrency] = useState(3);
+  const [delayMs, setDelayMs] = useState(2000);
   const [starting, setStarting] = useState(false);
 
   // Only allow this specific product in the Link Checker UI.
@@ -131,8 +131,8 @@ export default function LinkCheckerTab() {
                   </Select>
                 </div>
                 <div>
-                  <Label>Concurrency (1-2)</Label>
-                  <Input type="number" min={1} max={2} value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} />
+                  <Label>Concurrency (1-6)</Label>
+                  <Input type="number" min={1} max={6} value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} />
                 </div>
                 <div>
                   <Label>Delay between checks (ms)</Label>
