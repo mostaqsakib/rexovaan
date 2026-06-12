@@ -26,7 +26,9 @@ function downloadFile(filename: string, content: string, mime: string) {
 }
 
 function detailsToTxt(details: any[]) {
-  return details.map((d) => Object.values(d).join(' | ')).join('\n');
+  return details.map((d, i) =>
+    details.length > 1 ? `${i + 1}. ${Object.values(d).join(' | ')}` : Object.values(d).join(' | ')
+  ).join('\n');
 }
 
 function detailsToCsv(details: any[]) {

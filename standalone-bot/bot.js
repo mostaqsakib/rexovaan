@@ -4258,11 +4258,12 @@ async function handleViewOrder(chatId, customer, orderIdOrShortId, emojiMap, edi
     const historyMultiCol = historyKeys.length > 1;
     for (let i = 0; i < showItems.length; i++) {
       const entries = Object.entries(showItems[i]).filter(([, v]) => v && String(v).trim());
+      const numPrefix = details.length > 1 ? `${i + 1}. ` : '';
       if (!historyMultiCol || entries.length <= 1) {
         const mainVal = entries.find(([, v]) => String(v).startsWith('http'))?.[1] || entries[0]?.[1] || '';
-        msg += `${i + 1}. <code>${mainVal}</code>\n`;
+        msg += `${numPrefix}<code>${mainVal}</code>\n`;
       } else {
-        msg += `${i + 1}.`;
+        msg += `${numPrefix.trim()}`;
         for (const [key, val] of entries) msg += `\n<b>${key}:</b> <code>${val}</code>`;
         msg += `\n`;
       }
@@ -4356,7 +4357,7 @@ async function handleDownloadOrder(chatId, orderId, isCsv) {
     let txt = "";
     for (let i = 0; i < details.length; i++) {
       const text = getItemText(details[i], i);
-      txt += `${i + 1}. ${text}\n${dlMultiCol ? '\n' : ''}`;
+      txt += details.length > 1 ? `${i + 1}. ${text}\n${dlMultiCol ? '\n' : ''}` : `${text}\n${dlMultiCol ? '\n' : ''}`;
     }
     const filename = `${productName}-#${startRow}-#${endRow}.txt`;
     await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${productName} — ${details.length} items`);

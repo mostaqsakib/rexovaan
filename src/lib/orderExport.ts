@@ -7,30 +7,39 @@ export const getFileName = (order: OrderItem) => {
   return `${order.productName}-#${sorted[0]}-#${sorted[sorted.length - 1]}`;
 };
 
-const formatDetail = (detail: Record<string, string>, idx: number) => {
+const formatDetail = (detail: Record<string, string>, idx: number, total: number) => {
   const entries = Object.entries(detail).filter(([, v]) => v.trim());
+  const prefix = total > 1 ? `${idx + 1}. ` : '';
   if (entries.length <= 1) {
     const mainVal = entries.find(([, v]) => v.startsWith('http'))?.[1] || entries[0]?.[1] || '';
-    return `${idx + 1}. ${mainVal}`;
+    return `${prefix}${mainVal}`;
   }
-  return `${idx + 1}.\n${entries.map(([k, v]) => `${k}: ${v}`).join('\n')}`;
+  return `${prefix}${entries.map(([k, v]) => `${k}: ${v}`).join('\n')}`;
 };
 
 export const getCopyText = (order: OrderItem) => {
-  return order.details.map((detail, i) => formatDetail(detail, i)).join('\n\n');
+  return order.details.map((detail, i) => formatDetail(detail, i, order.details.length)).join('\n\n');
 };
 
 export const getTxtContent = (order: OrderItem) => {
-  return order.details.map((detail, i) => formatDetail(detail, i)).join('\n\n');
+  return order.details.map((detail, i) => formatDetail(detail, i, order.details.length)).join('\n\n');
 };
 
 export const getCsvContent = (order: OrderItem) => {
   if (!order.details?.length) return '';
   const headers = Object.keys(order.details[0]);
-  const rows = [['No.', ...headers].join(',')];
-  order.details.forEach((detail, i) => {
+  if (order.details.length > 1) {
+    const rows = [['No.', ...headers].join(',')];
+    order.details.forEach((detail, i) => {
+      const cols = headers.map(h => `"${(detail[h] || '').replace(/"/g, '""')}"`);
+      rows.push([String(i + 1), ...cols].join(','));
+    });
+    return rows.join('\n');
+  }
+  const rows = [headers.join(',')];
+  order.details.forEach((detail) => {
     const cols = headers.map(h => `"${(detail[h] || '').replace(/"/g, '""')}"`);
-    rows.push([String(i + 1), ...cols].join(','));
+    rows.push(cols.join(','));
   });
   return rows.join('\n');
 };
