@@ -6,8 +6,7 @@
     "start": "node bot.js",
     "dev": "node --watch bot.js",
     "checker": "node link-checker.js",
-    "start:all": "node bot.js & node link-checker.js & wait",
-    "postinstall": "playwright install chromium --with-deps || playwright install chromium || true"
+    "start:all": "node bot.js & node link-checker.js & wait"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
