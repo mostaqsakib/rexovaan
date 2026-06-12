@@ -11,7 +11,8 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Trash2, Download, Plus, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Trash2, Download, Plus, RefreshCw, AlertCircle, CheckCircle2, Infinity as InfinityIcon } from 'lucide-react';
 
 type Cookie = { id: string; label: string; is_active: boolean; expired: boolean; last_verified_at: string | null; created_at: string };
 type Product = { id: string; name: string; is_manual_delivery: boolean | null };
