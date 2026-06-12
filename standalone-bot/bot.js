@@ -4357,7 +4357,7 @@ async function handleDownloadOrder(chatId, orderId, isCsv) {
     let txt = "";
     for (let i = 0; i < details.length; i++) {
       const text = getItemText(details[i], i);
-      txt += `${i + 1}. ${text}\n${dlMultiCol ? '\n' : ''}`;
+      txt += details.length > 1 ? `${i + 1}. ${text}\n${dlMultiCol ? '\n' : ''}` : `${text}\n${dlMultiCol ? '\n' : ''}`;
     }
     const filename = `${productName}-#${startRow}-#${endRow}.txt`;
     await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${productName} — ${details.length} items`);
