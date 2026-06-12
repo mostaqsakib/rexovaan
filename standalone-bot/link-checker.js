@@ -4,6 +4,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
+import WebSocket from 'ws';
+
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = WebSocket;
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
