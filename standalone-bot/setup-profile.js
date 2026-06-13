@@ -8,6 +8,7 @@ import { execSync } from 'node:child_process';
 
 const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
 const PROFILE_ZIP_URL = process.env.PROFILE_ZIP_URL;
+const PROFILE_AUTH_EXPIRED_MARKER = path.join(PROFILE_DIR, '.auth-expired');
 
 async function resolveGofile(shareUrl) {
   const m = shareUrl.match(/gofile\.io\/d\/([A-Za-z0-9]+)/);
@@ -56,9 +57,14 @@ async function main() {
     console.log('[setup-profile] PROFILE_ZIP_URL not set — skipping');
     return;
   }
-  if (fs.existsSync(path.join(PROFILE_DIR, 'Default'))) {
+  const hasExpiredMarker = fs.existsSync(PROFILE_AUTH_EXPIRED_MARKER);
+  if (fs.existsSync(path.join(PROFILE_DIR, 'Default')) && !hasExpiredMarker) {
     console.log('[setup-profile] profile already present at', PROFILE_DIR, '— skipping');
     return;
+  }
+  if (hasExpiredMarker) {
+    console.log('[setup-profile] expired profile marker found — replacing profile from PROFILE_ZIP_URL');
+    fs.rmSync(PROFILE_DIR, { recursive: true, force: true });
   }
 
   fs.mkdirSync(PROFILE_DIR, { recursive: true });
