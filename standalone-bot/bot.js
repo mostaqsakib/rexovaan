@@ -379,6 +379,20 @@ function sanitizeTgBody(body) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function isIgnorableTelegramError(method, data) {
+  const description = String(data?.description || "").toLowerCase();
+  if (!description) return false;
+  if (method === "answerCallbackQuery") {
+    return description.includes("query is too old")
+      || description.includes("response timeout expired")
+      || description.includes("query id is invalid");
+  }
+  if (method === "editMessageText" || method === "editMessageReplyMarkup") {
+    return description.includes("message is not modified");
+  }
+  return false;
+}
+
 async function tgFetch(method, body, retries = 3) {
   body = sanitizeTgBody(body);
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -389,7 +403,7 @@ async function tgFetch(method, body, retries = 3) {
         body: JSON.stringify(body),
       }, 15000);
       const data = await res.json();
-      if (!data.ok) console.error(`TG ${method} failed:`, JSON.stringify(data));
+      if (!data.ok && !isIgnorableTelegramError(method, data)) console.error(`TG ${method} failed:`, JSON.stringify(data));
       return data;
     } catch (err) {
       console.error(`tgFetch ${method} attempt ${attempt}/${retries} error:`, err.message);
