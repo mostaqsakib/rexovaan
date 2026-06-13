@@ -181,13 +181,23 @@ async function checkUrl(context, url) {
 async function runJob(job) {
   console.log(`[checker] starting job ${job.id} for product ${job.product_id}`);
 
-  const cookieRow = await loadActiveCookie(job.cookie_id);
-  if (!cookieRow) {
-    await supabase.from('link_check_jobs').update({
-      status: 'failed', error_text: 'No active cookies', finished_at: new Date().toISOString(),
-    }).eq('id', job.id);
-    await notifyAdmin('⚠️ Link checker: no active Google cookies. Add fresh cookies in admin → Link Checker.');
-    return;
+  const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
+  const useProfile = (() => {
+    try { return require('fs').existsSync(`${PROFILE_DIR}/Default`); } catch { return false; }
+  })();
+
+  let cookieRow = null;
+  if (!useProfile) {
+    cookieRow = await loadActiveCookie(job.cookie_id);
+    if (!cookieRow) {
+      await supabase.from('link_check_jobs').update({
+        status: 'failed', error_text: 'No active cookies and no persistent profile', finished_at: new Date().toISOString(),
+      }).eq('id', job.id);
+      await notifyAdmin('⚠️ Link checker: no active Google cookies and no persistent profile. Either upload cookies or set PROFILE_ZIP_URL.');
+      return;
+    }
+  } else {
+    console.log('[checker] using persistent Chromium profile at', PROFILE_DIR);
   }
 
   // Load available stock items for the product
@@ -222,14 +232,27 @@ async function runJob(job) {
     status: 'running', total: items.length, started_at: new Date().toISOString(),
   }).eq('id', job.id);
 
-  // Launch browser
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const context = await browser.newContext({
+  // Launch browser — persistent profile (preferred) or ephemeral + cookies (fallback)
+  const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
+  const contextOpts = {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
     locale: 'en-US',
-  });
-  await context.addCookies(normalizeCookies(cookieRow.cookies_json));
+  };
+
+  let browser = null;
+  let context;
+  if (useProfile) {
+    context = await chromium.launchPersistentContext(PROFILE_DIR, {
+      headless: true,
+      args: launchArgs,
+      ...contextOpts,
+    });
+  } else {
+    browser = await chromium.launch({ headless: true, args: launchArgs });
+    context = await browser.newContext(contextOpts);
+    await context.addCookies(normalizeCookies(cookieRow.cookies_json));
+  }
 
   let aborted = false;
   let abortReason = '';
