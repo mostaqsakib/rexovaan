@@ -184,7 +184,7 @@ async function runJob(job) {
 
   const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
   const useProfile = (() => {
-    try { return require('fs').existsSync(`${PROFILE_DIR}/Default`); } catch { return false; }
+    try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; }
   })();
 
   let cookieRow = null;
