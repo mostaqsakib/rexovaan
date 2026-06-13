@@ -105,24 +105,38 @@ function normalizeCookies(arr) {
   }).filter(c => c.name && c.value && c.domain);
 }
 
-async function loadActiveCookie(cookieId) {
-  let q = supabase.from('google_account_cookies').select('*').eq('expired', false).eq('is_active', true);
-  if (cookieId) q = q.eq('id', cookieId);
-  const { data, error } = await q.limit(1).maybeSingle();
+async function loadActiveCookies(preferredId) {
+  // Load ALL active, non-expired cookies. Preferred one first (if provided & still valid),
+  // then most-recently-verified, then newest.
+  const { data, error } = await supabase
+    .from('google_account_cookies')
+    .select('*')
+    .eq('expired', false)
+    .eq('is_active', true)
+    .order('last_verified_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
   if (error) throw error;
-  if (data) return data;
-
-  const envCookies = normalizeCookies(GOOGLE_COOKIES_JSON);
-  if (envCookies.length > 0) {
-    return {
-      id: '__env_google_cookies__',
-      label: 'Railway GOOGLE_COOKIES_JSON',
-      cookies_json: envCookies,
-      is_active: true,
-      expired: false,
-    };
+  const rows = Array.isArray(data) ? [...data] : [];
+  if (preferredId) {
+    const idx = rows.findIndex(r => r.id === preferredId);
+    if (idx > 0) {
+      const [row] = rows.splice(idx, 1);
+      rows.unshift(row);
+    }
   }
-  return null;
+  if (rows.length === 0) {
+    const envCookies = normalizeCookies(GOOGLE_COOKIES_JSON);
+    if (envCookies.length > 0) {
+      rows.push({
+        id: '__env_google_cookies__',
+        label: 'Railway GOOGLE_COOKIES_JSON',
+        cookies_json: envCookies,
+        is_active: true,
+        expired: false,
+      });
+    }
+  }
+  return rows;
 }
 
 async function markCookiesExpired(cookieId) {
