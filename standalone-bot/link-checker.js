@@ -26,6 +26,23 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const POLL_INTERVAL_MS = 5000;
+const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
+const PROFILE_AUTH_EXPIRED_MARKER = `${PROFILE_DIR}/.auth-expired`;
+const AUTH_EXPIRED_NOTIFY_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+let lastAuthExpiredNotifyAt = 0;
+
+function hasProfileAuthExpiredMarker() {
+  try { return fs.existsSync(PROFILE_AUTH_EXPIRED_MARKER); } catch { return false; }
+}
+
+function markProfileAuthExpired(reason) {
+  try {
+    fs.mkdirSync(PROFILE_DIR, { recursive: true });
+    fs.writeFileSync(PROFILE_AUTH_EXPIRED_MARKER, `${new Date().toISOString()} ${reason || 'expired'}\n`);
+  } catch (e) {
+    console.error('[checker] failed to write profile auth marker:', e.message);
+  }
+}
 
 async function notifyAdmin(text) {
   if (!ADMIN_CHAT_ID || !BOT_TOKEN) return;
@@ -38,6 +55,15 @@ async function notifyAdmin(text) {
   } catch (e) {
     console.error('[checker] admin notify failed:', e.message);
   }
+}
+
+async function notifyAuthExpiredOnce(useProfile) {
+  const now = Date.now();
+  if (now - lastAuthExpiredNotifyAt < AUTH_EXPIRED_NOTIFY_COOLDOWN_MS) return;
+  lastAuthExpiredNotifyAt = now;
+  await notifyAdmin(useProfile
+    ? '⚠️ <b>Google session expired</b>\n\nThe persistent Chromium profile is no longer logged in. Re-run the local profile capture, upload a fresh zip, update PROFILE_ZIP_URL on Railway, then redeploy.'
+    : '⚠️ <b>Google cookies expired</b>\n\nLink checker stopped. Open admin → Link Checker → Google Cookies and paste fresh export from Cookie-Editor extension.');
 }
 
 // Extract first http(s) URL from a stock item's data JSON.
@@ -182,10 +208,19 @@ async function checkUrl(context, url) {
 async function runJob(job) {
   console.log(`[checker] starting job ${job.id} for product ${job.product_id}`);
 
-  const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
   const useProfile = (() => {
     try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; }
   })();
+
+  if (useProfile && hasProfileAuthExpiredMarker()) {
+    await supabase.from('link_check_jobs').update({
+      status: 'failed',
+      error_text: 'Google session expired in persistent profile — fresh PROFILE_ZIP_URL required',
+      finished_at: new Date().toISOString(),
+    }).eq('id', job.id);
+    await notifyAuthExpiredOnce(true);
+    return;
+  }
 
   let cookieRow = null;
   if (!useProfile) {
@@ -347,6 +382,7 @@ async function runJob(job) {
 
   if (abortReason === 'cookies_expired') {
     if (cookieRow) await markCookiesExpired(cookieRow.id);
+    if (useProfile) markProfileAuthExpired('redirected to Google sign-in');
     await supabase.from('link_check_jobs').update({
       status: 'failed',
       error_text: useProfile
@@ -354,9 +390,7 @@ async function runJob(job) {
         : 'Google cookies expired — re-upload required',
       finished_at: new Date().toISOString(),
     }).eq('id', job.id);
-    await notifyAdmin(useProfile
-      ? '⚠️ <b>Google session expired</b>\n\nThe persistent Chromium profile is no longer logged in. Re-run the local profile capture and update PROFILE_ZIP_URL on Railway.'
-      : '⚠️ <b>Google cookies expired</b>\n\nLink checker stopped. Open admin → Link Checker → Google Cookies and paste fresh export from Cookie-Editor extension.');
+    await notifyAuthExpiredOnce(useProfile);
     return;
   }
 
@@ -396,8 +430,11 @@ async function autoEnqueueIfNeeded() {
   if (!autoProducts || autoProducts.length === 0) return;
 
   // If persistent profile is available, we can auto-loop without any DB cookie.
-  const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
   const hasProfile = (() => { try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; } })();
+  if (hasProfile && hasProfileAuthExpiredMarker()) {
+    console.log('[checker] profile auth is marked expired — auto link-check jobs paused until fresh PROFILE_ZIP_URL redeploy');
+    return;
+  }
 
   let cookieId = null;
   if (!hasProfile) {
