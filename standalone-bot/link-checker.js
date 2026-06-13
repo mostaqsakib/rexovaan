@@ -105,24 +105,38 @@ function normalizeCookies(arr) {
   }).filter(c => c.name && c.value && c.domain);
 }
 
-async function loadActiveCookie(cookieId) {
-  let q = supabase.from('google_account_cookies').select('*').eq('expired', false).eq('is_active', true);
-  if (cookieId) q = q.eq('id', cookieId);
-  const { data, error } = await q.limit(1).maybeSingle();
+async function loadActiveCookies(preferredId) {
+  // Load ALL active, non-expired cookies. Preferred one first (if provided & still valid),
+  // then most-recently-verified, then newest.
+  const { data, error } = await supabase
+    .from('google_account_cookies')
+    .select('*')
+    .eq('expired', false)
+    .eq('is_active', true)
+    .order('last_verified_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false });
   if (error) throw error;
-  if (data) return data;
-
-  const envCookies = normalizeCookies(GOOGLE_COOKIES_JSON);
-  if (envCookies.length > 0) {
-    return {
-      id: '__env_google_cookies__',
-      label: 'Railway GOOGLE_COOKIES_JSON',
-      cookies_json: envCookies,
-      is_active: true,
-      expired: false,
-    };
+  const rows = Array.isArray(data) ? [...data] : [];
+  if (preferredId) {
+    const idx = rows.findIndex(r => r.id === preferredId);
+    if (idx > 0) {
+      const [row] = rows.splice(idx, 1);
+      rows.unshift(row);
+    }
   }
-  return null;
+  if (rows.length === 0) {
+    const envCookies = normalizeCookies(GOOGLE_COOKIES_JSON);
+    if (envCookies.length > 0) {
+      rows.push({
+        id: '__env_google_cookies__',
+        label: 'Railway GOOGLE_COOKIES_JSON',
+        cookies_json: envCookies,
+        is_active: true,
+        expired: false,
+      });
+    }
+  }
+  return rows;
 }
 
 async function markCookiesExpired(cookieId) {
@@ -249,7 +263,8 @@ async function runJob(job) {
   // Railway runs Linux, so Chrome profiles zipped from Windows often lose usable Google
   // session cookies (OS-encrypted). Prefer Cookie-Editor JSON cookies when available;
   // keep the persistent profile only as a fallback.
-  const cookieRow = await loadActiveCookie(job.cookie_id);
+  const cookieQueue = await loadActiveCookies(job.cookie_id);
+  let cookieRow = cookieQueue.shift() || null;
   const useProfile = !cookieRow && hasProfile;
 
   if (cookieRow && hasProfileAuthExpiredMarker()) {
@@ -325,6 +340,14 @@ async function runJob(job) {
 
   let browser = null;
   let context;
+
+  async function buildContextForCookie(row) {
+    const b = await chromium.launch({ headless: true, args: launchArgs });
+    const ctx = await b.newContext(contextOpts);
+    await ctx.addCookies(normalizeCookies(row.cookies_json));
+    return { browser: b, context: ctx };
+  }
+
   if (useProfile) {
     context = await chromium.launchPersistentContext(PROFILE_DIR, {
       headless: true,
@@ -332,9 +355,9 @@ async function runJob(job) {
       ...contextOpts,
     });
   } else {
-    browser = await chromium.launch({ headless: true, args: launchArgs });
-    context = await browser.newContext(contextOpts);
-    await context.addCookies(normalizeCookies(cookieRow.cookies_json));
+    const built = await buildContextForCookie(cookieRow);
+    browser = built.browser;
+    context = built.context;
   }
 
   let aborted = false;
@@ -342,6 +365,40 @@ async function runJob(job) {
   const concurrency = Math.max(1, Math.min(10, job.concurrency || 5));
   const delay = Math.max(0, job.delay_ms || 800);
   let lastCookieRefreshSaveAt = 0;
+
+  // Rotate to the next active cookie when the current one is detected as expired.
+  // Returns true if a new cookie was loaded successfully, false if none remain.
+  let rotatingPromise = null;
+  async function rotateCookie(reason) {
+    if (rotatingPromise) return rotatingPromise;
+    rotatingPromise = (async () => {
+      const oldLabel = cookieRow?.label || 'unknown';
+      const oldId = cookieRow?.id;
+      console.log(`[checker] rotating cookie "${oldLabel}" — ${reason}`);
+      if (oldId) await markCookiesExpired(oldId);
+      try { await context.close(); } catch {}
+      if (browser) { try { await browser.close(); } catch {} browser = null; }
+
+      // Refresh queue from DB (in case admin added a fresh cookie during the job)
+      const fresh = await loadActiveCookies().catch(() => []);
+      const next = fresh.find(r => r.id !== oldId) || cookieQueue.shift();
+      if (!next) {
+        cookieRow = null;
+        await notifyAdmin(`⚠️ Link checker: cookie "${oldLabel}" expired and no fallback cookies available. Add a fresh cookie in admin → Link Checker.`);
+        return false;
+      }
+      cookieRow = next;
+      const built = await buildContextForCookie(next);
+      browser = built.browser;
+      context = built.context;
+      lastCookieRefreshSaveAt = 0;
+      await notifyAdmin(`🔄 Link checker: cookie "${oldLabel}" expired — switched to "${next.label}".`);
+      console.log(`[checker] switched to cookie "${next.label}"`);
+      return true;
+    })().finally(() => { rotatingPromise = null; });
+    return rotatingPromise;
+  }
+
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
   async function topUpNewStock() {
@@ -382,6 +439,9 @@ async function runJob(job) {
 
   async function worker() {
     while (!aborted) {
+      // Wait if a rotation is in progress
+      if (rotatingPromise) { await rotatingPromise; if (aborted) break; }
+
       // Check job status (cancellation)
       const { data: cur } = await supabase.from('link_check_jobs').select('status').eq('id', job.id).single();
       if (cur && (cur.status === 'cancelled' || cur.status === 'failed')) { aborted = true; abortReason = abortReason || cur.status; break; }
@@ -407,12 +467,23 @@ async function runJob(job) {
         if (!item) break; // truly empty
       }
 
-      const res = await checkUrl(context, item.url);
+      const ctxSnapshot = context;
+      const res = await checkUrl(ctxSnapshot, item.url);
       if (res.result === 'cookies_expired') {
-        aborted = true;
-        abortReason = 'cookies_expired';
-        await supabase.from('link_check_items').update({ status: 'skipped', reason: 'cookies expired mid-job', checked_at: new Date().toISOString() }).eq('id', item.id);
-        break;
+        // Requeue this item so the next cookie retries it
+        await supabase.from('link_check_items').update({ status: 'pending', reason: null, checked_at: null }).eq('id', item.id);
+        if (useProfile) {
+          aborted = true;
+          abortReason = 'cookies_expired';
+          break;
+        }
+        const ok = await rotateCookie('worker hit Google sign-in redirect');
+        if (!ok) {
+          aborted = true;
+          abortReason = 'cookies_expired';
+          break;
+        }
+        continue;
       }
 
       await supabase.rpc('mark_link_check_result', {
@@ -428,6 +499,7 @@ async function runJob(job) {
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
     }
   }
+
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   if (!abortReason && cookieRow) await saveRefreshedCookies(cookieRow, context, 'job complete');
