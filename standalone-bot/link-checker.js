@@ -338,6 +338,7 @@ async function runJob(job) {
   let abortReason = '';
   const concurrency = Math.max(1, Math.min(6, job.concurrency || 3));
   const delay = Math.max(0, job.delay_ms || 5000);
+  let lastCookieRefreshSaveAt = 0;
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
   async function topUpNewStock() {
@@ -415,12 +416,18 @@ async function runJob(job) {
         _item_id: item.id, _result: res.result, _reason: res.reason,
       });
 
+      if (cookieRow && res.result !== 'cookies_expired' && Date.now() - lastCookieRefreshSaveAt > COOKIE_REFRESH_SAVE_INTERVAL_MS) {
+        lastCookieRefreshSaveAt = Date.now();
+        await saveRefreshedCookies(cookieRow, context, res.result);
+      }
+
       console.log(`[checker] ${res.result} - ${item.url.slice(0, 80)}... (${res.reason})`);
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
     }
   }
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  if (!abortReason && cookieRow) await saveRefreshedCookies(cookieRow, context, 'job complete');
   await context.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
 
