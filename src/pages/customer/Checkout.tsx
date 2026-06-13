@@ -28,6 +28,7 @@ export default function Checkout() {
   const { user, customer, refreshCustomer } = useCustomerAuth();
   const { format } = useCurrency();
   const [product, setProduct] = useState<any>(null);
+  const [flash, setFlash] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [result, setResult] = useState<{ details: any[]; total: number; orderId: string } | null>(null);
@@ -42,11 +43,30 @@ export default function Checkout() {
     (async () => {
       const { data } = await supabase.from('bot_products').select('*').eq('id', productId).maybeSingle();
       setProduct(data);
+      if (data) {
+        const { data: f } = await supabase
+          .from('bot_flash_sales')
+          .select('sale_price,ends_at')
+          .eq('product_id', data.id)
+          .eq('is_active', true)
+          .gte('ends_at', new Date().toISOString())
+          .order('sale_price')
+          .limit(1)
+          .maybeSingle();
+        setFlash(f);
+      }
       setLoading(false);
     })();
   }, [productId, user]);
 
-  const total = useMemo(() => (product ? Number(product.price) * qty : 0), [product, qty]);
+  const unitPrice = useMemo(() => {
+    if (!product) return 0;
+    let u = Number(product.price);
+    if (flash && Number(flash.sale_price) < u) u = Number(flash.sale_price);
+    return u;
+  }, [product, flash]);
+  const hasFlash = !!flash && Number(flash?.sale_price) < Number(product?.price || 0);
+  const total = useMemo(() => unitPrice * qty, [unitPrice, qty]);
 
   const place = async () => {
     setPlacing(true);
@@ -153,7 +173,20 @@ export default function Checkout() {
         <div className="flex justify-between py-3 border-b border-border">
           <div>
             <div className="font-medium">{product.name}</div>
-            <div className="text-sm text-muted-foreground">{format(product.price)} × {qty}</div>
+            <div className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
+              {hasFlash ? (
+                <>
+                  <span className="text-warning font-semibold">{format(unitPrice)}</span>
+                  <span className="line-through text-muted-foreground/60">{format(product.price)}</span>
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 text-warning border border-warning/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                    <Zap className="h-2.5 w-2.5" /> Flash
+                  </span>
+                  <span>× {qty}</span>
+                </>
+              ) : (
+                <span>{format(unitPrice)} × {qty}</span>
+              )}
+            </div>
           </div>
           <div className="text-xl font-bold">{format(total)}</div>
         </div>
@@ -244,7 +277,10 @@ export default function Checkout() {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Unit price</span>
-              <span className="font-mono">{format(product.price)}</span>
+              <span className="font-mono">
+                {hasFlash && <span className="line-through text-muted-foreground/60 mr-1.5">{format(product.price)}</span>}
+                {format(unitPrice)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Quantity</span>
