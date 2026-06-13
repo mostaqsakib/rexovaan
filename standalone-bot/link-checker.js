@@ -439,6 +439,9 @@ async function runJob(job) {
 
   async function worker() {
     while (!aborted) {
+      // Wait if a rotation is in progress
+      if (rotatingPromise) { await rotatingPromise; if (aborted) break; }
+
       // Check job status (cancellation)
       const { data: cur } = await supabase.from('link_check_jobs').select('status').eq('id', job.id).single();
       if (cur && (cur.status === 'cancelled' || cur.status === 'failed')) { aborted = true; abortReason = abortReason || cur.status; break; }
@@ -464,12 +467,23 @@ async function runJob(job) {
         if (!item) break; // truly empty
       }
 
-      const res = await checkUrl(context, item.url);
+      const ctxSnapshot = context;
+      const res = await checkUrl(ctxSnapshot, item.url);
       if (res.result === 'cookies_expired') {
-        aborted = true;
-        abortReason = 'cookies_expired';
-        await supabase.from('link_check_items').update({ status: 'skipped', reason: 'cookies expired mid-job', checked_at: new Date().toISOString() }).eq('id', item.id);
-        break;
+        // Requeue this item so the next cookie retries it
+        await supabase.from('link_check_items').update({ status: 'pending', reason: null, checked_at: null }).eq('id', item.id);
+        if (useProfile) {
+          aborted = true;
+          abortReason = 'cookies_expired';
+          break;
+        }
+        const ok = await rotateCookie('worker hit Google sign-in redirect');
+        if (!ok) {
+          aborted = true;
+          abortReason = 'cookies_expired';
+          break;
+        }
+        continue;
       }
 
       await supabase.rpc('mark_link_check_result', {
@@ -485,6 +499,7 @@ async function runJob(job) {
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
     }
   }
+
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   if (!abortReason && cookieRow) await saveRefreshedCookies(cookieRow, context, 'job complete');
