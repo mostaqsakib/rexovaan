@@ -263,7 +263,8 @@ async function runJob(job) {
   // Railway runs Linux, so Chrome profiles zipped from Windows often lose usable Google
   // session cookies (OS-encrypted). Prefer Cookie-Editor JSON cookies when available;
   // keep the persistent profile only as a fallback.
-  const cookieRow = await loadActiveCookie(job.cookie_id);
+  const cookieQueue = await loadActiveCookies(job.cookie_id);
+  let cookieRow = cookieQueue.shift() || null;
   const useProfile = !cookieRow && hasProfile;
 
   if (cookieRow && hasProfileAuthExpiredMarker()) {
