@@ -208,9 +208,19 @@ async function checkUrl(context, url) {
 async function runJob(job) {
   console.log(`[checker] starting job ${job.id} for product ${job.product_id}`);
 
-  const useProfile = (() => {
+  const hasProfile = (() => {
     try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; }
   })();
+
+  // Railway runs Linux, so Chrome profiles zipped from Windows often lose usable Google
+  // session cookies (OS-encrypted). Prefer Cookie-Editor JSON cookies when available;
+  // keep the persistent profile only as a fallback.
+  const cookieRow = await loadActiveCookie(job.cookie_id);
+  const useProfile = !cookieRow && hasProfile;
+
+  if (cookieRow && hasProfileAuthExpiredMarker()) {
+    console.log('[checker] exported cookies are active — ignoring expired persistent-profile marker');
+  }
 
   if (useProfile && hasProfileAuthExpiredMarker()) {
     await supabase.from('link_check_jobs').update({
@@ -222,16 +232,16 @@ async function runJob(job) {
     return;
   }
 
-  let cookieRow = null;
-  if (!useProfile) {
-    cookieRow = await loadActiveCookie(job.cookie_id);
-    if (!cookieRow) {
-      await supabase.from('link_check_jobs').update({
-        status: 'failed', error_text: 'No active cookies and no persistent profile', finished_at: new Date().toISOString(),
-      }).eq('id', job.id);
-      await notifyAdmin('⚠️ Link checker: no active Google cookies and no persistent profile. Either upload cookies or set PROFILE_ZIP_URL.');
-      return;
-    }
+  if (!cookieRow && !useProfile) {
+    await supabase.from('link_check_jobs').update({
+      status: 'failed', error_text: 'No active cookies and no persistent profile', finished_at: new Date().toISOString(),
+    }).eq('id', job.id);
+    await notifyAdmin('⚠️ Link checker: no active Google cookies and no persistent profile. Add Cookie-Editor JSON cookies in admin → Link Checker.');
+    return;
+  }
+
+  if (cookieRow) {
+    console.log('[checker] using exported Google cookies from Supabase');
   } else {
     console.log('[checker] using persistent Chromium profile at', PROFILE_DIR);
   }
@@ -429,23 +439,21 @@ async function autoEnqueueIfNeeded() {
     .eq('is_active', true);
   if (!autoProducts || autoProducts.length === 0) return;
 
-  // If persistent profile is available, we can auto-loop without any DB cookie.
   const hasProfile = (() => { try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; } })();
-  if (hasProfile && hasProfileAuthExpiredMarker()) {
-    console.log('[checker] profile auth is marked expired — auto link-check jobs paused until fresh PROFILE_ZIP_URL redeploy');
+
+  const { data: cookie } = await supabase
+    .from('google_account_cookies')
+    .select('id')
+    .eq('is_active', true).eq('expired', false)
+    .limit(1).maybeSingle();
+
+  if (!cookie && hasProfile && hasProfileAuthExpiredMarker()) {
+    console.log('[checker] profile auth is marked expired and no active exported cookies exist — auto link-check jobs paused');
     return;
   }
+  if (!cookie && !hasProfile) return; // can't auto-loop without cookies or profile
 
-  let cookieId = null;
-  if (!hasProfile) {
-    const { data: cookie } = await supabase
-      .from('google_account_cookies')
-      .select('id')
-      .eq('is_active', true).eq('expired', false)
-      .limit(1).maybeSingle();
-    if (!cookie) return; // can't auto-loop without cookies or profile
-    cookieId = cookie.id;
-  }
+  const cookieId = cookie?.id ?? null;
 
   for (const p of autoProducts) {
     const { data: existing } = await supabase
