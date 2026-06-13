@@ -337,9 +337,8 @@ function AddCookieDialog({ open, onClose }: { open: boolean; onClose: () => void
     try { parsed = JSON.parse(json); } catch { toast.error('Invalid JSON'); return; }
     if (!Array.isArray(parsed)) { toast.error('Expected JSON array of cookies'); return; }
     setSaving(true);
-    // deactivate others, insert new as active
-    await supabase.from('google_account_cookies').update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000');
-    const { error } = await supabase.from('google_account_cookies').insert({ label, cookies_json: parsed, is_active: true });
+    // Insert as active. Multiple cookies can be active at once — checker rotates through them.
+    const { error } = await supabase.from('google_account_cookies').insert({ label, cookies_json: parsed, is_active: true, expired: false });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success('Cookies saved');
