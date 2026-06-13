@@ -395,13 +395,20 @@ async function autoEnqueueIfNeeded() {
     .eq('is_active', true);
   if (!autoProducts || autoProducts.length === 0) return;
 
-  // Pick active cookie once
-  const { data: cookie } = await supabase
-    .from('google_account_cookies')
-    .select('id')
-    .eq('is_active', true).eq('expired', false)
-    .limit(1).maybeSingle();
-  if (!cookie) return; // can't auto-loop without cookies
+  // If persistent profile is available, we can auto-loop without any DB cookie.
+  const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
+  const hasProfile = (() => { try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; } })();
+
+  let cookieId = null;
+  if (!hasProfile) {
+    const { data: cookie } = await supabase
+      .from('google_account_cookies')
+      .select('id')
+      .eq('is_active', true).eq('expired', false)
+      .limit(1).maybeSingle();
+    if (!cookie) return; // can't auto-loop without cookies or profile
+    cookieId = cookie.id;
+  }
 
   for (const p of autoProducts) {
     const { data: existing } = await supabase
@@ -414,7 +421,7 @@ async function autoEnqueueIfNeeded() {
 
     await supabase.from('link_check_jobs').insert({
       product_id: p.id,
-      cookie_id: cookie.id,
+      cookie_id: cookieId,
       concurrency: 2,
       delay_ms: 5000,
       status: 'queued',
