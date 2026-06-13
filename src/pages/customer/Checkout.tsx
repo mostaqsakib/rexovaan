@@ -277,7 +277,10 @@ export default function Checkout() {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Unit price</span>
-              <span className="font-mono">{format(product.price)}</span>
+              <span className="font-mono">
+                {hasFlash && <span className="line-through text-muted-foreground/60 mr-1.5">{format(product.price)}</span>}
+                {format(unitPrice)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Quantity</span>
