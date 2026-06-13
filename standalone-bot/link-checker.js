@@ -30,6 +30,7 @@ const POLL_INTERVAL_MS = 5000;
 const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
 const PROFILE_AUTH_EXPIRED_MARKER = `${PROFILE_DIR}/.auth-expired`;
 const AUTH_EXPIRED_NOTIFY_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const COOKIE_REFRESH_SAVE_INTERVAL_MS = 60 * 1000;
 let lastAuthExpiredNotifyAt = 0;
 
 function hasProfileAuthExpiredMarker() {
@@ -127,6 +128,22 @@ async function loadActiveCookie(cookieId) {
 async function markCookiesExpired(cookieId) {
   if (!cookieId || String(cookieId).startsWith('__env_')) return;
   await supabase.from('google_account_cookies').update({ expired: true, is_active: false }).eq('id', cookieId);
+}
+
+async function saveRefreshedCookies(cookieRow, context, reason = 'refresh') {
+  if (!cookieRow?.id || String(cookieRow.id).startsWith('__env_')) return;
+  try {
+    const cookies = await context.cookies();
+    const googleCookies = cookies.filter(c => /(^|\.)google\.com$/i.test(c.domain) || /(^|\.)googleusercontent\.com$/i.test(c.domain));
+    if (googleCookies.length === 0) return;
+    await supabase
+      .from('google_account_cookies')
+      .update({ cookies_json: googleCookies, expired: false, is_active: true, last_verified_at: new Date().toISOString() })
+      .eq('id', cookieRow.id);
+    console.log(`[checker] saved refreshed Google cookies (${googleCookies.length}) after ${reason}`);
+  } catch (e) {
+    console.error('[checker] failed to save refreshed cookies:', e.message);
+  }
 }
 
 const INVALID_MARKERS = [
@@ -259,6 +276,9 @@ async function runJob(job) {
 
   if (cookieRow) {
     console.log('[checker] using exported Google cookies from Supabase');
+    if (String(cookieRow.id).startsWith('__env_')) {
+      console.log('[checker] warning: GOOGLE_COOKIES_JSON env cookies cannot be auto-refreshed; save cookies in admin Link Checker tab for longer-lived sessions');
+    }
   } else {
     console.log('[checker] using persistent Chromium profile at', PROFILE_DIR);
   }
@@ -321,6 +341,7 @@ async function runJob(job) {
   let abortReason = '';
   const concurrency = Math.max(1, Math.min(6, job.concurrency || 3));
   const delay = Math.max(0, job.delay_ms || 5000);
+  let lastCookieRefreshSaveAt = 0;
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
   async function topUpNewStock() {
@@ -398,12 +419,18 @@ async function runJob(job) {
         _item_id: item.id, _result: res.result, _reason: res.reason,
       });
 
+      if (cookieRow && res.result !== 'cookies_expired' && Date.now() - lastCookieRefreshSaveAt > COOKIE_REFRESH_SAVE_INTERVAL_MS) {
+        lastCookieRefreshSaveAt = Date.now();
+        await saveRefreshedCookies(cookieRow, context, res.result);
+      }
+
       console.log(`[checker] ${res.result} - ${item.url.slice(0, 80)}... (${res.reason})`);
       if (delay > 0) await new Promise(r => setTimeout(r, delay));
     }
   }
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  if (!abortReason && cookieRow) await saveRefreshedCookies(cookieRow, context, 'job complete');
   await context.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
 

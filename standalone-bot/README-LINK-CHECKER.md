@@ -18,6 +18,8 @@ If you prefer two separate Railway services, deploy this folder again with start
 3. Open `one.google.com`, click the extension icon, click **Export** → **JSON**.
 4. Open admin panel → **Link Checker** → **Google Cookies** tab → **Add**, paste the JSON, save.
 
+Cookies saved in the admin tab are auto-refreshed by the worker while checks run. This is better than Railway env cookies for long-running auto-loop jobs.
+
 ### Railway fallback (recommended when profile ZIP keeps expiring)
 
 Chrome profile ZIPs created on Windows often lose Google login when Railway runs them on Linux. If logs say `profile auth is marked expired`, do this instead:
@@ -27,6 +29,8 @@ Chrome profile ZIPs created on Windows often lose Google login when Railway runs
 3. Railway → service → **Variables** → add `GOOGLE_COOKIES_JSON`.
 4. Paste the full exported JSON as the value, save, redeploy.
 5. You can leave `PROFILE_ZIP_URL` as-is; the checker will prefer `GOOGLE_COOKIES_JSON` first.
+
+Note: `GOOGLE_COOKIES_JSON` cannot be auto-refreshed because Railway variables are static. For continuous jobs, paste cookies in the admin **Google Cookies** tab instead.
 
 ## Running a check
 
