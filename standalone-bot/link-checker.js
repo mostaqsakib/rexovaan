@@ -512,8 +512,8 @@ async function autoEnqueueIfNeeded() {
     await supabase.from('link_check_jobs').insert({
       product_id: p.id,
       cookie_id: cookieId,
-      concurrency: 2,
-      delay_ms: 5000,
+      concurrency: 5,
+      delay_ms: 800,
       status: 'queued',
     });
     console.log(`[checker] auto-enqueued job for ${p.name}`);
