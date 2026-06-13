@@ -173,7 +173,20 @@ export default function Checkout() {
         <div className="flex justify-between py-3 border-b border-border">
           <div>
             <div className="font-medium">{product.name}</div>
-            <div className="text-sm text-muted-foreground">{format(product.price)} × {qty}</div>
+            <div className="text-sm text-muted-foreground flex items-center gap-1.5 flex-wrap">
+              {hasFlash ? (
+                <>
+                  <span className="text-warning font-semibold">{format(unitPrice)}</span>
+                  <span className="line-through text-muted-foreground/60">{format(product.price)}</span>
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 text-warning border border-warning/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                    <Zap className="h-2.5 w-2.5" /> Flash
+                  </span>
+                  <span>× {qty}</span>
+                </>
+              ) : (
+                <span>{format(unitPrice)} × {qty}</span>
+              )}
+            </div>
           </div>
           <div className="text-xl font-bold">{format(total)}</div>
         </div>
