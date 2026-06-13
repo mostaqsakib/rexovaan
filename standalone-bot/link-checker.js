@@ -190,7 +190,7 @@ async function checkUrl(context, url) {
       return route.continue();
     });
 
-    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
     const isSignIn = (u) => /accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(u);
     if (isSignIn(page.url())) {
@@ -203,20 +203,20 @@ async function checkUrl(context, url) {
       return { text: t, hit: null };
     };
 
-    // Phase 1 (up to 8s): return immediately if ANY invalid marker shows up.
-    const invalidDeadline = Date.now() + 8000;
+    // Phase 1 (up to 3.5s): return immediately if ANY invalid marker shows up.
+    const invalidDeadline = Date.now() + 3500;
     let lastText = '';
     while (Date.now() < invalidDeadline) {
       if (isSignIn(page.url())) return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
       const { text, hit } = await scan();
       lastText = text;
       if (hit) return hit;
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 250));
     }
 
-    // Phase 2: wait for network to settle so any lazy "already in use" text loads.
-    try { await page.waitForLoadState('networkidle', { timeout: 8000 }); } catch {}
-    await new Promise(r => setTimeout(r, 1500)); // extra settle
+    // Phase 2: short settle so any lazy "already in use" text loads.
+    try { await page.waitForLoadState('networkidle', { timeout: 3000 }); } catch {}
+    await new Promise(r => setTimeout(r, 600)); // extra settle
 
     // Final invalid re-check after settle.
     {
@@ -339,8 +339,8 @@ async function runJob(job) {
 
   let aborted = false;
   let abortReason = '';
-  const concurrency = Math.max(1, Math.min(6, job.concurrency || 3));
-  const delay = Math.max(0, job.delay_ms || 5000);
+  const concurrency = Math.max(1, Math.min(10, job.concurrency || 5));
+  const delay = Math.max(0, job.delay_ms || 800);
   let lastCookieRefreshSaveAt = 0;
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
@@ -512,8 +512,8 @@ async function autoEnqueueIfNeeded() {
     await supabase.from('link_check_jobs').insert({
       product_id: p.id,
       cookie_id: cookieId,
-      concurrency: 2,
-      delay_ms: 5000,
+      concurrency: 5,
+      delay_ms: 800,
       status: 'queued',
     });
     console.log(`[checker] auto-enqueued job for ${p.name}`);
