@@ -9,6 +9,7 @@ import { execSync } from 'node:child_process';
 const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
 const PROFILE_ZIP_URL = process.env.PROFILE_ZIP_URL;
 const PROFILE_AUTH_EXPIRED_MARKER = path.join(PROFILE_DIR, '.auth-expired');
+const PROFILE_ZIP_URL_MARKER = path.join(PROFILE_DIR, '.profile-zip-url');
 
 async function resolveGofile(shareUrl) {
   const m = shareUrl.match(/gofile\.io\/d\/([A-Za-z0-9]+)/);
@@ -58,12 +59,21 @@ async function main() {
     return;
   }
   const hasExpiredMarker = fs.existsSync(PROFILE_AUTH_EXPIRED_MARKER);
-  if (fs.existsSync(path.join(PROFILE_DIR, 'Default')) && !hasExpiredMarker) {
+  const hasProfile = fs.existsSync(path.join(PROFILE_DIR, 'Default'));
+  const previousZipUrl = fs.existsSync(PROFILE_ZIP_URL_MARKER)
+    ? fs.readFileSync(PROFILE_ZIP_URL_MARKER, 'utf8').trim()
+    : '';
+  const zipUrlChanged = previousZipUrl && previousZipUrl !== PROFILE_ZIP_URL;
+
+  if (hasProfile && !hasExpiredMarker && !zipUrlChanged) {
     console.log('[setup-profile] profile already present at', PROFILE_DIR, '— skipping');
     return;
   }
   if (hasExpiredMarker) {
     console.log('[setup-profile] expired profile marker found — replacing profile from PROFILE_ZIP_URL');
+    fs.rmSync(PROFILE_DIR, { recursive: true, force: true });
+  } else if (hasProfile && zipUrlChanged) {
+    console.log('[setup-profile] PROFILE_ZIP_URL changed — replacing existing profile');
     fs.rmSync(PROFILE_DIR, { recursive: true, force: true });
   }
 
@@ -82,6 +92,7 @@ async function main() {
   console.log('[setup-profile] extracting to', PROFILE_DIR);
   execSync(`unzip -o -q "${zipPath}" -d "${PROFILE_DIR}"`, { stdio: 'inherit' });
   fs.unlinkSync(zipPath);
+  fs.writeFileSync(PROFILE_ZIP_URL_MARKER, PROFILE_ZIP_URL + '\n');
   console.log('[setup-profile] done');
 }
 
