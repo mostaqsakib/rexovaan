@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
 import WebSocket from 'ws';
+import fs from 'node:fs';
 
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
