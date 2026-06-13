@@ -343,14 +343,20 @@ async function runJob(job) {
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   await context.close().catch(() => {});
-  await browser.close().catch(() => {});
+  if (browser) await browser.close().catch(() => {});
 
   if (abortReason === 'cookies_expired') {
-    await markCookiesExpired(cookieRow.id);
+    if (cookieRow) await markCookiesExpired(cookieRow.id);
     await supabase.from('link_check_jobs').update({
-      status: 'failed', error_text: 'Google cookies expired — re-upload required', finished_at: new Date().toISOString(),
+      status: 'failed',
+      error_text: useProfile
+        ? 'Google session expired in persistent profile — re-upload PROFILE_ZIP_URL'
+        : 'Google cookies expired — re-upload required',
+      finished_at: new Date().toISOString(),
     }).eq('id', job.id);
-    await notifyAdmin('⚠️ <b>Google cookies expired</b>\n\nLink checker stopped. Open admin → Link Checker → Google Cookies and paste fresh export from Cookie-Editor extension.');
+    await notifyAdmin(useProfile
+      ? '⚠️ <b>Google session expired</b>\n\nThe persistent Chromium profile is no longer logged in. Re-run the local profile capture and update PROFILE_ZIP_URL on Railway.'
+      : '⚠️ <b>Google cookies expired</b>\n\nLink checker stopped. Open admin → Link Checker → Google Cookies and paste fresh export from Cookie-Editor extension.');
     return;
   }
 
