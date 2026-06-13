@@ -62,11 +62,10 @@ export default function LinkCheckerTab() {
   const startJob = async () => {
     if (!productId) { toast.error('Pick a product'); return; }
     const activeCookie = cookies.find(c => c.is_active && !c.expired);
-    if (!activeCookie) { toast.error('Add active Google cookies first'); return; }
     setStarting(true);
     const { error } = await supabase.from('link_check_jobs').insert({
       product_id: productId,
-      cookie_id: activeCookie.id,
+      cookie_id: activeCookie?.id ?? null,
       concurrency,
       delay_ms: delayMs,
       status: 'queued',
