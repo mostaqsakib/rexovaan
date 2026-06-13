@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
 import WebSocket from 'ws';
+import fs from 'node:fs';
 
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
@@ -181,13 +182,23 @@ async function checkUrl(context, url) {
 async function runJob(job) {
   console.log(`[checker] starting job ${job.id} for product ${job.product_id}`);
 
-  const cookieRow = await loadActiveCookie(job.cookie_id);
-  if (!cookieRow) {
-    await supabase.from('link_check_jobs').update({
-      status: 'failed', error_text: 'No active cookies', finished_at: new Date().toISOString(),
-    }).eq('id', job.id);
-    await notifyAdmin('⚠️ Link checker: no active Google cookies. Add fresh cookies in admin → Link Checker.');
-    return;
+  const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
+  const useProfile = (() => {
+    try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; }
+  })();
+
+  let cookieRow = null;
+  if (!useProfile) {
+    cookieRow = await loadActiveCookie(job.cookie_id);
+    if (!cookieRow) {
+      await supabase.from('link_check_jobs').update({
+        status: 'failed', error_text: 'No active cookies and no persistent profile', finished_at: new Date().toISOString(),
+      }).eq('id', job.id);
+      await notifyAdmin('⚠️ Link checker: no active Google cookies and no persistent profile. Either upload cookies or set PROFILE_ZIP_URL.');
+      return;
+    }
+  } else {
+    console.log('[checker] using persistent Chromium profile at', PROFILE_DIR);
   }
 
   // Load available stock items for the product
@@ -222,14 +233,27 @@ async function runJob(job) {
     status: 'running', total: items.length, started_at: new Date().toISOString(),
   }).eq('id', job.id);
 
-  // Launch browser
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const context = await browser.newContext({
+  // Launch browser — persistent profile (preferred) or ephemeral + cookies (fallback)
+  const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
+  const contextOpts = {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
     locale: 'en-US',
-  });
-  await context.addCookies(normalizeCookies(cookieRow.cookies_json));
+  };
+
+  let browser = null;
+  let context;
+  if (useProfile) {
+    context = await chromium.launchPersistentContext(PROFILE_DIR, {
+      headless: true,
+      args: launchArgs,
+      ...contextOpts,
+    });
+  } else {
+    browser = await chromium.launch({ headless: true, args: launchArgs });
+    context = await browser.newContext(contextOpts);
+    await context.addCookies(normalizeCookies(cookieRow.cookies_json));
+  }
 
   let aborted = false;
   let abortReason = '';
@@ -319,14 +343,20 @@ async function runJob(job) {
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
   await context.close().catch(() => {});
-  await browser.close().catch(() => {});
+  if (browser) await browser.close().catch(() => {});
 
   if (abortReason === 'cookies_expired') {
-    await markCookiesExpired(cookieRow.id);
+    if (cookieRow) await markCookiesExpired(cookieRow.id);
     await supabase.from('link_check_jobs').update({
-      status: 'failed', error_text: 'Google cookies expired — re-upload required', finished_at: new Date().toISOString(),
+      status: 'failed',
+      error_text: useProfile
+        ? 'Google session expired in persistent profile — re-upload PROFILE_ZIP_URL'
+        : 'Google cookies expired — re-upload required',
+      finished_at: new Date().toISOString(),
     }).eq('id', job.id);
-    await notifyAdmin('⚠️ <b>Google cookies expired</b>\n\nLink checker stopped. Open admin → Link Checker → Google Cookies and paste fresh export from Cookie-Editor extension.');
+    await notifyAdmin(useProfile
+      ? '⚠️ <b>Google session expired</b>\n\nThe persistent Chromium profile is no longer logged in. Re-run the local profile capture and update PROFILE_ZIP_URL on Railway.'
+      : '⚠️ <b>Google cookies expired</b>\n\nLink checker stopped. Open admin → Link Checker → Google Cookies and paste fresh export from Cookie-Editor extension.');
     return;
   }
 
@@ -365,13 +395,20 @@ async function autoEnqueueIfNeeded() {
     .eq('is_active', true);
   if (!autoProducts || autoProducts.length === 0) return;
 
-  // Pick active cookie once
-  const { data: cookie } = await supabase
-    .from('google_account_cookies')
-    .select('id')
-    .eq('is_active', true).eq('expired', false)
-    .limit(1).maybeSingle();
-  if (!cookie) return; // can't auto-loop without cookies
+  // If persistent profile is available, we can auto-loop without any DB cookie.
+  const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
+  const hasProfile = (() => { try { return fs.existsSync(`${PROFILE_DIR}/Default`); } catch { return false; } })();
+
+  let cookieId = null;
+  if (!hasProfile) {
+    const { data: cookie } = await supabase
+      .from('google_account_cookies')
+      .select('id')
+      .eq('is_active', true).eq('expired', false)
+      .limit(1).maybeSingle();
+    if (!cookie) return; // can't auto-loop without cookies or profile
+    cookieId = cookie.id;
+  }
 
   for (const p of autoProducts) {
     const { data: existing } = await supabase
@@ -384,7 +421,7 @@ async function autoEnqueueIfNeeded() {
 
     await supabase.from('link_check_jobs').insert({
       product_id: p.id,
-      cookie_id: cookie.id,
+      cookie_id: cookieId,
       concurrency: 2,
       delay_ms: 5000,
       status: 'queued',
