@@ -28,6 +28,7 @@ export default function Checkout() {
   const { user, customer, refreshCustomer } = useCustomerAuth();
   const { format } = useCurrency();
   const [product, setProduct] = useState<any>(null);
+  const [flash, setFlash] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [result, setResult] = useState<{ details: any[]; total: number; orderId: string } | null>(null);
@@ -42,11 +43,30 @@ export default function Checkout() {
     (async () => {
       const { data } = await supabase.from('bot_products').select('*').eq('id', productId).maybeSingle();
       setProduct(data);
+      if (data) {
+        const { data: f } = await supabase
+          .from('bot_flash_sales')
+          .select('sale_price,ends_at')
+          .eq('product_id', data.id)
+          .eq('is_active', true)
+          .gte('ends_at', new Date().toISOString())
+          .order('sale_price')
+          .limit(1)
+          .maybeSingle();
+        setFlash(f);
+      }
       setLoading(false);
     })();
   }, [productId, user]);
 
-  const total = useMemo(() => (product ? Number(product.price) * qty : 0), [product, qty]);
+  const unitPrice = useMemo(() => {
+    if (!product) return 0;
+    let u = Number(product.price);
+    if (flash && Number(flash.sale_price) < u) u = Number(flash.sale_price);
+    return u;
+  }, [product, flash]);
+  const hasFlash = !!flash && Number(flash?.sale_price) < Number(product?.price || 0);
+  const total = useMemo(() => unitPrice * qty, [unitPrice, qty]);
 
   const place = async () => {
     setPlacing(true);
