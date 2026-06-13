@@ -463,12 +463,13 @@ async function autoEnqueueIfNeeded() {
     .select('id')
     .eq('is_active', true).eq('expired', false)
     .limit(1).maybeSingle();
+  const hasEnvCookies = normalizeCookies(GOOGLE_COOKIES_JSON).length > 0;
 
-  if (!cookie && hasProfile && hasProfileAuthExpiredMarker()) {
+  if (!cookie && !hasEnvCookies && hasProfile && hasProfileAuthExpiredMarker()) {
     console.log('[checker] profile auth is marked expired and no active exported cookies exist — auto link-check jobs paused');
     return;
   }
-  if (!cookie && !hasProfile) return; // can't auto-loop without cookies or profile
+  if (!cookie && !hasEnvCookies && !hasProfile) return; // can't auto-loop without cookies or profile
 
   const cookieId = cookie?.id ?? null;
 
