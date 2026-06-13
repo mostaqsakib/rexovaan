@@ -10,26 +10,36 @@ const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
 const PROFILE_ZIP_URL = process.env.PROFILE_ZIP_URL;
 
 async function resolveGofile(shareUrl) {
-  // shareUrl like https://gofile.io/d/uy0ubZ  → contentId = uy0ubZ
   const m = shareUrl.match(/gofile\.io\/d\/([A-Za-z0-9]+)/);
   if (!m) throw new Error('Bad gofile URL');
   const contentId = m[1];
 
-  // 1. create guest account → token
   const accRes = await fetch('https://api.gofile.io/accounts', { method: 'POST' });
   const accJson = await accRes.json();
   const token = accJson?.data?.token;
   if (!token) throw new Error('gofile: no guest token');
 
-  // 2. list contents
-  const listRes = await fetch(`https://api.gofile.io/contents/${contentId}?wt=4fd6sg89d7s6`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const listJson = await listRes.json();
-  const children = listJson?.data?.children || {};
-  const first = Object.values(children).find(c => c.link || c.downloadLink);
-  if (!first) throw new Error('gofile: no downloadable child found');
-  return { url: first.link || first.downloadLink, token };
+  // Try a few known website tokens — gofile rotates these.
+  const wts = ['4fd6sg89d7s6', '12345', ''];
+  let listJson = null;
+  for (const wt of wts) {
+    const url = `https://api.gofile.io/contents/${contentId}` + (wt ? `?wt=${wt}` : '');
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json().catch(() => null);
+    if (j?.status === 'ok' && j?.data?.children) { listJson = j; break; }
+    console.log('[setup-profile] gofile attempt wt=' + wt + ' →', JSON.stringify(j).slice(0, 300));
+  }
+  if (!listJson) throw new Error('gofile: contents listing failed for all wt values');
+
+  const children = listJson.data.children || {};
+  const all = Object.values(children);
+  console.log('[setup-profile] gofile children:', JSON.stringify(all).slice(0, 500));
+  // Look at every possible field gofile has used over time.
+  const first = all.find(c => c.link || c.downloadLink || c.directLink) || all[0];
+  if (!first) throw new Error('gofile: no child found');
+  const dl = first.link || first.downloadLink || first.directLink;
+  if (!dl) throw new Error('gofile: child has no download link — try uploading to Supabase Storage instead and use the signed URL');
+  return { url: dl, token };
 }
 
 async function downloadTo(url, headers, dest) {
