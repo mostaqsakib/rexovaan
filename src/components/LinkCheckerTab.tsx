@@ -139,9 +139,7 @@ export default function LinkCheckerTab() {
                 </div>
               </div>
               <Button onClick={startJob} disabled={starting}>Start Check</Button>
-              {!cookies.some(c => c.is_active && !c.expired) && (
-                <div className="flex items-center gap-2 text-sm text-warning"><AlertCircle className="h-4 w-4" /> No active cookies. Add Google cookies first.</div>
-              )}
+              <div className="text-xs text-muted-foreground">Bot uses the persistent Google profile (PROFILE_ZIP_URL). Cookies tab is optional/legacy.</div>
             </CardContent>
           </Card>
 
