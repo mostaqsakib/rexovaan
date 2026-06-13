@@ -8,8 +8,19 @@ import { execSync } from 'node:child_process';
 
 const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
 const PROFILE_ZIP_URL = process.env.PROFILE_ZIP_URL;
+const GOOGLE_COOKIES_JSON = process.env.GOOGLE_COOKIES_JSON;
 const PROFILE_AUTH_EXPIRED_MARKER = path.join(PROFILE_DIR, '.auth-expired');
 const PROFILE_ZIP_URL_MARKER = path.join(PROFILE_DIR, '.profile-zip-url');
+
+function hasEnvCookies() {
+  if (!GOOGLE_COOKIES_JSON) return false;
+  try {
+    const parsed = JSON.parse(GOOGLE_COOKIES_JSON);
+    return Array.isArray(parsed) ? parsed.length > 0 : Array.isArray(parsed?.cookies) && parsed.cookies.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 async function resolveGofile(shareUrl) {
   const m = shareUrl.match(/gofile\.io\/d\/([A-Za-z0-9]+)/);
@@ -54,6 +65,11 @@ async function downloadTo(url, headers, dest) {
 }
 
 async function main() {
+  if (hasEnvCookies()) {
+    console.log('[setup-profile] GOOGLE_COOKIES_JSON is set — skipping profile zip download');
+    return;
+  }
+
   if (!PROFILE_ZIP_URL) {
     console.log('[setup-profile] PROFILE_ZIP_URL not set — skipping');
     return;
@@ -98,5 +114,6 @@ async function main() {
 
 main().catch(e => {
   console.error('[setup-profile] failed:', e);
-  process.exit(1);
+  console.log('[setup-profile] continuing without profile so bot/checker service does not crash');
+  process.exit(0);
 });
