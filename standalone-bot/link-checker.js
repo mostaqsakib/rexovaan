@@ -276,6 +276,9 @@ async function runJob(job) {
 
   if (cookieRow) {
     console.log('[checker] using exported Google cookies from Supabase');
+    if (String(cookieRow.id).startsWith('__env_')) {
+      console.log('[checker] warning: GOOGLE_COOKIES_JSON env cookies cannot be auto-refreshed; save cookies in admin Link Checker tab for longer-lived sessions');
+    }
   } else {
     console.log('[checker] using persistent Chromium profile at', PROFILE_DIR);
   }
