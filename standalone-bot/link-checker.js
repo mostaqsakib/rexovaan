@@ -15,6 +15,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const GOOGLE_COOKIES_JSON = process.env.GOOGLE_COOKIES_JSON;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.error('[checker] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -77,6 +78,10 @@ function extractUrl(data) {
 
 // Convert Cookie-Editor export to Playwright cookie format.
 function normalizeCookies(arr) {
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr); } catch { return []; }
+  }
+  if (arr && !Array.isArray(arr) && Array.isArray(arr.cookies)) arr = arr.cookies;
   if (!Array.isArray(arr)) return [];
   return arr.map(c => {
     const out = {
@@ -104,11 +109,23 @@ async function loadActiveCookie(cookieId) {
   if (cookieId) q = q.eq('id', cookieId);
   const { data, error } = await q.limit(1).maybeSingle();
   if (error) throw error;
-  return data;
+  if (data) return data;
+
+  const envCookies = normalizeCookies(GOOGLE_COOKIES_JSON);
+  if (envCookies.length > 0) {
+    return {
+      id: '__env_google_cookies__',
+      label: 'Railway GOOGLE_COOKIES_JSON',
+      cookies_json: envCookies,
+      is_active: true,
+      expired: false,
+    };
+  }
+  return null;
 }
 
 async function markCookiesExpired(cookieId) {
-  if (!cookieId) return;
+  if (!cookieId || String(cookieId).startsWith('__env_')) return;
   await supabase.from('google_account_cookies').update({ expired: true, is_active: false }).eq('id', cookieId);
 }
 
