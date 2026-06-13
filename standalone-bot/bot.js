@@ -169,11 +169,18 @@ function stripEmptyPlaceholderLine(html, key) {
   const lines = String(html || "").split("\n");
   const placeholderRe = new RegExp(`\\{${key}\\}`, "g");
   const out = [];
+  const stripDecorations = (s) => s
+    .replace(/<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[\u200d\ufe0f]/g, "")
+    .replace(/(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})+/gu, "")
+    .trim();
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!placeholderRe.test(line)) { out.push(line); continue; }
     placeholderRe.lastIndex = 0;
-    const stripped = line.replace(placeholderRe, "").replace(/<[^>]+>/g, "").trim();
+    // Treat the line as "empty" when only emojis / tags / whitespace remain after removing the placeholder.
+    const stripped = stripDecorations(line.replace(placeholderRe, ""));
     if (stripped !== "") {
       out.push(line.replace(placeholderRe, ""));
       continue;
@@ -181,13 +188,7 @@ function stripEmptyPlaceholderLine(html, key) {
     // Drop preceding emoji-only / blank line(s)
     while (out.length > 0) {
       const prev = out[out.length - 1];
-      const prevStripped = prev
-        .replace(/<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>/g, "")
-        .replace(/<[^>]+>/g, "")
-        .replace(/[\u200d\ufe0f]/g, "")
-        .replace(/(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})+/gu, "")
-        .trim();
-      if (prevStripped === "") { out.pop(); continue; }
+      if (stripDecorations(prev) === "") { out.pop(); continue; }
       break;
     }
     if (i + 1 < lines.length && lines[i + 1].trim() === "") i++;
