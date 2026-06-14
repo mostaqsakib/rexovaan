@@ -54,7 +54,23 @@ const OrderDeliveryEmail = ({
           )}
         </Section>
 
-        {items.length > 0 && (
+        {downloadUrl ? (
+          <>
+            <Heading as="h2" style={h2}>Your items</Heading>
+            <Section style={itemsBox}>
+              <Text style={text}>
+                {itemCount ? `Your ${itemCount} items are ready as a text file.` : 'Your items are ready as a text file.'}
+                {' '}Click the button below to download.
+              </Text>
+              <Button href={downloadUrl} style={downloadBtn}>
+                Download {downloadFilename || 'items.txt'}
+              </Button>
+              <Text style={footer}>
+                Or copy this link: <a href={downloadUrl}>{downloadUrl}</a>
+              </Text>
+            </Section>
+          </>
+        ) : items.length > 0 && (
           <>
             <Heading as="h2" style={h2}>Your items</Heading>
             <Section style={itemsBox}>
