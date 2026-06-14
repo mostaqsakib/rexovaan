@@ -116,3 +116,4 @@ const itemsBox = { background: '#f5f5fa', border: '1px solid #e0e0ec', borderRad
 const itemLine = { fontSize: '13px', color: '#1a1a2e', margin: '2px 0', wordBreak: 'break-all' as const }
 const hr = { borderColor: '#eee', margin: '24px 0' }
 const footer = { fontSize: '12px', color: '#888', margin: '12px 0 0' }
+const downloadBtn = { background: '#1a1a2e', color: '#ffffff', padding: '12px 20px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: 'bold' as const, display: 'inline-block', margin: '8px 0' }
