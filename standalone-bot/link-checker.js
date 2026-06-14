@@ -298,13 +298,22 @@ async function runJob(job) {
     console.log('[checker] using persistent Chromium profile at', PROFILE_DIR);
   }
 
-  // Load available stock items for the product
-  const { data: stockItems, error: stockErr } = await supabase
-    .from('bot_product_stock_items')
-    .select('id, data')
-    .eq('product_id', job.product_id)
-    .eq('status', 'available');
-  if (stockErr) throw stockErr;
+  // Load ALL available stock items for the product (paginated — Supabase caps each request at 1000)
+  const stockItems = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data: page, error: stockErr } = await supabase
+      .from('bot_product_stock_items')
+      .select('id, data')
+      .eq('product_id', job.product_id)
+      .eq('status', 'available')
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (stockErr) throw stockErr;
+    if (!page || page.length === 0) break;
+    stockItems.push(...page);
+    if (page.length < PAGE) break;
+  }
 
   const items = (stockItems || [])
     .map(s => ({ stock_item_id: s.id, url: extractUrl(s.data) }))
@@ -402,22 +411,39 @@ async function runJob(job) {
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
   async function topUpNewStock() {
-    const { data: existing } = await supabase
-      .from('link_check_items')
-      .select('stock_item_id')
-      .eq('job_id', job.id);
-    const existingIds = new Set((existing || []).map(r => r.stock_item_id).filter(Boolean));
+    const PAGE = 1000;
+    const existingIds = new Set();
+    for (let from = 0; ; from += PAGE) {
+      const { data: page } = await supabase
+        .from('link_check_items')
+        .select('stock_item_id')
+        .eq('job_id', job.id)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (!page || page.length === 0) break;
+      for (const r of page) if (r.stock_item_id) existingIds.add(r.stock_item_id);
+      if (page.length < PAGE) break;
+    }
 
-    const { data: current } = await supabase
-      .from('bot_product_stock_items')
-      .select('id, data')
-      .eq('product_id', job.product_id)
-      .eq('status', 'available');
+    const current = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data: page } = await supabase
+        .from('bot_product_stock_items')
+        .select('id, data')
+        .eq('product_id', job.product_id)
+        .eq('status', 'available')
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (!page || page.length === 0) break;
+      current.push(...page);
+      if (page.length < PAGE) break;
+    }
 
-    const fresh = (current || [])
+    const fresh = current
       .filter(s => !existingIds.has(s.id))
       .map(s => ({ stock_item_id: s.id, url: extractUrl(s.data) }))
       .filter(x => x.url);
+
 
     if (fresh.length === 0) return 0;
 
