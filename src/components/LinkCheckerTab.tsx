@@ -41,7 +41,7 @@ export default function LinkCheckerTab() {
       supabase.from('google_account_cookies').select('*').order('created_at', { ascending: false }),
       supabase.from('bot_products').select('id, name, is_manual_delivery, link_check_auto').eq('is_active', true).order('name'),
       supabase.from('link_check_jobs').select('*').order('created_at', { ascending: false }).limit(20),
-      supabase.from('bot_product_stock_items').select('id, product_id, data, invalid_reason, invalidated_at').eq('status', 'invalid').order('invalidated_at', { ascending: false }).limit(500),
+      supabase.from('bot_product_stock_items').select('id, product_id, data, invalid_reason, invalidated_at, invalidated_job_id').eq('status', 'invalid').order('invalidated_at', { ascending: false }).limit(500),
     ]);
     setCookies((c.data as Cookie[]) || []);
     setProducts(((p.data as Product[]) || []).filter(prod => isAllowedProduct(prod.name)));
