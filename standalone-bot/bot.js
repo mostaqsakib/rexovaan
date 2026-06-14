@@ -221,7 +221,18 @@ async function formatBulkPricingBlock(productId) {
         : `${t.min_quantity}+`;
       return `• <b>${range}</b> pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`;
     });
-    return `\n\n📦 <b>Bulk Pricing:</b>\n${lines.join("\n")}`;
+    let headerEmoji = "🤑";
+    try {
+      const { data: emojiRow } = await supabase
+        .from("bot_button_emojis")
+        .select("custom_emoji_id")
+        .eq("button_key", "bulk_pricing")
+        .maybeSingle();
+      if (emojiRow?.custom_emoji_id) {
+        headerEmoji = `<tg-emoji emoji-id="${emojiRow.custom_emoji_id}">🤑</tg-emoji>`;
+      }
+    } catch {}
+    return `\n${headerEmoji} <b>Bulk Pricing:</b>\n${lines.join("\n")}`;
   } catch {
     return "";
   }
