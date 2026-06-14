@@ -294,29 +294,76 @@ export default function LinkCheckerTab() {
               {invalidStock.length === 0 && <div className="text-sm text-muted-foreground">No invalid links archived.</div>}
               {Object.entries(invalidStock.reduce<Record<string, InvalidStock[]>>((acc, s) => {
                 (acc[s.product_id] ||= []).push(s); return acc;
-              }, {})).map(([pid, rows]) => (
-                <div key={pid} className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="font-medium">{productName(pid)} <span className="text-muted-foreground text-sm">({rows.length})</span></div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => downloadInvalidTxt(pid)}><Download className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => clearInvalid(pid)}><Trash2 className="h-4 w-4" /></Button>
+              }, {})).map(([pid, rows]) => {
+                // Group rows within this product by job (each run)
+                const byJob = rows.reduce<Record<string, InvalidStock[]>>((acc, r) => {
+                  const key = r.invalidated_job_id || 'unknown';
+                  (acc[key] ||= []).push(r); return acc;
+                }, {});
+                const jobEntries = Object.entries(byJob).sort((a, b) => {
+                  const ta = a[1][0]?.invalidated_at ? new Date(a[1][0].invalidated_at!).getTime() : 0;
+                  const tb = b[1][0]?.invalidated_at ? new Date(b[1][0].invalidated_at!).getTime() : 0;
+                  return tb - ta;
+                });
+                return (
+                  <div key={pid} className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-medium">{productName(pid)} <span className="text-muted-foreground text-sm">({rows.length})</span></div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => downloadInvalidTxt(pid)}><Download className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => clearInvalid(pid)}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-1 max-h-64 overflow-auto">
-                    {rows.slice(0, 50).map(r => {
-                      const url = Object.values(r.data || {}).find((x: any) => typeof x === 'string' && x.startsWith('http')) as string;
+                    {jobEntries.map(([jobId, jobRows], idx) => {
+                      const runLabel = jobId === 'unknown'
+                        ? 'Unknown run'
+                        : `Run ${jobEntries.length - idx} · ${jobRows[0]?.invalidated_at ? new Date(jobRows[0].invalidated_at!).toLocaleString() : ''}`;
                       return (
-                        <div key={r.id} className="text-xs font-mono p-2 rounded bg-muted/50 break-all">
-                          <div className="truncate">{url}</div>
-                          {r.invalid_reason && <div className="text-destructive mt-1">{r.invalid_reason}</div>}
+                        <div key={jobId} className="mb-3 rounded-lg border border-border/60">
+                          <div className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-muted/30">
+                            <div className="text-xs font-medium text-muted-foreground">{runLabel} <span className="ml-2">({jobRows.length})</span></div>
+                            <Button size="sm" variant="ghost" onClick={async () => {
+                              if (!confirm(`Delete all ${jobRows.length} invalid links from this run?`)) return;
+                              const ids = jobRows.map(r => r.id);
+                              const { error } = await supabase.from('bot_product_stock_items').delete().in('id', ids);
+                              if (error) { toast.error(error.message); return; }
+                              toast.success('Run cleared');
+                              void loadAll();
+                            }}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                          <div className="space-y-1 p-2 max-h-96 overflow-auto">
+                            {jobRows.map(r => {
+                              const url = Object.values(r.data || {}).find((x: any) => typeof x === 'string' && x.startsWith('http')) as string;
+                              return (
+                                <div key={r.id} className="text-xs font-mono p-2 rounded bg-muted/50 flex items-start gap-2">
+                                  <div className="flex-1 min-w-0 break-all whitespace-pre-wrap">
+                                    <div>{url}</div>
+                                    {r.invalid_reason && <div className="text-destructive mt-1">{r.invalid_reason}</div>}
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 shrink-0"
+                                    onClick={async () => {
+                                      if (!confirm('Delete this invalid link?')) return;
+                                      const { error } = await supabase.from('bot_product_stock_items').delete().eq('id', r.id);
+                                      if (error) { toast.error(error.message); return; }
+                                      toast.success('Deleted');
+                                      void loadAll();
+                                    }}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })}
-                    {rows.length > 50 && <div className="text-xs text-muted-foreground">+{rows.length - 50} more (use Download)</div>}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
         </TabsContent>
