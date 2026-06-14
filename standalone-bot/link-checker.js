@@ -494,6 +494,7 @@ async function runJob(job) {
       }
 
       const ctxSnapshot = context;
+      const cookieSnapshot = cookieRow;
       const res = await checkUrl(ctxSnapshot, item.url);
       if (res.result === 'cookies_expired') {
         // Requeue this item so the next cookie retries it
@@ -502,6 +503,12 @@ async function runJob(job) {
           aborted = true;
           abortReason = 'cookies_expired';
           break;
+        }
+        // If another worker already rotated past this cookie, don't mark the
+        // newly-loaded cookie as expired — just retry on the current one.
+        if (!cookieSnapshot || !cookieRow || cookieSnapshot.id !== cookieRow.id) {
+          console.log('[checker] stale cookies_expired from previous cookie — ignoring, retrying with current cookie');
+          continue;
         }
         const ok = await rotateCookie('worker hit Google sign-in redirect');
         if (!ok) {
