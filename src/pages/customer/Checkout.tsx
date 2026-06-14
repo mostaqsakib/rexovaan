@@ -81,24 +81,49 @@ export default function Checkout() {
 
       // Send delivery email (best-effort, don't block UX)
       if (user?.email) {
-        const items = (data.details || []).map((d: any) =>
+        const items: string[] = (data.details || []).map((d: any) =>
           typeof d === 'string' ? d : Object.values(d).join(' | ')
         );
-        supabase.functions.invoke('send-transactional-email', {
-          body: {
-            templateName: 'order-delivery',
-            recipientEmail: user.email,
-            idempotencyKey: `order-delivery-${data.orderId}`,
-            templateData: {
-              customerName: customer?.first_name || undefined,
-              productName: product.name,
-              quantity: qty,
-              totalPrice: data.totalPrice,
-              orderId: data.orderId.substring(0, 4).toUpperCase(),
-              items,
+        const shortOrderId = data.orderId.substring(0, 4).toUpperCase();
+        const baseTemplateData: Record<string, unknown> = {
+          customerName: customer?.first_name || undefined,
+          productName: product.name,
+          quantity: qty,
+          totalPrice: data.totalPrice,
+          orderId: shortOrderId,
+        };
+
+        const sendEmail = (extra: Record<string, unknown>) => {
+          supabase.functions.invoke('send-transactional-email', {
+            body: {
+              templateName: 'order-delivery',
+              recipientEmail: user.email,
+              idempotencyKey: `order-delivery-${data.orderId}`,
+              templateData: { ...baseTemplateData, ...extra },
             },
-          },
-        }).catch((err) => console.warn('order email failed', err));
+          }).catch((err) => console.warn('order email failed', err));
+        };
+
+        if (qty > 5) {
+          // Numbered the same way the bot numbers them: "1. ...", "2. ..."
+          const txtContent = items.map((line, i) => `${i + 1}. ${line}`).join('\n');
+          const safeProduct = product.name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60);
+          const filename = `${safeProduct}-${shortOrderId}.txt`;
+          (async () => {
+            try {
+              const { data: up, error: upErr } = await supabase.functions.invoke('upload-order-delivery-file', {
+                body: { orderId: data.orderId, content: txtContent, filename },
+              });
+              if (upErr || !up?.url) throw new Error(upErr?.message || 'upload failed');
+              sendEmail({ items: [], downloadUrl: up.url, downloadFilename: up.filename || filename, itemCount: items.length });
+            } catch (err) {
+              console.warn('attachment upload failed, sending inline', err);
+              sendEmail({ items });
+            }
+          })();
+        } else {
+          sendEmail({ items });
+        }
       }
     } catch (e) {
       toast.error((e as Error).message);

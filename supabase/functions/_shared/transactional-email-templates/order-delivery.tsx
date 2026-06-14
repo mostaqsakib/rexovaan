@@ -1,7 +1,7 @@
 /// <reference types="npm:@types/react@18.3.1" />
 import * as React from 'npm:react@18.3.1'
 import {
-  Body, Container, Head, Heading, Html, Preview, Section, Text, Hr,
+  Body, Button, Container, Head, Heading, Html, Preview, Section, Text, Hr,
 } from 'npm:@react-email/components@0.0.22'
 import { EmailLogo } from './_logo.tsx'
 import type { TemplateEntry } from './registry.ts'
@@ -15,6 +15,9 @@ interface OrderDeliveryProps {
   totalPrice?: number
   orderId?: string
   items?: string[]
+  downloadUrl?: string
+  downloadFilename?: string
+  itemCount?: number
 }
 
 const OrderDeliveryEmail = ({
@@ -24,6 +27,9 @@ const OrderDeliveryEmail = ({
   totalPrice,
   orderId,
   items = [],
+  downloadUrl,
+  downloadFilename,
+  itemCount,
 }: OrderDeliveryProps) => (
   <Html lang="en" dir="ltr">
     <Head />
@@ -48,7 +54,23 @@ const OrderDeliveryEmail = ({
           )}
         </Section>
 
-        {items.length > 0 && (
+        {downloadUrl ? (
+          <>
+            <Heading as="h2" style={h2}>Your items</Heading>
+            <Section style={itemsBox}>
+              <Text style={text}>
+                {itemCount ? `Your ${itemCount} items are ready as a text file.` : 'Your items are ready as a text file.'}
+                {' '}Click the button below to download.
+              </Text>
+              <Button href={downloadUrl} style={downloadBtn}>
+                Download {downloadFilename || 'items.txt'}
+              </Button>
+              <Text style={footer}>
+                Or copy this link: <a href={downloadUrl}>{downloadUrl}</a>
+              </Text>
+            </Section>
+          </>
+        ) : items.length > 0 && (
           <>
             <Heading as="h2" style={h2}>Your items</Heading>
             <Section style={itemsBox}>
@@ -94,3 +116,4 @@ const itemsBox = { background: '#f5f5fa', border: '1px solid #e0e0ec', borderRad
 const itemLine = { fontSize: '13px', color: '#1a1a2e', margin: '2px 0', wordBreak: 'break-all' as const }
 const hr = { borderColor: '#eee', margin: '24px 0' }
 const footer = { fontSize: '12px', color: '#888', margin: '12px 0 0' }
+const downloadBtn = { background: '#1a1a2e', color: '#ffffff', padding: '12px 20px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: 'bold' as const, display: 'inline-block', margin: '8px 0' }
