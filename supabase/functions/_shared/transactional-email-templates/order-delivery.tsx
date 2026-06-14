@@ -15,6 +15,9 @@ interface OrderDeliveryProps {
   totalPrice?: number
   orderId?: string
   items?: string[]
+  downloadUrl?: string
+  downloadFilename?: string
+  itemCount?: number
 }
 
 const OrderDeliveryEmail = ({
@@ -24,6 +27,9 @@ const OrderDeliveryEmail = ({
   totalPrice,
   orderId,
   items = [],
+  downloadUrl,
+  downloadFilename,
+  itemCount,
 }: OrderDeliveryProps) => (
   <Html lang="en" dir="ltr">
     <Head />
