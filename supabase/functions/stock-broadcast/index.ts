@@ -194,7 +194,7 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
     const bulkIcon = bulkEmoji?.custom_emoji_id
       ? `<tg-emoji emoji-id="${bulkEmoji.custom_emoji_id}">🛍</tg-emoji>`
       : "🛍";
-    bulkPricingText = `${bulkIcon} <b>BULK DISCOUNT:</b>\n\n${tierLines}`;
+    bulkPricingText = `\n\n${bulkIcon} <b>BULK DISCOUNT:</b>\n\n${tierLines}`;
   }
 
   const { data: settings } = await supabase.from("bot_settings").select("value").eq("key", "msg_stock_alert").maybeSingle();
