@@ -186,7 +186,15 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
     const tierLines = meaningfulTiers
       .map((t) => `• ${t.min_quantity}+ pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`)
       .join("\n");
-    bulkPricingText = `<b>BULK DISCOUNT:</b>\n\n${tierLines}`;
+    const { data: bulkEmoji } = await supabase
+      .from("bot_button_emojis")
+      .select("custom_emoji_id")
+      .eq("button_key", "bulk_pricing")
+      .maybeSingle();
+    const bulkIcon = bulkEmoji?.custom_emoji_id
+      ? `<tg-emoji emoji-id="${bulkEmoji.custom_emoji_id}">🛍</tg-emoji>`
+      : "🛍";
+    bulkPricingText = `${bulkIcon} <b>BULK DISCOUNT:</b>\n\n${tierLines}`;
   }
 
   const { data: settings } = await supabase.from("bot_settings").select("value").eq("key", "msg_stock_alert").maybeSingle();
