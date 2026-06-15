@@ -3578,9 +3578,12 @@ async function showQuantitySelection(chatId, productId, emojiMap, editMessageId)
   if (!product) return;
   // Only use special as base price if MOQ is 1 (always-applicable). Otherwise show tier/regular.
   const special = await getCustomerSpecialPrice(custRow?.id, productId, 1);
-  const basePrice = special !== null
-    ? special
-    : (tiers && tiers.length > 0 ? Number(tiers[0].price) : Number(product.price));
+  const flash = await getActiveFlashSale(productId);
+  const tierOrRegular = tiers && tiers.length > 0 ? Number(tiers[0].price) : Number(product.price);
+  const candidates = [tierOrRegular];
+  if (special !== null) candidates.push(Number(special));
+  if (flash) candidates.push(Number(flash.sale_price));
+  const basePrice = Math.min(...candidates);
 
   const productEmoji = product.custom_emoji_id
     ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji>`
