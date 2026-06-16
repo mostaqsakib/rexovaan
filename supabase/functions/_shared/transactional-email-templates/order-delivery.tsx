@@ -75,7 +75,7 @@ const OrderDeliveryEmail = ({
             <Heading as="h2" style={h2}>Your items</Heading>
             <Section style={itemsBox}>
               {items.map((line, i) => (
-                <Text key={i} style={itemLine}>{line}</Text>
+                <Text key={i} style={itemLine}>{`${i + 1}. ${line}`}</Text>
               ))}
             </Section>
           </>
