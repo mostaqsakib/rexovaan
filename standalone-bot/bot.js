@@ -5138,6 +5138,53 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+
+  // ── Channel Join settings: collect inputs ──
+  if (customer.pending_action === "admin_cj_msg" && isAdmin(chatId)) {
+    const htmlText = prepareTelegramHtml(entitiesToHtml(rawText, message.entities));
+    if (!htmlText.trim()) { await sendMessage(chatId, "❌ Empty message. Send the join message text or /cancel."); return; }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "channel_join_message").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value: htmlText, updated_at: new Date().toISOString() }).eq("key", "channel_join_message");
+    else await supabase.from("bot_settings").insert({ key: "channel_join_message", value: htmlText });
+    cachedChannelJoin.message = htmlText;
+    channelJoinLastFetch = Date.now();
+    await sendMessage(chatId, `✅ <b>Join message updated!</b>`, { inline_keyboard: [[{ text: "📢 Channel Join", callback_data: "adm_channel_join" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    try {
+      await sendMessage(chatId, `📝 <b>Preview:</b>\n\n${htmlText}`);
+    } catch (e) { console.error("CJ preview failed:", e.message); }
+    return;
+  }
+
+  if ((customer.pending_action === "admin_cj_join_emoji" || customer.pending_action === "admin_cj_done_emoji") && isAdmin(chatId)) {
+    const key = customer.pending_action === "admin_cj_join_emoji" ? "channel_join_button_emoji" : "channel_join_done_emoji";
+    const label = customer.pending_action === "admin_cj_join_emoji" ? "Join button emoji" : "Done button emoji";
+    const htmlText = prepareTelegramHtml(entitiesToHtml(rawText, message.entities)).trim();
+    if (!htmlText) { await sendMessage(chatId, "❌ Empty input. Send an emoji or /cancel."); return; }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", key).maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value: htmlText, updated_at: new Date().toISOString() }).eq("key", key);
+    else await supabase.from("bot_settings").insert({ key, value: htmlText });
+    if (key === "channel_join_button_emoji") cachedChannelJoin.buttonEmoji = htmlText;
+    else cachedChannelJoin.doneEmoji = htmlText;
+    channelJoinLastFetch = Date.now();
+    await sendMessage(chatId, `✅ <b>${label}</b> updated to: ${htmlText}`, { inline_keyboard: [[{ text: "📢 Channel Join", callback_data: "adm_channel_join" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+  }
+
+  if (customer.pending_action === "admin_cj_username" && isAdmin(chatId)) {
+    const value = text.trim();
+    if (!value) { await sendMessage(chatId, "❌ Empty input. Send the channel username/ID or /cancel."); return; }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "channel_join_username").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", "channel_join_username");
+    else await supabase.from("bot_settings").insert({ key: "channel_join_username", value });
+    cachedChannelJoin.username = value;
+    channelJoinLastFetch = Date.now();
+    await sendMessage(chatId, `✅ Channel updated to: <code>${escapeHtml(value)}</code>\n\n⚠️ Remember: the bot must be an <b>admin</b> in the channel.`, { inline_keyboard: [[{ text: "📢 Channel Join", callback_data: "adm_channel_join" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+  }
+
   // Broadcast
   // ── Flash Sale: collect sale price ──
   if (customer.pending_action?.startsWith("fs_price_") && isAdmin(chatId)) {
