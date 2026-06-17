@@ -6,7 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, Save, MessageSquare, Info, Gift, DollarSign, Image as ImageIcon, Upload, X } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Loader2, Save, MessageSquare, Info, Gift, DollarSign, Image as ImageIcon, Upload, X, Megaphone } from 'lucide-react';
 
 const BotSettingsTab = () => {
   const [logoUrl, setLogoUrl] = useState('');
