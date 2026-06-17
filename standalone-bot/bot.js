@@ -5489,6 +5489,26 @@ async function handleCallback(callbackQuery, emojiMap) {
   }
 
 
+  // ── Channel join verification flow ──
+  if (data === "chk_join") {
+    const s = await fetchChannelJoinSettings(true);
+    if (!s.enabled || !s.username) return;
+    if (isAdmin(chatId)) return;
+    if (await isUserVerifiedForChannel(chatId)) return;
+    const channelId = channelApiId(s.username);
+    const ok = channelId ? await checkUserIsChannelMember(chatId, channelId) : false;
+    if (ok) {
+      await markUserVerifiedForChannel(chatId);
+      await sendMessage(chatId, "✅ <b>Verified!</b> You can now use the bot. Send /start to begin.");
+    } else {
+      await sendMessage(chatId, `❌ <b>You haven't joined the channel yet.</b>\n\nPlease join first, then tap "Done ${s.doneEmoji}" again.`, buildJoinPromptKeyboard(s));
+    }
+    return;
+  }
+
+  // Channel join verification guard (block all other callbacks until verified)
+  if (!(await ensureChannelVerified(chatId))) return;
+
   // ── Admin menu callbacks ──
 
   if (data === "noop") return;
