@@ -175,18 +175,18 @@ async function checkUserIsChannelMember(chatId, channelId) {
 
 function buildJoinPromptKeyboard(settings) {
   const link = channelLinkFromUsername(settings.username);
-  // Use raw emoji characters directly — Telegram renders premium custom emojis
-  // in inline keyboard button text natively (no HTML, no tg-emoji tag needed).
-  // Safely unwrap any legacy <tg-emoji ...>CHAR</tg-emoji> values still stored.
-  const unwrapTgEmoji = (v) => String(v || "").replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/gi, "$1");
-  const btnEmoji = unwrapTgEmoji(settings.buttonEmoji);
-  const doneEmoji = unwrapTgEmoji(settings.doneEmoji);
+  // Store/use raw emoji string exactly like product names — plain concatenation,
+  // no HTML parsing, no entity extraction. Telegram clients render premium
+  // custom emojis from the underlying unicode fallback automatically.
+  const btnEmoji = String(settings.buttonEmoji || "");
+  const doneEmoji = String(settings.doneEmoji || "");
   const row1 = link
     ? [{ text: `${btnEmoji} Join Channel`, url: link }]
     : [{ text: `${btnEmoji} Join Channel`, callback_data: "noop" }];
   const row2 = [{ text: `Done ${doneEmoji}`, callback_data: "chk_join" }];
   return { inline_keyboard: [row1, row2] };
 }
+
 
 // Returns true if user is allowed to continue, false if blocked by join prompt.
 async function ensureChannelVerified(chatId) {
