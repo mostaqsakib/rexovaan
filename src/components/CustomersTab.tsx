@@ -161,16 +161,22 @@ const CustomersTab = () => {
     return `#${c.chat_id}`;
   };
 
-  const handleEditBalance = async () => {
-    if (!editCustomer || newBalance === '' || !note.trim()) return;
+  const handleEditBalance = async (skipNotify = false) => {
+    if (!editCustomer || newBalance === '') return;
+    if (!skipNotify && !note.trim()) return;
     setSaving(true);
     try {
       const { data, error } = await supabase.functions.invoke('admin-edit-balance', {
-        body: { customer_id: editCustomer.id, new_balance: Number(newBalance), note: note.trim() },
+        body: {
+          customer_id: editCustomer.id,
+          new_balance: Number(newBalance),
+          note: skipNotify ? '' : note.trim(),
+          skip_notify: skipNotify,
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Balance updated: ${Number(data.old_balance).toFixed(2)} → ${Number(data.new_balance).toFixed(2)} USDT`);
+      toast.success(`Balance updated: ${Number(data.old_balance).toFixed(2)} → ${Number(data.new_balance).toFixed(2)} USDT${skipNotify ? ' (silent)' : ''}`);
       setEditCustomer(null);
       setNewBalance('');
       setNote('');
@@ -181,6 +187,7 @@ const CustomersTab = () => {
       setSaving(false);
     }
   };
+
 
   const handleDeposit = async () => {
     if (!depositCustomer || !depositAmount || Number(depositAmount) <= 0 || !depositNote.trim()) return;
@@ -412,22 +419,34 @@ const CustomersTab = () => {
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium">Note (required) <span className="text-destructive">*</span></label>
+              <label className="text-sm font-medium">Note (optional)</label>
               <Textarea
-                placeholder="e.g. Refund for order #123, Manual deposit, Bonus credit..."
+                placeholder="e.g. Refund for order #123, Manual deposit, Bonus credit... Leave empty to update silently."
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                If left empty and you click "Skip & Save", no notification will be sent to the user.
+              </p>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setEditCustomer(null)}>Cancel</Button>
-            <Button onClick={handleEditBalance} disabled={saving || newBalance === '' || !note.trim()}>
+            <Button
+              variant="secondary"
+              onClick={() => handleEditBalance(true)}
+              disabled={saving || newBalance === ''}
+            >
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Skip & Save (Silent)
+            </Button>
+            <Button onClick={() => handleEditBalance(false)} disabled={saving || newBalance === '' || !note.trim()}>
               {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Save & Notify
             </Button>
           </DialogFooter>
+
         </DialogContent>
       </Dialog>
 

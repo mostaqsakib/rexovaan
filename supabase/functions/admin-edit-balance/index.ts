@@ -10,13 +10,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { customer_id, new_balance, note } = await req.json();
+    const { customer_id, new_balance, note, skip_notify } = await req.json();
 
     if (!customer_id || new_balance === undefined || new_balance === null) {
       return new Response(JSON.stringify({ error: "customer_id and new_balance required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (!note || !note.trim()) {
-      return new Response(JSON.stringify({ error: "Note is required for balance edits" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const hasNote = !!(note && String(note).trim());
+    const silent = skip_notify === true || !hasNote;
+    if (!silent && !hasNote) {
+      return new Response(JSON.stringify({ error: "Note is required for balance edits (or set skip_notify=true)" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     // Negative balances are allowed (represent a due/amount owed by the customer).
 
