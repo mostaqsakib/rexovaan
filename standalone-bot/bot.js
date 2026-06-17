@@ -5184,10 +5184,19 @@ async function handleMessage(message, emojiMap) {
   if ((customer.pending_action === "admin_cj_join_emoji" || customer.pending_action === "admin_cj_done_emoji") && isAdmin(chatId)) {
     const key = customer.pending_action === "admin_cj_join_emoji" ? "channel_join_button_emoji" : "channel_join_done_emoji";
     const label = customer.pending_action === "admin_cj_join_emoji" ? "Join button emoji" : "Done button emoji";
-    // Store the raw text exactly as sent — same flow as product names.
-    // No entity extraction, no HTML wrapping. Telegram renders premium emoji
-    // fallback unicode in button text natively.
-    const value = String(rawText || "").trim();
+
+    // Telegram entity offsets/lengths are in UTF-16 code units. JS strings are
+    // UTF-16 internally, so slicing rawText by [offset, offset+length] correctly
+    // extracts the raw character(s), including surrogate pairs used by premium
+    // custom emojis. Store the raw character exactly as-is — no stripping.
+    let value = "";
+    const entities = Array.isArray(message.entities) ? message.entities : [];
+    const customEmojiEntity = entities.find((e) => e.type === "custom_emoji");
+    if (customEmojiEntity && typeof customEmojiEntity.offset === "number" && typeof customEmojiEntity.length === "number") {
+      value = rawText.substring(customEmojiEntity.offset, customEmojiEntity.offset + customEmojiEntity.length);
+    } else {
+      value = String(rawText || "").trim();
+    }
 
     if (!value) { await sendMessage(chatId, "❌ Empty input. Send an emoji or /cancel."); return; }
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
