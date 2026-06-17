@@ -6,7 +6,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, Save, MessageSquare, Info, Gift, DollarSign, Image as ImageIcon, Upload, X } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Loader2, Save, MessageSquare, Info, Gift, DollarSign, Image as ImageIcon, Upload, X, Megaphone } from 'lucide-react';
 
 const BotSettingsTab = () => {
   const [logoUrl, setLogoUrl] = useState('');
@@ -28,6 +29,19 @@ const BotSettingsTab = () => {
   const [savingRef, setSavingRef] = useState(false);
   const [savingBdt, setSavingBdt] = useState(false);
 
+  // Channel join verification settings
+  const [cjEnabled, setCjEnabled] = useState(false);
+  const [origCjEnabled, setOrigCjEnabled] = useState(false);
+  const [cjUsername, setCjUsername] = useState('');
+  const [origCjUsername, setOrigCjUsername] = useState('');
+  const [cjMessage, setCjMessage] = useState('');
+  const [origCjMessage, setOrigCjMessage] = useState('');
+  const [cjJoinEmoji, setCjJoinEmoji] = useState('📢');
+  const [origCjJoinEmoji, setOrigCjJoinEmoji] = useState('📢');
+  const [cjDoneEmoji, setCjDoneEmoji] = useState('✅');
+  const [origCjDoneEmoji, setOrigCjDoneEmoji] = useState('✅');
+  const [savingCj, setSavingCj] = useState(false);
+
   useEffect(() => {
     fetchSettings();
   }, []);
@@ -36,7 +50,7 @@ const BotSettingsTab = () => {
     const { data, error } = await supabase
       .from('bot_settings')
       .select('*')
-      .in('key', ['welcome_message', 'referral_commission_percent', 'referral_first_bonus', 'dollar_rate_bdt', 'site_logo_url', 'site_shop_name']);
+      .in('key', ['welcome_message', 'referral_commission_percent', 'referral_first_bonus', 'dollar_rate_bdt', 'site_logo_url', 'site_shop_name', 'channel_join_enabled', 'channel_join_username', 'channel_join_message', 'channel_join_button_emoji', 'channel_join_done_emoji']);
     if (error) {
       toast.error('Failed to load settings');
       setLoading(false);
@@ -49,6 +63,11 @@ const BotSettingsTab = () => {
       if (row.key === 'dollar_rate_bdt') { setBdtRate(row.value); setOrigBdtRate(row.value); }
       if (row.key === 'site_logo_url') { setLogoUrl(row.value); setOrigLogoUrl(row.value); }
       if (row.key === 'site_shop_name') { setShopName(row.value); setOrigShopName(row.value); }
+      if (row.key === 'channel_join_enabled') { const v = String(row.value).toLowerCase() === 'true'; setCjEnabled(v); setOrigCjEnabled(v); }
+      if (row.key === 'channel_join_username') { setCjUsername(row.value || ''); setOrigCjUsername(row.value || ''); }
+      if (row.key === 'channel_join_message') { setCjMessage(row.value || ''); setOrigCjMessage(row.value || ''); }
+      if (row.key === 'channel_join_button_emoji') { setCjJoinEmoji(row.value || '📢'); setOrigCjJoinEmoji(row.value || '📢'); }
+      if (row.key === 'channel_join_done_emoji') { setCjDoneEmoji(row.value || '✅'); setOrigCjDoneEmoji(row.value || '✅'); }
     }
     setLoading(false);
   };
@@ -91,6 +110,7 @@ const BotSettingsTab = () => {
   const hasRefChanges = refCommission !== origRefCommission || refBonus !== origRefBonus;
   const hasBdtChanges = bdtRate !== origBdtRate;
   const hasBrandChanges = logoUrl !== origLogoUrl || shopName !== origShopName;
+  const hasCjChanges = cjEnabled !== origCjEnabled || cjUsername !== origCjUsername || cjMessage !== origCjMessage || cjJoinEmoji !== origCjJoinEmoji || cjDoneEmoji !== origCjDoneEmoji;
 
   const handleLogoUpload = async (file: File) => {
     setUploadingLogo(true);
@@ -125,6 +145,27 @@ const BotSettingsTab = () => {
     if (error) toast.error('Failed to save BDT rate');
     else { toast.success('Dollar rate updated!'); setOrigBdtRate(bdtRate); }
     setSavingBdt(false);
+  };
+
+  const handleSaveCj = async () => {
+    setSavingCj(true);
+    const results = await Promise.all([
+      upsertSetting('channel_join_enabled', cjEnabled ? 'true' : 'false'),
+      upsertSetting('channel_join_username', cjUsername.trim()),
+      upsertSetting('channel_join_message', cjMessage),
+      upsertSetting('channel_join_button_emoji', cjJoinEmoji || '📢'),
+      upsertSetting('channel_join_done_emoji', cjDoneEmoji || '✅'),
+    ]);
+    if (results.some(r => r.error)) toast.error('Failed to save channel join settings');
+    else {
+      toast.success('Channel join settings updated!');
+      setOrigCjEnabled(cjEnabled);
+      setOrigCjUsername(cjUsername);
+      setOrigCjMessage(cjMessage);
+      setOrigCjJoinEmoji(cjJoinEmoji);
+      setOrigCjDoneEmoji(cjDoneEmoji);
+    }
+    setSavingCj(false);
   };
 
   if (loading) {
@@ -301,6 +342,59 @@ const BotSettingsTab = () => {
             <Button onClick={handleSaveBdt} disabled={savingBdt || !hasBdtChanges} size="sm" className="gap-2">
               {savingBdt ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save Rate
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Megaphone className="h-5 w-5 text-primary" />
+            Channel Join Requirement
+          </CardTitle>
+          <CardDescription>
+            Require users to join your Telegram channel before they can use the bot. Verification uses Telegram's getChatMember — your bot must be an admin of the channel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm">Enable channel join requirement</Label>
+              <p className="text-xs text-muted-foreground">When on, every user must verify channel membership before using the bot.</p>
+            </div>
+            <Switch checked={cjEnabled} onCheckedChange={setCjEnabled} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cj-username">Channel username or ID</Label>
+            <Input id="cj-username" value={cjUsername} onChange={(e) => setCjUsername(e.target.value)} placeholder="@mychannel or -1001234567890" />
+            <p className="text-xs text-muted-foreground">Public channels: <code className="bg-muted px-1 rounded">@channelname</code>. Private: numeric ID starting with <code className="bg-muted px-1 rounded">-100</code>.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cj-message">Join message template</Label>
+            <Textarea
+              id="cj-message"
+              value={cjMessage}
+              onChange={(e) => setCjMessage(e.target.value)}
+              placeholder="🔔 Please join our channel to continue..."
+              className="min-h-[120px] font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">HTML formatting supported (e.g. <code className="bg-muted px-1 rounded">&lt;b&gt;</code>, <code className="bg-muted px-1 rounded">&lt;i&gt;</code>).</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="cj-join-emoji">Join button emoji</Label>
+              <Input id="cj-join-emoji" value={cjJoinEmoji} onChange={(e) => setCjJoinEmoji(e.target.value)} placeholder="📢" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cj-done-emoji">Done button emoji</Label>
+              <Input id="cj-done-emoji" value={cjDoneEmoji} onChange={(e) => setCjDoneEmoji(e.target.value)} placeholder="✅" />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveCj} disabled={savingCj || !hasCjChanges} size="sm" className="gap-2">
+              {savingCj ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Channel Settings
             </Button>
           </div>
         </CardContent>

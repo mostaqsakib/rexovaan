@@ -86,6 +86,112 @@ const PLACEHOLDER_KEYS = new Set([
 let cachedPageMsgs = {};
 let pageMsgsLastFetch = 0;
 
+// ── Channel Join Verification cache ──
+let cachedChannelJoin = {
+  enabled: false,
+  username: "",
+  message: '🔔 <b>Please join our channel to continue using this bot.</b>\n\nAfter joining, tap "Done ✅" below.',
+  buttonEmoji: "📢",
+  doneEmoji: "✅",
+};
+let channelJoinLastFetch = 0;
+
+async function fetchChannelJoinSettings(force = false) {
+  if (!force && Date.now() - channelJoinLastFetch < 60000) return cachedChannelJoin;
+  try {
+    const { data } = await supabase
+      .from("bot_settings")
+      .select("key, value")
+      .in("key", [
+        "channel_join_enabled",
+        "channel_join_username",
+        "channel_join_message",
+        "channel_join_button_emoji",
+        "channel_join_done_emoji",
+      ]);
+    if (data) {
+      for (const row of data) {
+        const v = row.value ?? "";
+        if (row.key === "channel_join_enabled") cachedChannelJoin.enabled = String(v).toLowerCase() === "true";
+        else if (row.key === "channel_join_username") cachedChannelJoin.username = String(v).trim();
+        else if (row.key === "channel_join_message" && v) cachedChannelJoin.message = String(v);
+        else if (row.key === "channel_join_button_emoji" && v) cachedChannelJoin.buttonEmoji = String(v);
+        else if (row.key === "channel_join_done_emoji" && v) cachedChannelJoin.doneEmoji = String(v);
+      }
+    }
+    channelJoinLastFetch = Date.now();
+  } catch (e) { console.error("fetchChannelJoinSettings failed:", e); }
+  return cachedChannelJoin;
+}
+
+function channelLinkFromUsername(u) {
+  const s = String(u || "").trim();
+  if (!s) return null;
+  if (s.startsWith("https://") || s.startsWith("http://")) return s;
+  if (s.startsWith("@")) return `https://t.me/${s.slice(1)}`;
+  if (s.startsWith("-100")) return null; // numeric id has no public link
+  return `https://t.me/${s}`;
+}
+
+function channelApiId(u) {
+  const s = String(u || "").trim();
+  if (!s) return null;
+  if (/^-?\d+$/.test(s)) return s; // numeric id
+  if (s.startsWith("@")) return s;
+  if (s.startsWith("https://t.me/") || s.startsWith("http://t.me/")) {
+    const handle = s.replace(/^https?:\/\/t\.me\//, "").split(/[/?#]/)[0];
+    return handle ? `@${handle}` : null;
+  }
+  return `@${s}`;
+}
+
+async function isUserVerifiedForChannel(chatId) {
+  try {
+    const { data } = await supabase
+      .from("user_channel_verification")
+      .select("user_id")
+      .eq("user_id", chatId)
+      .maybeSingle();
+    return !!data;
+  } catch (e) { console.error("isUserVerifiedForChannel:", e); return false; }
+}
+
+async function markUserVerifiedForChannel(chatId) {
+  try {
+    await supabase
+      .from("user_channel_verification")
+      .upsert({ user_id: chatId, verified_at: new Date().toISOString() }, { onConflict: "user_id" });
+  } catch (e) { console.error("markUserVerifiedForChannel:", e); }
+}
+
+async function checkUserIsChannelMember(chatId, channelId) {
+  try {
+    const res = await tgFetch("getChatMember", { chat_id: channelId, user_id: chatId });
+    if (!res?.ok) return false;
+    const status = res.result?.status;
+    return status === "member" || status === "administrator" || status === "creator";
+  } catch (e) { console.error("getChatMember failed:", e); return false; }
+}
+
+function buildJoinPromptKeyboard(settings) {
+  const link = channelLinkFromUsername(settings.username);
+  const row1 = link
+    ? [{ text: `${settings.buttonEmoji} Join Channel`, url: link }]
+    : [{ text: `${settings.buttonEmoji} Join Channel`, callback_data: "noop" }];
+  const row2 = [{ text: `Done ${settings.doneEmoji}`, callback_data: "chk_join" }];
+  return { inline_keyboard: [row1, row2] };
+}
+
+// Returns true if user is allowed to continue, false if blocked by join prompt.
+async function ensureChannelVerified(chatId) {
+  const s = await fetchChannelJoinSettings();
+  if (!s.enabled || !s.username) return true;
+  if (isAdmin(chatId)) return true;
+  if (await isUserVerifiedForChannel(chatId)) return true;
+  await sendMessage(chatId, s.message, buildJoinPromptKeyboard(s));
+  return false;
+}
+
 function normalizePlaceholderMarkup(html) {
   const source = String(html || "");
   return source.replace(/\{[^{}]*\}/g, (match) => {
@@ -4505,6 +4611,9 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  // Channel join verification guard
+  if (!(await ensureChannelVerified(chatId))) return;
+
   // ── Customer input collection (purchase pre-checkout) ──
   if (customer.pending_action?.startsWith("collectinput_") && text && !text.startsWith("/")) {
     const parts = customer.pending_action.replace("collectinput_", "").split("_");
@@ -5379,6 +5488,26 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
+
+  // ── Channel join verification flow ──
+  if (data === "chk_join") {
+    const s = await fetchChannelJoinSettings(true);
+    if (!s.enabled || !s.username) return;
+    if (isAdmin(chatId)) return;
+    if (await isUserVerifiedForChannel(chatId)) return;
+    const channelId = channelApiId(s.username);
+    const ok = channelId ? await checkUserIsChannelMember(chatId, channelId) : false;
+    if (ok) {
+      await markUserVerifiedForChannel(chatId);
+      await sendMessage(chatId, "✅ <b>Verified!</b> You can now use the bot. Send /start to begin.");
+    } else {
+      await sendMessage(chatId, `❌ <b>You haven't joined the channel yet.</b>\n\nPlease join first, then tap "Done ${s.doneEmoji}" again.`, buildJoinPromptKeyboard(s));
+    }
+    return;
+  }
+
+  // Channel join verification guard (block all other callbacks until verified)
+  if (!(await ensureChannelVerified(chatId))) return;
 
   // ── Admin menu callbacks ──
 
