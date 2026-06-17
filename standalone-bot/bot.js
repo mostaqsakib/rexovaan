@@ -5573,8 +5573,14 @@ async function handleCallback(callbackQuery, emojiMap) {
     if (isAdmin(chatId)) return;
     if (await isUserVerifiedForChannel(chatId)) return;
     const channelId = channelApiId(s.username);
-    const ok = channelId ? await checkUserIsChannelMember(chatId, channelId) : false;
-    if (ok) {
+    const status = channelId ? await checkChannelMembershipStatus(chatId, channelId) : "error";
+    if (status === "member") {
+      await markUserVerifiedForChannel(chatId);
+      await sendMessage(chatId, "✅ <b>Verified!</b> You can now use the bot. Send /start to begin.");
+    } else if (status === "error") {
+      // Graceful fallback: bot may not be admin in the channel, or channel ID
+      // is invalid. Trust the user and let them through to avoid a hard loop.
+      console.warn(`[channel-join] Verification API failed for chat ${chatId}, channel ${channelId}. Granting access as fallback.`);
       await markUserVerifiedForChannel(chatId);
       await sendMessage(chatId, "✅ <b>Verified!</b> You can now use the bot. Send /start to begin.");
     } else {
