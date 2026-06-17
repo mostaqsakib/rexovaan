@@ -110,6 +110,7 @@ const BotSettingsTab = () => {
   const hasRefChanges = refCommission !== origRefCommission || refBonus !== origRefBonus;
   const hasBdtChanges = bdtRate !== origBdtRate;
   const hasBrandChanges = logoUrl !== origLogoUrl || shopName !== origShopName;
+  const hasCjChanges = cjEnabled !== origCjEnabled || cjUsername !== origCjUsername || cjMessage !== origCjMessage || cjJoinEmoji !== origCjJoinEmoji || cjDoneEmoji !== origCjDoneEmoji;
 
   const handleLogoUpload = async (file: File) => {
     setUploadingLogo(true);
