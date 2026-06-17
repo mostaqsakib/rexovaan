@@ -346,6 +346,59 @@ const BotSettingsTab = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Megaphone className="h-5 w-5 text-primary" />
+            Channel Join Requirement
+          </CardTitle>
+          <CardDescription>
+            Require users to join your Telegram channel before they can use the bot. Verification uses Telegram's getChatMember — your bot must be an admin of the channel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm">Enable channel join requirement</Label>
+              <p className="text-xs text-muted-foreground">When on, every user must verify channel membership before using the bot.</p>
+            </div>
+            <Switch checked={cjEnabled} onCheckedChange={setCjEnabled} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cj-username">Channel username or ID</Label>
+            <Input id="cj-username" value={cjUsername} onChange={(e) => setCjUsername(e.target.value)} placeholder="@mychannel or -1001234567890" />
+            <p className="text-xs text-muted-foreground">Public channels: <code className="bg-muted px-1 rounded">@channelname</code>. Private: numeric ID starting with <code className="bg-muted px-1 rounded">-100</code>.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cj-message">Join message template</Label>
+            <Textarea
+              id="cj-message"
+              value={cjMessage}
+              onChange={(e) => setCjMessage(e.target.value)}
+              placeholder="🔔 Please join our channel to continue..."
+              className="min-h-[120px] font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">HTML formatting supported (e.g. <code className="bg-muted px-1 rounded">&lt;b&gt;</code>, <code className="bg-muted px-1 rounded">&lt;i&gt;</code>).</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="cj-join-emoji">Join button emoji</Label>
+              <Input id="cj-join-emoji" value={cjJoinEmoji} onChange={(e) => setCjJoinEmoji(e.target.value)} placeholder="📢" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cj-done-emoji">Done button emoji</Label>
+              <Input id="cj-done-emoji" value={cjDoneEmoji} onChange={(e) => setCjDoneEmoji(e.target.value)} placeholder="✅" />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveCj} disabled={savingCj || !hasCjChanges} size="sm" className="gap-2">
+              {savingCj ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Channel Settings
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
