@@ -1474,6 +1474,21 @@ export type Database = {
         }
         Relationships: []
       }
+      user_channel_verification: {
+        Row: {
+          user_id: number
+          verified_at: string
+        }
+        Insert: {
+          user_id: number
+          verified_at?: string
+        }
+        Update: {
+          user_id?: number
+          verified_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
