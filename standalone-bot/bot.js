@@ -93,6 +93,8 @@ let cachedChannelJoin = {
   message: '🔔 <b>Please join our channel to continue using this bot.</b>\n\nAfter joining, tap "Done ✅" below.',
   buttonEmoji: "📢",
   doneEmoji: "✅",
+  buttonEmojiId: "",
+  doneEmojiId: "",
 };
 let channelJoinLastFetch = 0;
 
@@ -108,8 +110,13 @@ async function fetchChannelJoinSettings(force = false) {
         "channel_join_message",
         "channel_join_button_emoji",
         "channel_join_done_emoji",
+        "channel_join_button_emoji_id",
+        "channel_join_done_emoji_id",
       ]);
     if (data) {
+      // Reset id fields so cleared settings actually clear in cache
+      cachedChannelJoin.buttonEmojiId = "";
+      cachedChannelJoin.doneEmojiId = "";
       for (const row of data) {
         const v = row.value ?? "";
         if (row.key === "channel_join_enabled") cachedChannelJoin.enabled = String(v).toLowerCase() === "true";
@@ -117,6 +124,8 @@ async function fetchChannelJoinSettings(force = false) {
         else if (row.key === "channel_join_message" && v) cachedChannelJoin.message = String(v);
         else if (row.key === "channel_join_button_emoji" && v) cachedChannelJoin.buttonEmoji = String(v);
         else if (row.key === "channel_join_done_emoji" && v) cachedChannelJoin.doneEmoji = String(v);
+        else if (row.key === "channel_join_button_emoji_id") cachedChannelJoin.buttonEmojiId = String(v || "").trim();
+        else if (row.key === "channel_join_done_emoji_id") cachedChannelJoin.doneEmojiId = String(v || "").trim();
       }
     }
     channelJoinLastFetch = Date.now();
@@ -187,16 +196,26 @@ async function checkUserIsChannelMember(chatId, channelId) {
 
 function buildJoinPromptKeyboard(settings) {
   const link = channelLinkFromUsername(settings.username);
-  // Store/use raw emoji string exactly like product names — plain concatenation,
-  // no HTML parsing, no entity extraction. Telegram clients render premium
-  // custom emojis from the underlying unicode fallback automatically.
+  // Mirror product list buttons: when a premium custom_emoji document_id is set,
+  // strip text glyphs and pass icon_custom_emoji_id so the button renders the
+  // premium emoji icon. Otherwise fall back to plain unicode in the label.
   const btnEmoji = String(settings.buttonEmoji || "");
   const doneEmoji = String(settings.doneEmoji || "");
-  const row1 = link
-    ? [{ text: `${btnEmoji} Join Channel`, url: link }]
-    : [{ text: `${btnEmoji} Join Channel`, callback_data: "noop" }];
-  const row2 = [{ text: `Done ${doneEmoji}`, callback_data: "chk_join" }];
-  return { inline_keyboard: [row1, row2] };
+  const btnEmojiId = String(settings.buttonEmojiId || "").trim();
+  const doneEmojiId = String(settings.doneEmojiId || "").trim();
+
+  const joinBase = btnEmojiId ? "Join Channel" : `${btnEmoji} Join Channel`;
+  const doneBase = doneEmojiId ? "Done" : `Done ${doneEmoji}`;
+
+  const joinBtn = link
+    ? { text: joinBase, url: link }
+    : { text: joinBase, callback_data: "noop" };
+  if (btnEmojiId) joinBtn.icon_custom_emoji_id = btnEmojiId;
+
+  const doneBtn = { text: doneBase, callback_data: "chk_join" };
+  if (doneEmojiId) doneBtn.icon_custom_emoji_id = doneEmojiId;
+
+  return { inline_keyboard: [[joinBtn], [doneBtn]] };
 }
 
 
@@ -5183,31 +5202,47 @@ async function handleMessage(message, emojiMap) {
   }
 
   if ((customer.pending_action === "admin_cj_join_emoji" || customer.pending_action === "admin_cj_done_emoji") && isAdmin(chatId)) {
-    const key = customer.pending_action === "admin_cj_join_emoji" ? "channel_join_button_emoji" : "channel_join_done_emoji";
-    const label = customer.pending_action === "admin_cj_join_emoji" ? "Join button emoji" : "Done button emoji";
+    const isJoin = customer.pending_action === "admin_cj_join_emoji";
+    const key = isJoin ? "channel_join_button_emoji" : "channel_join_done_emoji";
+    const idKey = isJoin ? "channel_join_button_emoji_id" : "channel_join_done_emoji_id";
+    const label = isJoin ? "Join button emoji" : "Done button emoji";
 
     // Telegram entity offsets/lengths are in UTF-16 code units. JS strings are
     // UTF-16 internally, so slicing rawText by [offset, offset+length] correctly
-    // extracts the raw character(s), including surrogate pairs used by premium
-    // custom emojis. Store the raw character exactly as-is — no stripping.
+    // extracts the raw fallback character(s), including surrogate pairs.
+    // If a custom_emoji entity is present, ALSO capture its document_id so we
+    // can render a premium emoji icon on the inline button (same approach as
+    // bot_products.custom_emoji_id + icon_custom_emoji_id on product buttons).
     let value = "";
+    let customEmojiId = "";
     const entities = Array.isArray(message.entities) ? message.entities : [];
     const customEmojiEntity = entities.find((e) => e.type === "custom_emoji");
     if (customEmojiEntity && typeof customEmojiEntity.offset === "number" && typeof customEmojiEntity.length === "number") {
       value = rawText.substring(customEmojiEntity.offset, customEmojiEntity.offset + customEmojiEntity.length);
+      customEmojiId = String(customEmojiEntity.custom_emoji_id || "");
     } else {
       value = String(rawText || "").trim();
     }
 
     if (!value) { await sendMessage(chatId, "❌ Empty input. Send an emoji or /cancel."); return; }
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    // Upsert the fallback unicode character
     const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", key).maybeSingle();
     if (existing) await supabase.from("bot_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", key);
     else await supabase.from("bot_settings").insert({ key, value });
-    if (key === "channel_join_button_emoji") cachedChannelJoin.buttonEmoji = value;
-    else cachedChannelJoin.doneEmoji = value;
+
+    // Upsert the premium document_id (empty string clears it if admin sent a plain emoji)
+    const { data: existingId } = await supabase.from("bot_settings").select("id").eq("key", idKey).maybeSingle();
+    if (existingId) await supabase.from("bot_settings").update({ value: customEmojiId, updated_at: new Date().toISOString() }).eq("key", idKey);
+    else await supabase.from("bot_settings").insert({ key: idKey, value: customEmojiId });
+
+    if (isJoin) { cachedChannelJoin.buttonEmoji = value; cachedChannelJoin.buttonEmojiId = customEmojiId; }
+    else { cachedChannelJoin.doneEmoji = value; cachedChannelJoin.doneEmojiId = customEmojiId; }
     channelJoinLastFetch = Date.now();
-    await sendMessage(chatId, `✅ <b>${label}</b> updated to: ${escapeHtml(value)}`, { inline_keyboard: [[{ text: "📢 Channel Join", callback_data: "adm_channel_join" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+
+    const idNote = customEmojiId ? `\n\n🌟 Premium emoji document_id captured: <code>${customEmojiId}</code>` : "";
+    await sendMessage(chatId, `✅ <b>${label}</b> updated to: ${escapeHtml(value)}${idNote}`, { inline_keyboard: [[{ text: "📢 Channel Join", callback_data: "adm_channel_join" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
     return;
   }
 
