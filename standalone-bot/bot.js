@@ -175,8 +175,10 @@ async function checkUserIsChannelMember(chatId, channelId) {
 
 function buildJoinPromptKeyboard(settings) {
   const link = channelLinkFromUsername(settings.username);
-  const btnEmoji = stripCustomEmoji(settings.buttonEmoji);
-  const doneEmoji = stripCustomEmoji(settings.doneEmoji);
+  // Use raw emoji characters directly — Telegram renders premium custom emojis
+  // in inline keyboard button text natively (no HTML, no tg-emoji tag needed).
+  const btnEmoji = String(settings.buttonEmoji || "");
+  const doneEmoji = String(settings.doneEmoji || "");
   const row1 = link
     ? [{ text: `${btnEmoji} Join Channel`, url: link }]
     : [{ text: `${btnEmoji} Join Channel`, callback_data: "noop" }];
