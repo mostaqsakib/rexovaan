@@ -167,7 +167,10 @@ async function markUserVerifiedForChannel(chatId) {
 async function checkUserIsChannelMember(chatId, channelId) {
   try {
     const res = await tgFetch("getChatMember", { chat_id: channelId, user_id: chatId });
-    if (!res?.ok) return false;
+    if (!res?.ok) {
+      console.error("getChatMember not ok:", JSON.stringify(res));
+      return false;
+    }
     const status = res.result?.status;
     return status === "member" || status === "administrator" || status === "creator";
   } catch (e) { console.error("getChatMember failed:", e); return false; }
@@ -194,6 +197,13 @@ async function ensureChannelVerified(chatId) {
   if (!s.enabled || !s.username) return true;
   if (isAdmin(chatId)) return true;
   if (await isUserVerifiedForChannel(chatId)) return true;
+  // Auto-verify if user is already a channel member (avoids loop when user
+  // joined the channel but never tapped Done).
+  const channelId = channelApiId(s.username);
+  if (channelId && (await checkUserIsChannelMember(chatId, channelId))) {
+    await markUserVerifiedForChannel(chatId);
+    return true;
+  }
   await sendMessage(chatId, s.message, buildJoinPromptKeyboard(s));
   return false;
 }
