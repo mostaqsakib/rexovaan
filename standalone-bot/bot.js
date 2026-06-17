@@ -164,16 +164,25 @@ async function markUserVerifiedForChannel(chatId) {
   } catch (e) { console.error("markUserVerifiedForChannel:", e); }
 }
 
-async function checkUserIsChannelMember(chatId, channelId) {
+// Returns: 'member' | 'not_member' | 'error'
+async function checkChannelMembershipStatus(chatId, channelId) {
   try {
     const res = await tgFetch("getChatMember", { chat_id: channelId, user_id: chatId });
     if (!res?.ok) {
-      console.error("getChatMember not ok:", JSON.stringify(res));
-      return false;
+      console.warn("[channel-join] getChatMember not ok:", JSON.stringify(res));
+      return "error";
     }
     const status = res.result?.status;
-    return status === "member" || status === "administrator" || status === "creator";
-  } catch (e) { console.error("getChatMember failed:", e); return false; }
+    if (status === "member" || status === "administrator" || status === "creator") return "member";
+    return "not_member";
+  } catch (e) {
+    console.warn("[channel-join] getChatMember threw:", e?.message || e);
+    return "error";
+  }
+}
+
+async function checkUserIsChannelMember(chatId, channelId) {
+  return (await checkChannelMembershipStatus(chatId, channelId)) === "member";
 }
 
 function buildJoinPromptKeyboard(settings) {
@@ -5564,8 +5573,14 @@ async function handleCallback(callbackQuery, emojiMap) {
     if (isAdmin(chatId)) return;
     if (await isUserVerifiedForChannel(chatId)) return;
     const channelId = channelApiId(s.username);
-    const ok = channelId ? await checkUserIsChannelMember(chatId, channelId) : false;
-    if (ok) {
+    const status = channelId ? await checkChannelMembershipStatus(chatId, channelId) : "error";
+    if (status === "member") {
+      await markUserVerifiedForChannel(chatId);
+      await sendMessage(chatId, "✅ <b>Verified!</b> You can now use the bot. Send /start to begin.");
+    } else if (status === "error") {
+      // Graceful fallback: bot may not be admin in the channel, or channel ID
+      // is invalid. Trust the user and let them through to avoid a hard loop.
+      console.warn(`[channel-join] Verification API failed for chat ${chatId}, channel ${channelId}. Granting access as fallback.`);
       await markUserVerifiedForChannel(chatId);
       await sendMessage(chatId, "✅ <b>Verified!</b> You can now use the bot. Send /start to begin.");
     } else {
