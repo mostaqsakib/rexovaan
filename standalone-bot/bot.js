@@ -4611,6 +4611,9 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  // Channel join verification guard
+  if (!(await ensureChannelVerified(chatId))) return;
+
   // ── Customer input collection (purchase pre-checkout) ──
   if (customer.pending_action?.startsWith("collectinput_") && text && !text.startsWith("/")) {
     const parts = customer.pending_action.replace("collectinput_", "").split("_");
