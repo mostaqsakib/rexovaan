@@ -175,10 +175,12 @@ async function checkUserIsChannelMember(chatId, channelId) {
 
 function buildJoinPromptKeyboard(settings) {
   const link = channelLinkFromUsername(settings.username);
+  const btnEmoji = stripCustomEmoji(settings.buttonEmoji);
+  const doneEmoji = stripCustomEmoji(settings.doneEmoji);
   const row1 = link
-    ? [{ text: `${settings.buttonEmoji} Join Channel`, url: link }]
-    : [{ text: `${settings.buttonEmoji} Join Channel`, callback_data: "noop" }];
-  const row2 = [{ text: `Done ${settings.doneEmoji}`, callback_data: "chk_join" }];
+    ? [{ text: `${btnEmoji} Join Channel`, url: link }]
+    : [{ text: `${btnEmoji} Join Channel`, callback_data: "noop" }];
+  const row2 = [{ text: `Done ${doneEmoji}`, callback_data: "chk_join" }];
   return { inline_keyboard: [row1, row2] };
 }
 
