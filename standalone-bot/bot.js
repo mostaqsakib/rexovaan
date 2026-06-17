@@ -164,16 +164,25 @@ async function markUserVerifiedForChannel(chatId) {
   } catch (e) { console.error("markUserVerifiedForChannel:", e); }
 }
 
-async function checkUserIsChannelMember(chatId, channelId) {
+// Returns: 'member' | 'not_member' | 'error'
+async function checkChannelMembershipStatus(chatId, channelId) {
   try {
     const res = await tgFetch("getChatMember", { chat_id: channelId, user_id: chatId });
     if (!res?.ok) {
-      console.error("getChatMember not ok:", JSON.stringify(res));
-      return false;
+      console.warn("[channel-join] getChatMember not ok:", JSON.stringify(res));
+      return "error";
     }
     const status = res.result?.status;
-    return status === "member" || status === "administrator" || status === "creator";
-  } catch (e) { console.error("getChatMember failed:", e); return false; }
+    if (status === "member" || status === "administrator" || status === "creator") return "member";
+    return "not_member";
+  } catch (e) {
+    console.warn("[channel-join] getChatMember threw:", e?.message || e);
+    return "error";
+  }
+}
+
+async function checkUserIsChannelMember(chatId, channelId) {
+  return (await checkChannelMembershipStatus(chatId, channelId)) === "member";
 }
 
 function buildJoinPromptKeyboard(settings) {
