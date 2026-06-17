@@ -232,7 +232,7 @@ async function formatBulkPricingBlock(productId) {
         headerEmoji = `<tg-emoji emoji-id="${emojiRow.custom_emoji_id}">🤑</tg-emoji>`;
       }
     } catch {}
-    return `\n${headerEmoji} <b>Bulk Pricing:</b>\n${lines.join("\n")}`;
+    return `\n\n${headerEmoji} <b>Bulk Pricing:</b>\n${lines.join("\n")}`;
   } catch {
     return "";
   }
