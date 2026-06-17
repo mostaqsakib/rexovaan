@@ -6021,6 +6021,67 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
+  // ── Channel Join settings (admin) ──
+  if (data === "adm_channel_join" && isAdmin(chatId)) {
+    const s = await fetchChannelJoinSettings(true);
+    const status = s.enabled ? "🟢 ON" : "🔴 OFF";
+    const usernameDisplay = s.username ? `<code>${escapeHtml(s.username)}</code>` : "<i>not set</i>";
+    const messagePreview = s.message ? s.message.slice(0, 300) + (s.message.length > 300 ? "…" : "") : "<i>not set</i>";
+    const text =
+      `📢 <b>Channel Join Requirement</b>\n\n` +
+      `<b>Status:</b> ${status}\n` +
+      `<b>Channel:</b> ${usernameDisplay}\n` +
+      `<b>Join button emoji:</b> ${s.buttonEmoji || "<i>none</i>"}\n` +
+      `<b>Done button emoji:</b> ${s.doneEmoji || "<i>none</i>"}\n\n` +
+      `<b>Current message:</b>\n${messagePreview}`;
+    const buttons = [
+      [{ text: s.enabled ? "🔴 Disable" : "🟢 Enable", callback_data: "cj_toggle" }],
+      [{ text: "🔗 Edit Channel", callback_data: "cj_edit_username" }],
+      [{ text: "✏️ Edit Join Message", callback_data: "cj_edit_msg" }],
+      [{ text: "📢 Edit Join Emoji", callback_data: "cj_edit_join_emoji" }, { text: "✅ Edit Done Emoji", callback_data: "cj_edit_done_emoji" }],
+      [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
+    ];
+    await editOrSend(chatId, msgId, text, { inline_keyboard: buttons });
+    return;
+  }
+
+  if (data === "cj_toggle" && isAdmin(chatId)) {
+    const s = await fetchChannelJoinSettings(true);
+    const newVal = s.enabled ? "false" : "true";
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "channel_join_enabled").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value: newVal, updated_at: new Date().toISOString() }).eq("key", "channel_join_enabled");
+    else await supabase.from("bot_settings").insert({ key: "channel_join_enabled", value: newVal });
+    cachedChannelJoin.enabled = newVal === "true";
+    channelJoinLastFetch = Date.now();
+    await sendMessage(chatId, `✅ Channel join requirement is now <b>${newVal === "true" ? "ON" : "OFF"}</b>.`);
+    await showAdminMenu(chatId, emojiMap);
+    return;
+  }
+
+  if (data === "cj_edit_msg" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_cj_msg" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `✏️ <b>Edit Join Message</b>\n\nSend the new message text now. HTML formatting and premium/custom emojis are supported.\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+  if (data === "cj_edit_join_emoji" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_cj_join_emoji" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `📢 <b>Edit Join Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported).\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+  if (data === "cj_edit_done_emoji" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_cj_done_emoji" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `✅ <b>Edit Done Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported).\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+  if (data === "cj_edit_username" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_cj_username" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `🔗 <b>Edit Channel</b>\n\nSend the channel username (e.g. <code>@mychannel</code>) or numeric ID (e.g. <code>-1001234567890</code>).\n\n⚠️ The bot must be an <b>admin</b> in the channel for verification to work.\n\n❌ /cancel to cancel`);
+    return;
+  }
+
   if (data === "adm_broadcast" && isAdmin(chatId)) {
     await supabase.from("bot_customers").update({ pending_action: "admin_broadcast", pending_inputs: null }).eq("chat_id", chatId);
     await editOrSend(chatId, msgId, `📢 <b>Broadcast Mode</b>\n\nType your broadcast message now. After that you can attach product buttons.\n\nHTML formatting: <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>\n\n❌ /cancel to cancel`);
