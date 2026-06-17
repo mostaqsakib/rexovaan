@@ -29,6 +29,19 @@ const BotSettingsTab = () => {
   const [savingRef, setSavingRef] = useState(false);
   const [savingBdt, setSavingBdt] = useState(false);
 
+  // Channel join verification settings
+  const [cjEnabled, setCjEnabled] = useState(false);
+  const [origCjEnabled, setOrigCjEnabled] = useState(false);
+  const [cjUsername, setCjUsername] = useState('');
+  const [origCjUsername, setOrigCjUsername] = useState('');
+  const [cjMessage, setCjMessage] = useState('');
+  const [origCjMessage, setOrigCjMessage] = useState('');
+  const [cjJoinEmoji, setCjJoinEmoji] = useState('📢');
+  const [origCjJoinEmoji, setOrigCjJoinEmoji] = useState('📢');
+  const [cjDoneEmoji, setCjDoneEmoji] = useState('✅');
+  const [origCjDoneEmoji, setOrigCjDoneEmoji] = useState('✅');
+  const [savingCj, setSavingCj] = useState(false);
+
   useEffect(() => {
     fetchSettings();
   }, []);
