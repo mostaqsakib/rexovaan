@@ -1712,8 +1712,14 @@ async function showShop(chatId, emojiMap, editMessageId, forceRefresh = false) {
 
 async function showBalance(chatId, customer, emojiMap = {}, editMessageId = null) {
   const { data: fresh } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
-  const balance = fresh ? Number(fresh.balance).toFixed(2) : "0.00";
-  const balMsg = replacePlaceholder(getPageMsg("msg_balance", `💰 <b>Your Balance:</b> {balance} USDT`), 'balance', balance);
+  const rawBalance = fresh ? Number(fresh.balance) : 0;
+  const balance = rawBalance < 0
+    ? `Due ${Math.abs(rawBalance).toFixed(2)}`
+    : rawBalance.toFixed(2);
+  const defaultBalMsg = rawBalance < 0
+    ? `⚠️ <b>You have a due amount:</b> <b>{balance} USDT</b>\n\nPlease deposit to clear your due.`
+    : `💰 <b>Your Balance:</b> {balance} USDT`;
+  const balMsg = replacePlaceholder(getPageMsg("msg_balance", defaultBalMsg), 'balance', balance);
   const msg = balMsg;
   const buttons = {
     inline_keyboard: [
@@ -1729,7 +1735,10 @@ async function showBalance(chatId, customer, emojiMap = {}, editMessageId = null
 
 async function showProfile(chatId, customer, emojiMap = {}, editMessageId = null) {
   const { data: fresh } = await supabase.from("bot_customers").select("balance, created_at, pay_later_enabled, pay_later_limit, pay_later_used").eq("id", customer.id).single();
-  const balance = fresh ? Number(fresh.balance).toFixed(2) : "0.00";
+  const rawBalance = fresh ? Number(fresh.balance) : 0;
+  const balance = rawBalance < 0
+    ? `Due ${Math.abs(rawBalance).toFixed(2)}`
+    : rawBalance.toFixed(2);
   const joinedDate = fresh?.created_at ? new Date(fresh.created_at).toISOString().split("T")[0] : "N/A";
 
   // Premium emoji helper for profile text
@@ -1739,7 +1748,8 @@ async function showProfile(chatId, customer, emojiMap = {}, editMessageId = null
     return fallback;
   }
 
-  let profileMsg = `${e("👤", "menu_profile")} <b>User Profile</b>\n\n🆔 <b>ID:</b> {id}\n${e("💰", "menu_balance")} <b>Balance:</b> {balance} USDT\n📅 <b>Joined:</b> {joined}`;
+  const balanceLabel = rawBalance < 0 ? "Due" : "Balance";
+  let profileMsg = `${e("👤", "menu_profile")} <b>User Profile</b>\n\n🆔 <b>ID:</b> {id}\n${e("💰", "menu_balance")} <b>${balanceLabel}:</b> {balance} USDT\n📅 <b>Joined:</b> {joined}`;
 
   // Pay Later credit info
   if (fresh?.pay_later_enabled) {

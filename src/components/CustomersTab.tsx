@@ -303,8 +303,10 @@ const CustomersTab = () => {
                 ) : (
                   <Badge variant="outline" className="text-xs gap-1"><Send className="h-3 w-3" />Telegram</Badge>
                 )}
-                <Badge variant="outline" className="font-mono">
-                  {Number(c.balance).toFixed(2)} USDT
+                <Badge variant={Number(c.balance) < 0 ? "destructive" : "outline"} className="font-mono">
+                  {Number(c.balance) < 0
+                    ? `Due: ${Math.abs(Number(c.balance)).toFixed(2)} USDT`
+                    : `${Number(c.balance).toFixed(2)} USDT`}
                 </Badge>
                 {c.pay_later_enabled && (
                   <Badge variant="secondary" className="font-mono text-xs">
@@ -402,10 +404,12 @@ const CustomersTab = () => {
               <Input
                 type="number"
                 step="0.01"
-                min="0"
                 value={newBalance}
                 onChange={(e) => setNewBalance(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Enter a negative value (e.g. <code>-50</code>) to set a due/owed amount.
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium">Note (required) <span className="text-destructive">*</span></label>

@@ -18,9 +18,7 @@ Deno.serve(async (req) => {
     if (!note || !note.trim()) {
       return new Response(JSON.stringify({ error: "Note is required for balance edits" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (Number(new_balance) < 0) {
-      return new Response(JSON.stringify({ error: "Balance cannot be negative" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    // Negative balances are allowed (represent a due/amount owed by the customer).
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
