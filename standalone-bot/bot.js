@@ -1614,6 +1614,7 @@ async function showAdminMenu(chatId, emojiMap, editMessageId) {
     [{ text: `👥 Groups`, callback_data: "adm_groups" }, { text: `🔑 Keywords`, callback_data: "adm_keywords" }],
     [{ text: `✨ Button Emojis`, callback_data: "adm_emojis" }, { text: `💳 Payment Emojis`, callback_data: "adm_pemojis" }],
     [{ text: `✏️ Edit Messages`, callback_data: "adm_editmsg" }, { text: `📋 Price List`, callback_data: "adm_pricelist" }],
+    [{ text: `📢 Channel Join`, callback_data: "adm_channel_join" }],
     [{ text: maintenanceMode ? "🟢 Maintenance OFF" : "🔴 Maintenance ON", callback_data: "adm_maintenance" }],
     [applyEmoji({ text: "🖥️ Open Web Dashboard", web_app: { url: webAppUrl } }, "admin_panel", emojiMap)],
   ];
