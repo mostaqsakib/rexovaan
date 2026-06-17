@@ -202,7 +202,8 @@ function buildJoinPromptKeyboard(settings) {
 
 // Returns true if user is allowed to continue, false if blocked by join prompt.
 async function ensureChannelVerified(chatId) {
-  const s = await fetchChannelJoinSettings();
+  // Always read fresh from DB so admin emoji edits show up immediately.
+  const s = await fetchChannelJoinSettings(true);
   if (!s.enabled || !s.username) return true;
   if (isAdmin(chatId)) return true;
   if (await isUserVerifiedForChannel(chatId)) return true;
