@@ -167,7 +167,10 @@ async function markUserVerifiedForChannel(chatId) {
 async function checkUserIsChannelMember(chatId, channelId) {
   try {
     const res = await tgFetch("getChatMember", { chat_id: channelId, user_id: chatId });
-    if (!res?.ok) return false;
+    if (!res?.ok) {
+      console.error("getChatMember not ok:", JSON.stringify(res));
+      return false;
+    }
     const status = res.result?.status;
     return status === "member" || status === "administrator" || status === "creator";
   } catch (e) { console.error("getChatMember failed:", e); return false; }
