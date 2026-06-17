@@ -50,7 +50,7 @@ const BotSettingsTab = () => {
     const { data, error } = await supabase
       .from('bot_settings')
       .select('*')
-      .in('key', ['welcome_message', 'referral_commission_percent', 'referral_first_bonus', 'dollar_rate_bdt', 'site_logo_url', 'site_shop_name']);
+      .in('key', ['welcome_message', 'referral_commission_percent', 'referral_first_bonus', 'dollar_rate_bdt', 'site_logo_url', 'site_shop_name', 'channel_join_enabled', 'channel_join_username', 'channel_join_message', 'channel_join_button_emoji', 'channel_join_done_emoji']);
     if (error) {
       toast.error('Failed to load settings');
       setLoading(false);
@@ -63,6 +63,11 @@ const BotSettingsTab = () => {
       if (row.key === 'dollar_rate_bdt') { setBdtRate(row.value); setOrigBdtRate(row.value); }
       if (row.key === 'site_logo_url') { setLogoUrl(row.value); setOrigLogoUrl(row.value); }
       if (row.key === 'site_shop_name') { setShopName(row.value); setOrigShopName(row.value); }
+      if (row.key === 'channel_join_enabled') { const v = String(row.value).toLowerCase() === 'true'; setCjEnabled(v); setOrigCjEnabled(v); }
+      if (row.key === 'channel_join_username') { setCjUsername(row.value || ''); setOrigCjUsername(row.value || ''); }
+      if (row.key === 'channel_join_message') { setCjMessage(row.value || ''); setOrigCjMessage(row.value || ''); }
+      if (row.key === 'channel_join_button_emoji') { setCjJoinEmoji(row.value || '📢'); setOrigCjJoinEmoji(row.value || '📢'); }
+      if (row.key === 'channel_join_done_emoji') { setCjDoneEmoji(row.value || '✅'); setOrigCjDoneEmoji(row.value || '✅'); }
     }
     setLoading(false);
   };
