@@ -147,6 +147,27 @@ const BotSettingsTab = () => {
     setSavingBdt(false);
   };
 
+  const handleSaveCj = async () => {
+    setSavingCj(true);
+    const results = await Promise.all([
+      upsertSetting('channel_join_enabled', cjEnabled ? 'true' : 'false'),
+      upsertSetting('channel_join_username', cjUsername.trim()),
+      upsertSetting('channel_join_message', cjMessage),
+      upsertSetting('channel_join_button_emoji', cjJoinEmoji || '📢'),
+      upsertSetting('channel_join_done_emoji', cjDoneEmoji || '✅'),
+    ]);
+    if (results.some(r => r.error)) toast.error('Failed to save channel join settings');
+    else {
+      toast.success('Channel join settings updated!');
+      setOrigCjEnabled(cjEnabled);
+      setOrigCjUsername(cjUsername);
+      setOrigCjMessage(cjMessage);
+      setOrigCjJoinEmoji(cjJoinEmoji);
+      setOrigCjDoneEmoji(cjDoneEmoji);
+    }
+    setSavingCj(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
