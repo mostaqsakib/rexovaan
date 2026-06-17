@@ -194,6 +194,13 @@ async function ensureChannelVerified(chatId) {
   if (!s.enabled || !s.username) return true;
   if (isAdmin(chatId)) return true;
   if (await isUserVerifiedForChannel(chatId)) return true;
+  // Auto-verify if user is already a channel member (avoids loop when user
+  // joined the channel but never tapped Done).
+  const channelId = channelApiId(s.username);
+  if (channelId && (await checkUserIsChannelMember(chatId, channelId))) {
+    await markUserVerifiedForChannel(chatId);
+    return true;
+  }
   await sendMessage(chatId, s.message, buildJoinPromptKeyboard(s));
   return false;
 }
