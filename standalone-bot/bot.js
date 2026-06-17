@@ -177,8 +177,10 @@ function buildJoinPromptKeyboard(settings) {
   const link = channelLinkFromUsername(settings.username);
   // Use raw emoji characters directly — Telegram renders premium custom emojis
   // in inline keyboard button text natively (no HTML, no tg-emoji tag needed).
-  const btnEmoji = String(settings.buttonEmoji || "");
-  const doneEmoji = String(settings.doneEmoji || "");
+  // Safely unwrap any legacy <tg-emoji ...>CHAR</tg-emoji> values still stored.
+  const unwrapTgEmoji = (v) => String(v || "").replace(/<tg-emoji[^>]*>([\s\S]*?)<\/tg-emoji>/gi, "$1");
+  const btnEmoji = unwrapTgEmoji(settings.buttonEmoji);
+  const doneEmoji = unwrapTgEmoji(settings.doneEmoji);
   const row1 = link
     ? [{ text: `${btnEmoji} Join Channel`, url: link }]
     : [{ text: `${btnEmoji} Join Channel`, callback_data: "noop" }];
