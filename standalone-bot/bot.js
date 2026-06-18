@@ -6421,12 +6421,26 @@ async function handleCallback(callbackQuery, emojiMap) {
 
   // ── Flash Sales menu ──
   if (data === "adm_flashsales" && isAdmin(chatId)) {
-    const { data: active } = await supabase.from("bot_flash_sales").select("*, bot_products!inner(name)").eq("is_active", true).order("ends_at");
+    const nowIso = new Date().toISOString();
+    const { data: activeRaw, error: fsErr } = await supabase
+      .from("bot_flash_sales")
+      .select("*")
+      .eq("is_active", true)
+      .gt("ends_at", nowIso)
+      .order("ends_at");
+    if (fsErr) console.error("[adm_flashsales] query error:", fsErr);
+    const active = Array.isArray(activeRaw) ? activeRaw : [];
+    const productIds = [...new Set(active.map((s) => s.product_id).filter(Boolean))];
+    const productMap = {};
+    if (productIds.length > 0) {
+      const { data: prods } = await supabase.from("bot_products").select("id, name").in("id", productIds);
+      for (const p of prods || []) productMap[p.id] = p.name;
+    }
     let txt = "🔥 <b>Flash Sales</b>\n\n";
-    if (active && active.length > 0) {
+    if (active.length > 0) {
       txt += "<b>Active sales:</b>\n";
       for (const s of active) {
-        const name = s.bot_products?.name || "Product";
+        const name = productMap[s.product_id] || "Product";
         txt += `• <b>${escapeHtml(name)}</b> — $${Number(s.sale_price).toFixed(2)} • ⏳ ${formatCountdown(s.ends_at)}\n`;
       }
       txt += "\n";
@@ -6437,13 +6451,12 @@ async function handleCallback(callbackQuery, emojiMap) {
     const buttons = [
       [{ text: "➕ Create Flash Sale", callback_data: "adm_fs_new" }],
     ];
-    if (active && active.length > 0) {
-      for (const s of active) {
-        buttons.push([
-          { text: `♻️ Re-edit: ${s.bot_products?.name || "Product"}`, callback_data: `adm_fs_reedit_${s.id}` },
-          { text: `❌ End`, callback_data: `adm_fs_end_${s.id}` },
-        ]);
-      }
+    for (const s of active) {
+      const name = productMap[s.product_id] || "Product";
+      buttons.push([
+        { text: `♻️ Re-edit: ${name}`, callback_data: `adm_fs_reedit_${s.id}` },
+        { text: `❌ End`, callback_data: `adm_fs_end_${s.id}` },
+      ]);
     }
     buttons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
     await editOrSend(chatId, msgId, txt, { inline_keyboard: buttons });
