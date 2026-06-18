@@ -266,18 +266,32 @@ function normalizeTelegramHtml(html) {
   return result;
 }
 
+// Telegram rejects custom_emoji entities that overlap any other formatting
+// entity (bold/italic/underline/strikethrough/code/spoiler/blockquote). When
+// admins author templates like `<b>🕐 <tg-emoji ...>🕐</tg-emoji> {countdown}</b>`,
+// the inner <tg-emoji> must be lifted OUT of the <b> wrapper, otherwise the
+// channel/group server silently drops the custom emoji and only the fallback
+// glyph renders. This works for emoji at any position inside the wrapper —
+// start, middle, or end — by splitting the wrapper around each tg-emoji.
 function keepCustomEmojiOutsideFormatting(html) {
   let result = String(html || "");
-  for (let i = 0; i < 5; i++) {
-    const next = result
-      .replace(/<(b|i|u|s|code)>(\s*)<tg-emoji([^>]*)>([\s\S]*?)<\/tg-emoji>(\s*)([\s\S]*?)<\/\1>/gi, (_m, tag, before, attrs, glyph, gap, rest) => {
-        const emoji = `${before}<tg-emoji${attrs}>${glyph}</tg-emoji>${gap}`;
-        return rest.trim() ? `${emoji}<${tag}>${rest}</${tag}>` : emoji;
-      })
-      .replace(/<(b|i|u|s|code)>([\s\S]*?)(\s*)<tg-emoji([^>]*)>([\s\S]*?)<\/tg-emoji>(\s*)<\/\1>/gi, (_m, tag, rest, gap, attrs, glyph, after) => {
-        const emoji = `${gap}<tg-emoji${attrs}>${glyph}</tg-emoji>${after}`;
-        return rest.trim() ? `<${tag}>${rest}</${tag}>${emoji}` : emoji;
+  const tags = ["b", "i", "u", "s", "code", "spoiler"];
+  for (let i = 0; i < 6; i++) {
+    let next = result;
+    for (const tag of tags) {
+      const re = new RegExp(`<${tag}\\b([^>]*)>([\\s\\S]*?)<\\/${tag}>`, "gi");
+      next = next.replace(re, (full, attrs, inner) => {
+        if (!/<tg-emoji\b/i.test(inner)) return full;
+        const parts = inner.split(/(<tg-emoji\b[^>]*>[\s\S]*?<\/tg-emoji>)/i);
+        return parts
+          .map((part) => {
+            if (!part) return "";
+            if (/^<tg-emoji\b/i.test(part)) return part;
+            return `<${tag}${attrs || ""}>${part}</${tag}>`;
+          })
+          .join("");
       });
+    }
     if (next === result) break;
     result = next;
   }
