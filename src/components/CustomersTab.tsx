@@ -120,6 +120,10 @@ const CustomersTab = () => {
     if (accountFilter === 'web') query = query.not('auth_user_id', 'is', null);
     else if (accountFilter === 'telegram') query = query.is('auth_user_id', null);
 
+    if (balanceFilter === 'positive') query = query.gt('balance', 0);
+    else if (balanceFilter === 'negative') query = query.lt('balance', 0);
+    else if (balanceFilter === 'zero') query = query.eq('balance', 0);
+
     if (hasSearch) {
       const s = searchRaw.replace(/^@/, '');
       const esc = s.replace(/[,()]/g, ' ');
