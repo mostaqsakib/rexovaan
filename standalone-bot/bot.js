@@ -4118,6 +4118,57 @@ async function executeInternalStockDelivery(chatId, customer, product, qty, tota
   return orderRow;
 }
 
+// ── Apply payment to outstanding due first, then to product ──
+// Rule: if customer has a negative balance (due), incoming payment first clears the due.
+// Product is delivered only when (current balance + payment) >= product total.
+async function processDirectPayPurchase({ chatId, customer, product, qty, expectedTotal, amount, verifiedVia, ltcRawAmount, normalizedTxn, emojiMap, receiptPrefix = "✅ <b>Payment Verified!</b>" }) {
+  const { data: freshBal } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
+  const currentBal = freshBal ? Number(freshBal.balance) : 0;
+  const dueBefore = currentBal < 0 ? Math.abs(currentBal) : 0;
+  const afterPayment = currentBal + amount;
+  const dueCleared = dueBefore > 0 ? Math.min(dueBefore, amount) : 0;
+
+  // Insufficient: payment + balance can't cover product
+  if (afterPayment < expectedTotal) {
+    await supabase.from("bot_customers").update({ balance: afterPayment, updated_at: new Date().toISOString() }).eq("id", customer.id);
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    const shortfall = expectedTotal - afterPayment;
+    let msg = `⚠️ <b>Insufficient Payment — Order Not Delivered</b>\n\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, normalizedTxn)}`;
+    if (dueBefore > 0) {
+      msg += `🧾 Previous Due: <b>${dueBefore.toFixed(2)} USDT</b>\n💸 Applied to Due: <b>${dueCleared.toFixed(2)} USDT</b>\n`;
+      const dueAfter = Math.max(0, dueBefore - amount);
+      if (dueAfter > 0) msg += `🧾 Remaining Due: <b>${dueAfter.toFixed(2)} USDT</b>\n`;
+    }
+    msg += `🛒 Product Required: <b>${expectedTotal.toFixed(2)} USDT</b>\n📉 Shortfall: <b>${shortfall.toFixed(2)} USDT</b>\n\n`;
+    if (afterPayment < 0) msg += `🧾 New Due: <b>${Math.abs(afterPayment).toFixed(2)} USDT</b>\n`;
+    else msg += `💳 New Balance: <b>${afterPayment.toFixed(2)} USDT</b>\n`;
+    msg += `\nOrder cancelled. Add more funds and re-order.`;
+    await sendMessage(chatId, msg, mainMenuKeyboard(emojiMap));
+    return;
+  }
+
+  // Sufficient: deliver product. balance = (currentBal + amount) - expectedTotal
+  const newBal = afterPayment - expectedTotal;
+  await supabase.from("bot_customers").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
+
+  let receiptMsg = `${receiptPrefix}\n\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, normalizedTxn)}`;
+  if (dueCleared > 0) receiptMsg += `🧾 Due Cleared: <b>${dueCleared.toFixed(2)} USDT</b>\n`;
+  // Balance used = portion of expectedTotal not paid by direct payment
+  const balanceUsed = Math.max(0, expectedTotal - Math.max(0, amount - dueCleared));
+  // (when currentBal was positive and amount < expectedTotal, we used some balance)
+  if (currentBal > 0 && amount < expectedTotal) {
+    receiptMsg += `💳 Used from balance: <b>${(expectedTotal - amount).toFixed(2)} USDT</b>\n`;
+  }
+  const change = newBal > 0 && currentBal <= 0 ? newBal : (newBal - Math.max(0, currentBal));
+  if (change > 0) receiptMsg += `💳 Change added to balance: <b>${change.toFixed(2)} USDT</b>\n`;
+  if (newBal < 0) receiptMsg += `🧾 Remaining Due: <b>${Math.abs(newBal).toFixed(2)} USDT</b>\n`;
+  else receiptMsg += `💵 New Balance: <b>${newBal.toFixed(2)} USDT</b>\n`;
+  receiptMsg += `\n⏳ Delivering your items...`;
+  await sendMessage(chatId, receiptMsg);
+  await executeDirectPayDelivery(chatId, customer, product, qty, expectedTotal, emojiMap, verifiedVia, normalizedTxn);
+}
+
+
 async function executeDirectPayDelivery(chatId, customer, product, qty, totalPrice, emojiMap, verifiedVia, normalizedTxn) {
   // Manual delivery product
   if (product.is_manual_delivery) {
