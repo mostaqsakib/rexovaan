@@ -1127,11 +1127,18 @@ async function sendMessage(chatId, text, replyMarkup) {
   text = prepareTelegramHtml(text);
   const body = { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true };
   if (replyMarkup) body.reply_markup = replyMarkup;
+  const isChannel = Number(chatId) < 0 && String(chatId).startsWith("-100");
+  const hasCustomEmoji = text.includes("<tg-emoji");
   let result = await tgFetch("sendMessage", body);
   if (!result?.ok) {
     const errDesc = String(result?.description || "").toLowerCase();
+    // Surface channel + custom-emoji errors clearly so we can tell when Telegram
+    // strips/rejects premium emoji due to insufficient channel boost level.
+    if (isChannel && hasCustomEmoji) {
+      console.log(`[Channel sendMessage] chat=${chatId} ok=${result?.ok} desc="${result?.description}"`);
+    }
     // Only strip custom emoji if the error is specifically about custom emoji
-    if (text.includes("<tg-emoji") && (errDesc.includes("custom emoji") || errDesc.includes("premium"))) {
+    if (text.includes("<tg-emoji") && (errDesc.includes("custom emoji") || errDesc.includes("premium") || errDesc.includes("boost"))) {
       console.log("Retrying sendMessage without custom emoji tags (emoji error):", result?.description);
       body.text = stripCustomEmoji(text);
       result = await tgFetch("sendMessage", body);
