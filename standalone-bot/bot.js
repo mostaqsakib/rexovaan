@@ -7439,7 +7439,7 @@ async function handleMyChatMember(event) {
       : (newStatus === "administrator" || newStatus === "member");
     if (isMember) {
       await supabase.from("bot_broadcast_groups").upsert(
-        { chat_id: chat.id, title: chat.title || null, is_active: true, updated_at: new Date().toISOString() },
+        { chat_id: chat.id, title: chat.title || null, chat_type: chat.type, is_active: true, updated_at: new Date().toISOString() },
         { onConflict: "chat_id" }
       );
       console.log(`✅ Bot joined ${chat.type}: ${chat.title} (${chat.id})`);
@@ -7449,7 +7449,7 @@ async function handleMyChatMember(event) {
         } catch {}
       }
     } else {
-      await supabase.from("bot_broadcast_groups").update({ is_active: false, updated_at: new Date().toISOString() }).eq("chat_id", chat.id);
+      await supabase.from("bot_broadcast_groups").update({ is_active: false, chat_type: chat.type, updated_at: new Date().toISOString() }).eq("chat_id", chat.id);
       console.log(`❌ Bot removed from ${chat.type}: ${chat.title} (${chat.id})`);
     }
   } catch (e) {
