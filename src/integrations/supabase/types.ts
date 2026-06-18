@@ -50,6 +50,7 @@ export type Database = {
       bot_broadcast_groups: {
         Row: {
           chat_id: number
+          chat_type: string | null
           created_at: string
           id: string
           is_active: boolean
@@ -58,6 +59,7 @@ export type Database = {
         }
         Insert: {
           chat_id: number
+          chat_type?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -66,6 +68,7 @@ export type Database = {
         }
         Update: {
           chat_id?: number
+          chat_type?: string | null
           created_at?: string
           id?: string
           is_active?: boolean

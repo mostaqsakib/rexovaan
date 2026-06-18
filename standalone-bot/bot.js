@@ -609,12 +609,20 @@ async function getBotUsername() {
 }
 
 // ── Group broadcast helpers ──
+// Excludes channels — channels only receive Flash Sale broadcasts when admin
+// explicitly selects them as a target (via broadcastToChats).
 async function getBroadcastChatIds() {
   const { data: customers } = await supabase.from("bot_customers").select("chat_id");
-  const { data: groups } = await supabase.from("bot_broadcast_groups").select("chat_id").eq("is_active", true);
+  const { data: groups } = await supabase
+    .from("bot_broadcast_groups")
+    .select("chat_id, chat_type")
+    .eq("is_active", true);
   const ids = [];
   if (customers) for (const c of customers) ids.push(c.chat_id);
-  if (groups) for (const g of groups) ids.push(g.chat_id);
+  if (groups) for (const g of groups) {
+    if (g.chat_type === "channel") continue; // skip channels for auto-broadcasts
+    ids.push(g.chat_id);
+  }
   return ids;
 }
 
