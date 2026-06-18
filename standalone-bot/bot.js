@@ -5166,6 +5166,24 @@ async function handleMessage(message, emojiMap) {
     const msgKey = customer.pending_action.replace("admin_editmsg_", "");
     const label = PAGE_MSG_KEYS[msgKey] || msgKey;
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    // ── Byte-aware capture of premium/custom emoji entities ──
+    // Telegram entity offsets are UTF-16 code-units; entitiesToHtml() already converts these
+    // and emits raw <tg-emoji emoji-id="..."> wrappers from each entity.custom_emoji_id.
+    // We additionally collect the raw IDs here so the admin sees confirmation that
+    // every premium emoji on the time/{countdown} line (or anywhere) was captured.
+    const entities = Array.isArray(message.entities) ? message.entities : [];
+    const capturedEmojiIds = [];
+    for (const ent of entities) {
+      if (ent?.type === "custom_emoji" && ent.custom_emoji_id) {
+        const startU16 = ent.offset || 0;
+        const endU16 = startU16 + (ent.length || 0);
+        // Byte/UTF-16 aware slice of the original placeholder glyph
+        const glyph = rawText.substring(startU16, endU16);
+        capturedEmojiIds.push({ id: String(ent.custom_emoji_id), glyph });
+      }
+    }
+
     const htmlText = prepareTelegramHtml(entitiesToHtml(rawText, message.entities));
     // Upsert into bot_settings
     const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", msgKey).maybeSingle();
@@ -5198,8 +5216,20 @@ async function handleMessage(message, emojiMap) {
     };
     previewText = replacePlaceholders(previewText, sampleReplacements);
     const editButtons = { inline_keyboard: [[{ text: "✏️ Edit More", callback_data: "adm_editmsg" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] };
+
+    // Build emoji capture summary (raw icon_custom_emoji_id values, like other handlers expose)
+    let emojiNote = "";
+    if (capturedEmojiIds.length > 0) {
+      const lines = capturedEmojiIds
+        .slice(0, 12)
+        .map((e, i) => `${i + 1}. ${escapeHtml(e.glyph)} → <code>${escapeHtml(e.id)}</code>`)
+        .join("\n");
+      const more = capturedEmojiIds.length > 12 ? `\n… +${capturedEmojiIds.length - 12} more` : "";
+      emojiNote = `\n\n🌟 <b>${capturedEmojiIds.length} premium emoji captured:</b>\n${lines}${more}`;
+    }
+
     // First send confirmation
-    await sendMessage(chatId, `✅ <b>${label}</b> message saved successfully!`, editButtons);
+    await sendMessage(chatId, `✅ <b>${label}</b> message saved successfully!${emojiNote}`, editButtons);
     // Then send preview separately so if it fails, confirmation is already sent
     try {
       const previewResult = await sendMessage(chatId, prepareTelegramHtml(`📝 <b>Preview:</b>\n\n${previewText}`));
