@@ -3421,43 +3421,8 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
         if (product) {
           const unitPrice = await getTieredPrice(productId, qty, Number(product.price), customer.id);
           const expectedTotal = Math.round(unitPrice * qty * 10000) / 10000;
-          if (amount >= expectedTotal) {
-            const change = amount - expectedTotal;
-            if (change > 0) {
-              const { data: freshBal } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
-              const newBal = (freshBal ? Number(freshBal.balance) : 0) + change;
-              await supabase.from("bot_customers").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
-            }
-            let receiptMsg = `✅ <b>Payment Verified!</b>\n\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, normalizedTxn)}`;
-            if (change > 0) receiptMsg += `💳 Change added to balance: <b>${change.toFixed(2)} USDT</b>\n`;
-            receiptMsg += `\n⏳ Delivering your items...`;
-            await sendMessage(chatId, receiptMsg);
-            await executeDirectPayDelivery(chatId, customer, product, qty, expectedTotal, emojiMap, verifiedVia, normalizedTxn);
-            return;
-          } else {
-            const { data: freshBal } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
-            const currentBal = freshBal ? Number(freshBal.balance) : 0;
-            const totalAvailable = currentBal + amount;
-            if (totalAvailable >= expectedTotal) {
-              const deductFromBal = expectedTotal - amount;
-              const newBal = currentBal - deductFromBal;
-              await supabase.from("bot_customers").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
-              let receiptMsg = `✅ <b>Payment Verified!</b>\n\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, normalizedTxn)}💳 Used from balance: <b>${deductFromBal.toFixed(2)} USDT</b>\n`;
-              receiptMsg += `💵 Remaining Balance: <b>${newBal.toFixed(2)} USDT</b>\n\n⏳ Delivering your items...`;
-              await sendMessage(chatId, receiptMsg);
-              await executeDirectPayDelivery(chatId, customer, product, qty, expectedTotal, emojiMap, verifiedVia, normalizedTxn);
-              return;
-            } else {
-              const newBal = currentBal + amount;
-              await supabase.from("bot_customers").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
-              const shortfall = expectedTotal - totalAvailable;
-              let receiptMsg = `⚠️ <b>Insufficient Payment</b>\n\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, normalizedTxn)}`;
-              receiptMsg += `💳 Total Available: <b>${totalAvailable.toFixed(2)} USDT</b>\n💵 Required: <b>${expectedTotal.toFixed(2)} USDT</b>\n📉 Shortfall: <b>${shortfall.toFixed(2)} USDT</b>\n\n`;
-              receiptMsg += `The deposit has been added to your balance. Order cancelled.\nNew Balance: <b>${newBal.toFixed(2)} USDT</b>`;
-              await sendMessage(chatId, receiptMsg, mainMenuKeyboard());
-              return;
-            }
-          }
+          await processDirectPayPurchase({ chatId, customer, product, qty, expectedTotal, amount, verifiedVia, ltcRawAmount, normalizedTxn, emojiMap });
+          return;
         }
       }
 
@@ -7711,28 +7676,9 @@ async function backgroundDepositChecker() {
               const unitPrice = await getTieredPrice(dep.pending_product_id, qty, Number(product.price), dep.customer_id);
               const expectedTotal = Math.round(unitPrice * qty * 10000) / 10000;
 
-              if (amount >= expectedTotal) {
-                const change = amount - expectedTotal;
-                if (change > 0) {
-                  const { data: freshBal } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
-                  const newBal = (freshBal ? Number(freshBal.balance) : 0) + change;
-                  await supabase.from("bot_customers").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
-                }
-                let receiptMsg = `✅ <b>Payment Verified!</b> — Background Check\n\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, txn)}`;
-                if (change > 0) receiptMsg += `💳 Change added to balance: <b>${change.toFixed(2)} USDT</b>\n`;
-                receiptMsg += `\n⏳ Delivering your items...`;
-                await sendMessage(chatId, receiptMsg);
+              {
                 const emojiMap = await loadButtonEmojis();
-                await executeDirectPayDelivery(chatId, customer, product, qty, expectedTotal, emojiMap, verifiedVia, txn);
-              } else {
-                // Amount less than expected — add to balance
-                const { data: freshBal } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
-                const newBal = (freshBal ? Number(freshBal.balance) : 0) + amount;
-                await supabase.from("bot_customers").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
-                await sendMessage(chatId,
-                  `✅ <b>Deposit Verified!</b> — Background Check\n\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, txn)}💳 New Balance: <b>${newBal.toFixed(2)} USDT</b>\n\n⚠️ Amount was less than required for pending order. Added to your balance instead.`,
-                  mainMenuKeyboard()
-                );
+                await processDirectPayPurchase({ chatId, customer, product, qty, expectedTotal, amount, verifiedVia, ltcRawAmount, normalizedTxn: txn, emojiMap, receiptPrefix: "✅ <b>Payment Verified!</b> — Background Check" });
               }
             } else {
               // Product not found — just add to balance
