@@ -609,12 +609,20 @@ async function getBotUsername() {
 }
 
 // ── Group broadcast helpers ──
+// Excludes channels — channels only receive Flash Sale broadcasts when admin
+// explicitly selects them as a target (via broadcastToChats).
 async function getBroadcastChatIds() {
   const { data: customers } = await supabase.from("bot_customers").select("chat_id");
-  const { data: groups } = await supabase.from("bot_broadcast_groups").select("chat_id").eq("is_active", true);
+  const { data: groups } = await supabase
+    .from("bot_broadcast_groups")
+    .select("chat_id, chat_type")
+    .eq("is_active", true);
   const ids = [];
   if (customers) for (const c of customers) ids.push(c.chat_id);
-  if (groups) for (const g of groups) ids.push(g.chat_id);
+  if (groups) for (const g of groups) {
+    if (g.chat_type === "channel") continue; // skip channels for auto-broadcasts
+    ids.push(g.chat_id);
+  }
   return ids;
 }
 
@@ -7431,7 +7439,7 @@ async function handleMyChatMember(event) {
       : (newStatus === "administrator" || newStatus === "member");
     if (isMember) {
       await supabase.from("bot_broadcast_groups").upsert(
-        { chat_id: chat.id, title: chat.title || null, is_active: true, updated_at: new Date().toISOString() },
+        { chat_id: chat.id, title: chat.title || null, chat_type: chat.type, is_active: true, updated_at: new Date().toISOString() },
         { onConflict: "chat_id" }
       );
       console.log(`✅ Bot joined ${chat.type}: ${chat.title} (${chat.id})`);
@@ -7441,7 +7449,7 @@ async function handleMyChatMember(event) {
         } catch {}
       }
     } else {
-      await supabase.from("bot_broadcast_groups").update({ is_active: false, updated_at: new Date().toISOString() }).eq("chat_id", chat.id);
+      await supabase.from("bot_broadcast_groups").update({ is_active: false, chat_type: chat.type, updated_at: new Date().toISOString() }).eq("chat_id", chat.id);
       console.log(`❌ Bot removed from ${chat.type}: ${chat.title} (${chat.id})`);
     }
   } catch (e) {

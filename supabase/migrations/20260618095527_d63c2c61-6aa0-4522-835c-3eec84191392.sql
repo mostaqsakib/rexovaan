@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_broadcast_groups ADD COLUMN IF NOT EXISTS chat_type text;
