@@ -6466,6 +6466,23 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
+  if (data.startsWith("adm_fs_reedit_") && isAdmin(chatId)) {
+    const saleId = data.replace("adm_fs_reedit_", "");
+    const { data: sale } = await supabase.from("bot_flash_sales").select("*").eq("id", saleId).maybeSingle();
+    if (!sale) { await editOrSend(chatId, msgId, "❌ Sale not found.", { inline_keyboard: [[{ text: "◀️ Back", callback_data: "adm_flashsales" }]] }); return; }
+    const { data: product } = await supabase.from("bot_products").select("*").eq("id", sale.product_id).maybeSingle();
+    const text = await buildFlashSaleMessage(sale, product || { name: "Product", custom_emoji_id: null, id: sale.product_id }, false);
+    const keyboard = await buildFlashSaleKeyboard(product || { id: sale.product_id });
+    const msgs = Array.isArray(sale.announcement_messages) ? sale.announcement_messages : [];
+    let ok = 0, fail = 0;
+    for (const m of msgs) {
+      const res = await editMessageText(m.chat_id, m.message_id, text, keyboard).catch((e) => ({ ok: false, description: e?.message }));
+      if (res?.ok || res?.skipped) ok++; else fail++;
+    }
+    await editOrSend(chatId, msgId, `♻️ <b>Re-edit complete</b>\n\n✅ Updated: ${ok}\n❌ Failed: ${fail}\n📤 Total: ${msgs.length}\n\n<i>Current template re-applied with premium emoji formatting.</i>`, { inline_keyboard: [[{ text: "◀️ Back", callback_data: "adm_flashsales" }]] });
+    return;
+  }
+
   if (data.startsWith("adm_fs_end_") && isAdmin(chatId)) {
     const saleId = data.replace("adm_fs_end_", "");
     const { data: sale } = await supabase.from("bot_flash_sales").select("*").eq("id", saleId).maybeSingle();
