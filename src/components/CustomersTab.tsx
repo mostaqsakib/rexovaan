@@ -29,6 +29,7 @@ interface Customer {
 }
 
 type AccountFilter = 'all' | 'web' | 'telegram';
+type BalanceFilter = 'all' | 'positive' | 'negative' | 'zero';
 
 const formatDate = (dateStr: string) => {
   const d = new Date(dateStr);
