@@ -7599,7 +7599,7 @@ async function pollUpdates() {
         res = await fetch(`${TELEGRAM_API}/getUpdates`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ offset, timeout: POLL_TIMEOUT, allowed_updates: ["message", "edited_message", "callback_query", "my_chat_member"] }),
+          body: JSON.stringify({ offset, timeout: POLL_TIMEOUT, allowed_updates: ["message", "edited_message", "callback_query", "my_chat_member", "channel_post", "edited_channel_post"] }),
           signal: controller.signal,
         });
       } finally {
