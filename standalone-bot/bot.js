@@ -2966,7 +2966,10 @@ function normalizeTxnInput(input) {
   const raw = String(input || "").trim();
   if (!raw) return "";
 
-  const cleaned = raw.replace(/[<>`"']/g, " ").replace(/\s+/g, " ").trim();
+  // Strip zero-width / invisible unicode chars that often sneak in when users
+  // copy Order IDs from Bybit's web UI (ZWSP, ZWNJ, ZWJ, BOM, LRM/RLM, etc.).
+  const stripped = raw.replace(/[\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g, "");
+  const cleaned = stripped.replace(/[<>`"']/g, " ").replace(/\s+/g, " ").trim();
 
   const hexMatch = cleaned.match(/0x[a-fA-F0-9]{20,}/);
   if (hexMatch) return hexMatch[0];
@@ -2983,6 +2986,10 @@ function normalizeTxnInput(input) {
   const tonHashMatch = cleaned.match(/\b[a-zA-Z0-9_-]{40,128}\b/);
   if (tonHashMatch && /[0-9]/.test(tonHashMatch[0])) return tonHashMatch[0];
 
+  // Long numeric IDs first (e.g. Bybit Order IDs are 18-32 digits).
+  const longNumericMatch = cleaned.match(/\d{15,}/);
+  if (longNumericMatch) return longNumericMatch[0];
+
   const numericMatch = cleaned.match(/\b\d{8,}\b/);
   if (numericMatch) return numericMatch[0];
 
@@ -2994,7 +3001,12 @@ function normalizeTxnInput(input) {
 
 function isBybitOrderLikeId(value) {
   const txn = String(value || "").trim();
-  return txn.length >= 20 && /\d/.test(txn) && /^[A-Za-z0-9]{6,}(?:-[A-Za-z0-9]{3,}){2,}$/.test(txn);
+  if (txn.length < 18) return false;
+  // Long all-numeric Bybit Order IDs (e.g. "26061800022067683511204085762475").
+  if (/^\d{18,}$/.test(txn)) return true;
+  // Hyphenated order IDs like "ABC123-XYZ-456".
+  if (/^[A-Za-z0-9]{6,}(?:-[A-Za-z0-9]{3,}){2,}$/.test(txn) && txn.length >= 20) return true;
+  return false;
 }
 
 
