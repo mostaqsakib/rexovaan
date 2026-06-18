@@ -290,6 +290,22 @@ const CustomersTab = () => {
               </button>
             ))}
           </div>
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {([
+              { key: 'all' as BalanceFilter, label: 'All Balances' },
+              { key: 'positive' as BalanceFilter, label: 'Balance > 0' },
+              { key: 'negative' as BalanceFilter, label: 'Due' },
+              { key: 'zero' as BalanceFilter, label: 'Zero' },
+            ]).map(f => (
+              <button
+                key={f.key}
+                onClick={() => setBalanceFilter(f.key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${balanceFilter === f.key ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
           <Input
             placeholder="Search by username, name, chat ID, or email..."
             value={search}
