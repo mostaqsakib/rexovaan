@@ -1,0 +1,1 @@
+DELETE FROM bot_flash_sales WHERE id='ceef48eb-ee52-401a-9f03-bb8841fe7ceb';
