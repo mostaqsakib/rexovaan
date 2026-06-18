@@ -909,28 +909,47 @@ async function unpinFlashSaleMessages(messageIds) {
 async function flashSaleTickerLoop() {
   while (true) {
     try {
-      // Process pending deletes: remove all broadcast messages, then delete the row
+      // Process pending deletes AFTER active sales so a slow/stuck delete (e.g. hundreds of
+      // old messages that fail to delete) cannot block new flash-sale broadcasts.
+      // Budget: only one pending-delete row per tick, and cap msg ops to avoid starving the loop.
       const { data: toDelete } = await supabase
         .from("bot_flash_sales")
         .select("*")
-        .eq("pending_delete", true);
+        .eq("pending_delete", true)
+        .order("updated_at", { ascending: true })
+        .limit(1);
       if (toDelete && toDelete.length > 0) {
         for (const sale of toDelete) {
-          const msgs = Array.isArray(sale.announcement_messages) ? sale.announcement_messages : [];
+          const allMsgs = Array.isArray(sale.announcement_messages) ? sale.announcement_messages : [];
+          const PER_TICK_BUDGET = 50;
+          const msgs = allMsgs.slice(0, PER_TICK_BUDGET);
+          const remaining = allMsgs.slice(PER_TICK_BUDGET);
           const unpinResult = await unpinFlashSaleMessages(msgs).catch((e) => ({ ok: false, failed: [{ error: e?.message || String(e) }] }));
           const deleteFailed = [];
           for (const m of msgs) {
             const result = await deleteOrNeutralizeFlashSaleMessage(m);
             if (!result.ok) deleteFailed.push({ ...m, error: result.description || result.response?.description || "delete failed" });
           }
-          if (!unpinResult.ok || deleteFailed.length > 0) {
-            console.error("[FlashSale] delete incomplete", { saleId: sale.id, unpinFailed: unpinResult.failed?.length || 0, deleteFailed: deleteFailed.length });
-            await supabase.from("bot_flash_sales").update({ updated_at: new Date().toISOString() }).eq("id", sale.id);
-            continue;
-          }
-          await supabase.from("bot_flash_sales").delete().eq("id", sale.id);
-          if (ADMIN_CHAT_ID) {
-            try { await sendMessage(ADMIN_CHAT_ID, `🗑️ <b>Flash Sale deleted</b>\n\nRemoved ${msgs.length} broadcast message(s).`); } catch (_) {}
+          // Drop successfully-processed messages; keep only remaining + still-failing ones.
+          const stillFailing = deleteFailed.map((f) => ({ chat_id: f.chat_id, message_id: f.message_id }));
+          const newAnnouncementMessages = [...stillFailing, ...remaining];
+          // Force-give-up safety: if a pending_delete row has been retrying for > 30 min, just
+          // drop the DB row so it doesn't block the loop forever.
+          const stuckMs = Date.now() - new Date(sale.updated_at || sale.created_at || Date.now()).getTime();
+          const giveUp = stuckMs > 30 * 60 * 1000;
+          if (newAnnouncementMessages.length > 0 && !giveUp) {
+            await supabase.from("bot_flash_sales").update({
+              announcement_messages: newAnnouncementMessages,
+              updated_at: new Date().toISOString(),
+            }).eq("id", sale.id);
+          } else {
+            if (giveUp && newAnnouncementMessages.length > 0) {
+              console.error("[FlashSale] giving up on stuck pending_delete", { saleId: sale.id, leftover: newAnnouncementMessages.length });
+            }
+            await supabase.from("bot_flash_sales").delete().eq("id", sale.id);
+            if (ADMIN_CHAT_ID) {
+              try { await sendMessage(ADMIN_CHAT_ID, `🗑️ <b>Flash Sale deleted</b>\n\nRemoved ${allMsgs.length - newAnnouncementMessages.length} broadcast message(s).`); } catch (_) {}
+            }
           }
         }
       }
