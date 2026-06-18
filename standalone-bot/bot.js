@@ -7416,25 +7416,33 @@ async function handleCallback(callbackQuery, emojiMap) {
   }
 }
 
-// ── Group: my_chat_member (bot added/removed) ──
+// ── Group/Channel: my_chat_member (bot added/removed) ──
 async function handleMyChatMember(event) {
   try {
     const chat = event.chat;
-    if (!chat || (chat.type !== "group" && chat.type !== "supergroup")) return;
+    if (!chat) return;
+    const isGroup = chat.type === "group" || chat.type === "supergroup";
+    const isChannel = chat.type === "channel";
+    if (!isGroup && !isChannel) return;
     const newStatus = event.new_chat_member?.status;
-    const isMember = newStatus === "administrator" || newStatus === "member";
+    // Channels: bot must be administrator to post. Groups: member or admin works.
+    const isMember = isChannel
+      ? newStatus === "administrator"
+      : (newStatus === "administrator" || newStatus === "member");
     if (isMember) {
       await supabase.from("bot_broadcast_groups").upsert(
         { chat_id: chat.id, title: chat.title || null, is_active: true, updated_at: new Date().toISOString() },
         { onConflict: "chat_id" }
       );
-      console.log(`✅ Bot joined group: ${chat.title} (${chat.id})`);
-      try {
-        await sendMessage(chat.id, `✅ <b>Bot connected!</b>\n\nThis group will now receive product updates, stock alerts, price changes, and announcements automatically.`);
-      } catch {}
+      console.log(`✅ Bot joined ${chat.type}: ${chat.title} (${chat.id})`);
+      if (isGroup) {
+        try {
+          await sendMessage(chat.id, `✅ <b>Bot connected!</b>\n\nThis ${chat.type} will now receive product updates, stock alerts, price changes, and announcements automatically.`);
+        } catch {}
+      }
     } else {
       await supabase.from("bot_broadcast_groups").update({ is_active: false, updated_at: new Date().toISOString() }).eq("chat_id", chat.id);
-      console.log(`❌ Bot removed from group: ${chat.title} (${chat.id})`);
+      console.log(`❌ Bot removed from ${chat.type}: ${chat.title} (${chat.id})`);
     }
   } catch (e) {
     console.error("handleMyChatMember error:", e.message);
