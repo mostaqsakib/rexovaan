@@ -752,7 +752,13 @@ function renderCountdownPremium(text, map) {
 function stripFormattingAroundCountdown(tpl) {
   let out = String(tpl || "");
   for (let i = 0; i < 5; i++) {
-    const next = out.replace(/<(b|i|u|s|code)>\s*\{countdown\}\s*<\/\1>/gi, "{countdown}");
+    // 1) Tight wrap: <b>{countdown}</b> → {countdown}
+    let next = out.replace(/<(b|i|u|s|code)>\s*\{countdown\}\s*<\/\1>/gi, "{countdown}");
+    // 2) Loose wrap with surrounding content/premium emoji on the time line:
+    //    <b>🕐 <tg-emoji ...>...</tg-emoji> {countdown}</b> → 🕐 <tg-emoji ...>...</tg-emoji> {countdown}
+    //    Preserves any custom_emoji_id and text the admin placed on the countdown line.
+    next = next.replace(/<(b|i|u|s|code)>([^<]*(?:<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>[^<]*)*)\{countdown\}([^<]*(?:<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>[^<]*)*)<\/\1>/gi,
+      "$2{countdown}$3");
     if (next === out) break;
     out = next;
   }
@@ -5160,6 +5166,24 @@ async function handleMessage(message, emojiMap) {
     const msgKey = customer.pending_action.replace("admin_editmsg_", "");
     const label = PAGE_MSG_KEYS[msgKey] || msgKey;
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    // ── Byte-aware capture of premium/custom emoji entities ──
+    // Telegram entity offsets are UTF-16 code-units; entitiesToHtml() already converts these
+    // and emits raw <tg-emoji emoji-id="..."> wrappers from each entity.custom_emoji_id.
+    // We additionally collect the raw IDs here so the admin sees confirmation that
+    // every premium emoji on the time/{countdown} line (or anywhere) was captured.
+    const entities = Array.isArray(message.entities) ? message.entities : [];
+    const capturedEmojiIds = [];
+    for (const ent of entities) {
+      if (ent?.type === "custom_emoji" && ent.custom_emoji_id) {
+        const startU16 = ent.offset || 0;
+        const endU16 = startU16 + (ent.length || 0);
+        // Byte/UTF-16 aware slice of the original placeholder glyph
+        const glyph = rawText.substring(startU16, endU16);
+        capturedEmojiIds.push({ id: String(ent.custom_emoji_id), glyph });
+      }
+    }
+
     const htmlText = prepareTelegramHtml(entitiesToHtml(rawText, message.entities));
     // Upsert into bot_settings
     const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", msgKey).maybeSingle();
@@ -5192,8 +5216,20 @@ async function handleMessage(message, emojiMap) {
     };
     previewText = replacePlaceholders(previewText, sampleReplacements);
     const editButtons = { inline_keyboard: [[{ text: "✏️ Edit More", callback_data: "adm_editmsg" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] };
+
+    // Build emoji capture summary (raw icon_custom_emoji_id values, like other handlers expose)
+    let emojiNote = "";
+    if (capturedEmojiIds.length > 0) {
+      const lines = capturedEmojiIds
+        .slice(0, 12)
+        .map((e, i) => `${i + 1}. ${escapeHtml(e.glyph)} → <code>${escapeHtml(e.id)}</code>`)
+        .join("\n");
+      const more = capturedEmojiIds.length > 12 ? `\n… +${capturedEmojiIds.length - 12} more` : "";
+      emojiNote = `\n\n🌟 <b>${capturedEmojiIds.length} premium emoji captured:</b>\n${lines}${more}`;
+    }
+
     // First send confirmation
-    await sendMessage(chatId, `✅ <b>${label}</b> message saved successfully!`, editButtons);
+    await sendMessage(chatId, `✅ <b>${label}</b> message saved successfully!${emojiNote}`, editButtons);
     // Then send preview separately so if it fails, confirmation is already sent
     try {
       const previewResult = await sendMessage(chatId, prepareTelegramHtml(`📝 <b>Preview:</b>\n\n${previewText}`));
@@ -6169,7 +6205,10 @@ async function handleCallback(callbackQuery, emojiMap) {
     };
     const placeholderInfo = placeholderMap[msgKey] || "No placeholders";
 
-    await editOrSend(chatId, msgId, `✏️ <b>Edit: ${label}</b>${currentPreview}\n\n📌 <b>Available Placeholders:</b>\n${placeholderInfo}\n\n👇 Send the new message now (with premium emojis & formatting).\n\n❌ /cancel to cancel`);
+    const timeLineHint = (msgKey === "msg_flash_sale" || msgKey === "msg_flash_sale_ended")
+      ? `\n\n⏱ <b>Premium emoji on the time / {countdown} line is fully supported.</b>\nPlace any premium emoji next to <code>{countdown}</code> (e.g. <code>🕐 {countdown}</code> with a premium clock). The raw <code>custom_emoji_id</code> is captured byte-aware and rendered via <code>&lt;tg-emoji&gt;</code> when broadcast.`
+      : "";
+    await editOrSend(chatId, msgId, `✏️ <b>Edit: ${label}</b>${currentPreview}\n\n📌 <b>Available Placeholders:</b>\n${placeholderInfo}${timeLineHint}\n\n👇 Send the new message now (with premium emojis & formatting).\n\n❌ /cancel to cancel`);
     return;
   }
 
