@@ -6439,7 +6439,10 @@ async function handleCallback(callbackQuery, emojiMap) {
     ];
     if (active && active.length > 0) {
       for (const s of active) {
-        buttons.push([{ text: `❌ End: ${s.bot_products?.name || "Product"}`, callback_data: `adm_fs_end_${s.id}` }]);
+        buttons.push([
+          { text: `♻️ Re-edit: ${s.bot_products?.name || "Product"}`, callback_data: `adm_fs_reedit_${s.id}` },
+          { text: `❌ End`, callback_data: `adm_fs_end_${s.id}` },
+        ]);
       }
     }
     buttons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
