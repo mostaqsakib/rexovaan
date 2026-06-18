@@ -6205,7 +6205,10 @@ async function handleCallback(callbackQuery, emojiMap) {
     };
     const placeholderInfo = placeholderMap[msgKey] || "No placeholders";
 
-    await editOrSend(chatId, msgId, `✏️ <b>Edit: ${label}</b>${currentPreview}\n\n📌 <b>Available Placeholders:</b>\n${placeholderInfo}\n\n👇 Send the new message now (with premium emojis & formatting).\n\n❌ /cancel to cancel`);
+    const timeLineHint = (msgKey === "msg_flash_sale" || msgKey === "msg_flash_sale_ended")
+      ? `\n\n⏱ <b>Premium emoji on the time / {countdown} line is fully supported.</b>\nPlace any premium emoji next to <code>{countdown}</code> (e.g. <code>🕐 {countdown}</code> with a premium clock). The raw <code>custom_emoji_id</code> is captured byte-aware and rendered via <code>&lt;tg-emoji&gt;</code> when broadcast.`
+      : "";
+    await editOrSend(chatId, msgId, `✏️ <b>Edit: ${label}</b>${currentPreview}\n\n📌 <b>Available Placeholders:</b>\n${placeholderInfo}${timeLineHint}\n\n👇 Send the new message now (with premium emojis & formatting).\n\n❌ /cancel to cancel`);
     return;
   }
 
