@@ -64,12 +64,12 @@ const CustomersTab = () => {
   const [activityCustomer, setActivityCustomer] = useState<Customer | null>(null);
   const [pricingCustomer, setPricingCustomer] = useState<Customer | null>(null);
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
+  const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('all');
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
-
 
   useEffect(() => {
     fetchCustomers(true);
-  }, [debouncedSearch, accountFilter]);
+  }, [debouncedSearch, accountFilter, balanceFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
