@@ -752,7 +752,13 @@ function renderCountdownPremium(text, map) {
 function stripFormattingAroundCountdown(tpl) {
   let out = String(tpl || "");
   for (let i = 0; i < 5; i++) {
-    const next = out.replace(/<(b|i|u|s|code)>\s*\{countdown\}\s*<\/\1>/gi, "{countdown}");
+    // 1) Tight wrap: <b>{countdown}</b> → {countdown}
+    let next = out.replace(/<(b|i|u|s|code)>\s*\{countdown\}\s*<\/\1>/gi, "{countdown}");
+    // 2) Loose wrap with surrounding content/premium emoji on the time line:
+    //    <b>🕐 <tg-emoji ...>...</tg-emoji> {countdown}</b> → 🕐 <tg-emoji ...>...</tg-emoji> {countdown}
+    //    Preserves any custom_emoji_id and text the admin placed on the countdown line.
+    next = next.replace(/<(b|i|u|s|code)>([^<]*(?:<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>[^<]*)*)\{countdown\}([^<]*(?:<tg-emoji[^>]*>[\s\S]*?<\/tg-emoji>[^<]*)*)<\/\1>/gi,
+      "$2{countdown}$3");
     if (next === out) break;
     out = next;
   }
