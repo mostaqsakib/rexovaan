@@ -3057,8 +3057,9 @@ function inferVerificationTargets(normalizedTxn, paymentMethodName = "") {
 
   // No method hint — fall back on TxID shape, but still keep Binance on by default.
   if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(txn)) return { binance: false, bybit: true, bep20: false, trc20: false, ton: false, ltc: false, bkash: false };
-  if (isBybitOrderLikeId(txn)) return { binance: false, bybit: true, bep20: false, trc20: false, ton: false, ltc: false, bkash: false };
-  if (/^\d{8,}$/.test(txn)) return { binance: true, bybit: false, bep20: false, trc20: false, ton: false, ltc: false, bkash: false };
+  if (isBybitOrderLikeId(txn)) return { binance: true, bybit: true, bep20: false, trc20: false, ton: false, ltc: false, bkash: false };
+  if (/^\d{8,}$/.test(txn)) return { binance: true, bybit: txn.length >= 15, bep20: false, trc20: false, ton: false, ltc: false, bkash: false };
+
   if (/^0x[a-fA-F0-9]{20,}$/.test(txn)) return { binance: true, bybit: false, bep20: true, trc20: false, ton: false, ltc: false, bkash: false };
   if (/^[a-fA-F0-9]{32,128}$/.test(txn)) return { binance: true, bybit: false, bep20: true, trc20: true, ton: false, ltc: true, bkash: false };
   if (/^[A-Za-z0-9_-]{40,128}$/.test(txn)) return { binance: true, bybit: false, bep20: false, trc20: false, ton: true, ltc: false, bkash: false };
