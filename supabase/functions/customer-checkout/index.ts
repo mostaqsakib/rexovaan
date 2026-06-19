@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     if (!product || !product.is_active) return new Response(JSON.stringify({ error: 'Product not available' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     if (product.is_manual_delivery) return new Response(JSON.stringify({ error: 'Manual delivery — please use Telegram bot' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    // Resolve unit price: special > flash (if cheaper) > tiered > base
+    // Resolve unit price: always the LOWEST of base, tier (for current qty), customer special, active flash.
     let unitPrice = Number(product.price);
     const { data: special } = await admin
       .from('bot_customer_pricing')
@@ -99,18 +99,14 @@ Deno.serve(async (req) => {
       .order('min_quantity', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (special) unitPrice = Number(special.price);
-    else {
-      const { data: tier } = await admin
-        .from('bot_product_pricing')
-        .select('*')
-        .eq('product_id', productId)
-        .lte('min_quantity', quantity)
-        .order('min_quantity', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (tier) unitPrice = Number(tier.price);
-    }
+    const { data: tier } = await admin
+      .from('bot_product_pricing')
+      .select('*')
+      .eq('product_id', productId)
+      .lte('min_quantity', quantity)
+      .order('min_quantity', { ascending: false })
+      .limit(1)
+      .maybeSingle();
     const { data: flash } = await admin
       .from('bot_flash_sales')
       .select('*')
@@ -120,7 +116,11 @@ Deno.serve(async (req) => {
       .order('sale_price', { ascending: true })
       .limit(1)
       .maybeSingle();
-    if (flash && Number(flash.sale_price) < unitPrice) unitPrice = Number(flash.sale_price);
+    const candidates: number[] = [unitPrice];
+    if (tier) candidates.push(Number(tier.price));
+    if (special) candidates.push(Number(special.price));
+    if (flash) candidates.push(Number(flash.sale_price));
+    unitPrice = Math.min(...candidates.filter((v) => Number.isFinite(v) && v >= 0));
 
     const totalPrice = +(unitPrice * quantity).toFixed(2);
 
