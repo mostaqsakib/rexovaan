@@ -1516,22 +1516,29 @@ async function getCustomerSpecialPriceInfo(customerId, productId) {
 }
 
 async function getTieredPrice(productId, qty, fallbackPrice, customerId = null) {
-  // Flash sale + customer special price — whichever is lower wins.
-  // Special price skips bulk/tiered pricing entirely. Special only applies if qty >= MOQ.
+  // Always charge the LOWEST applicable price among:
+  //   base price, bulk/tier price (for current qty), customer special price, active flash sale.
   const flash = await getActiveFlashSale(productId);
   const special = await getCustomerSpecialPrice(customerId, productId, qty);
 
-  if (special !== null && flash) return Math.min(special, Number(flash.sale_price));
-  if (special !== null) return special;
-  if (flash) return Number(flash.sale_price);
-
   const { data: tiers } = await supabase
     .from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity");
-  if (!tiers || tiers.length === 0) return fallbackPrice;
-  for (const tier of tiers) {
-    if (qty >= tier.min_quantity && (tier.max_quantity === null || qty <= tier.max_quantity)) return Number(tier.price);
+  let tierPrice = null;
+  if (tiers && tiers.length > 0) {
+    for (const tier of tiers) {
+      if (qty >= tier.min_quantity && (tier.max_quantity === null || qty <= tier.max_quantity)) {
+        tierPrice = Number(tier.price);
+        break;
+      }
+    }
+    if (tierPrice === null) tierPrice = Number(tiers[tiers.length - 1].price);
   }
-  return Number(tiers[tiers.length - 1].price);
+
+  const candidates = [Number(fallbackPrice)];
+  if (tierPrice !== null) candidates.push(tierPrice);
+  if (special !== null) candidates.push(Number(special));
+  if (flash) candidates.push(Number(flash.sale_price));
+  return Math.min(...candidates.filter((v) => Number.isFinite(v) && v >= 0));
 }
 
 
