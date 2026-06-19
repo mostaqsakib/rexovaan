@@ -52,6 +52,8 @@ const fmtDate = (s: string) => {
 const WebOrdersTab = () => {
   const [orders, setOrders] = useState<WebOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'web' | 'bot'>('all');
@@ -59,18 +61,17 @@ const WebOrdersTab = () => {
   const [refundNote, setRefundNote] = useState('');
   const [refunding, setRefunding] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const PAGE_SIZE = 500;
+
+  const fetchPage = async (from: number, to: number): Promise<WebOrder[]> => {
     const { data, error } = await supabase
       .from('bot_orders')
       .select('id, customer_id, product_name, quantity, total_price, status, payment_method, txn_hash, source, details, delivered_items, created_at, delivered_at')
       .order('created_at', { ascending: false })
-      .limit(500);
+      .range(from, to);
     if (error) {
       toast.error('Orders could not be loaded');
-      setOrders([]);
-      setLoading(false);
-      return;
+      return [];
     }
     const customerIds = Array.from(new Set((data || []).map((r: any) => r.customer_id).filter(Boolean)));
     let customersById: Record<string, WebOrder['customer']> = {};
@@ -84,9 +85,24 @@ const WebOrdersTab = () => {
         return acc;
       }, {});
     }
-    const rows: WebOrder[] = (data || []).map((r: any) => ({ ...r, customer: customersById[r.customer_id] || null }));
+    return (data || []).map((r: any) => ({ ...r, customer: customersById[r.customer_id] || null }));
+  };
+
+  const load = async () => {
+    setLoading(true);
+    const rows = await fetchPage(0, PAGE_SIZE - 1);
     setOrders(rows);
+    setHasMore(rows.length === PAGE_SIZE);
     setLoading(false);
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const rows = await fetchPage(orders.length, orders.length + PAGE_SIZE - 1);
+    setOrders(prev => [...prev, ...rows]);
+    setHasMore(rows.length === PAGE_SIZE);
+    setLoadingMore(false);
   };
 
   useEffect(() => { void load(); }, []);
@@ -249,6 +265,14 @@ const WebOrdersTab = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {hasMore && !loading && !q && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore} className="gap-1.5">
+            {loadingMore ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</> : 'Load more orders'}
+          </Button>
         </div>
       )}
 

@@ -50,26 +50,50 @@ export default function Orders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [products, setProducts] = useState<Record<string, { delivery_instruction: string | null; delivery_media: any }>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+
+  const PAGE_SIZE = 50;
+
+  const loadProductsFor = async (rows: any[]) => {
+    const ids = Array.from(new Set(rows.map((o: any) => o.product_id).filter(Boolean)));
+    if (!ids.length) return;
+    const { data: prods } = await supabase.from('bot_products').select('id,delivery_instruction,delivery_media').in('id', ids as string[]);
+    setProducts(prev => {
+      const map: Record<string, any> = { ...prev };
+      (prods || []).forEach((p: any) => {
+        let media = p.delivery_media;
+        if (typeof media === 'string') { try { media = JSON.parse(media); } catch { media = []; } }
+        map[p.id] = { delivery_instruction: p.delivery_instruction, delivery_media: media };
+      });
+      return map;
+    });
+  };
+
+  const loadMore = async () => {
+    if (!customer || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const from = orders.length;
+    const to = from + PAGE_SIZE - 1;
+    const { data } = await supabase.from('bot_orders').select('*').eq('customer_id', customer.id).neq('status', 'refunded').order('created_at', { ascending: false }).range(from, to);
+    const rows = data || [];
+    setOrders(prev => [...prev, ...rows]);
+    setHasMore(rows.length === PAGE_SIZE);
+    await loadProductsFor(rows);
+    setLoadingMore(false);
+  };
 
   useEffect(() => {
     if (!authLoading && !user) { navigate('/login?next=/account/orders'); return; }
     if (!customer) return;
     (async () => {
-      const { data } = await supabase.from('bot_orders').select('*').eq('customer_id', customer.id).neq('status', 'refunded').order('created_at', { ascending: false }).limit(50);
-      setOrders(data || []);
-      const ids = Array.from(new Set((data || []).map((o: any) => o.product_id).filter(Boolean)));
-      if (ids.length) {
-        const { data: prods } = await supabase.from('bot_products').select('id,delivery_instruction,delivery_media').in('id', ids as string[]);
-        const map: Record<string, any> = {};
-        (prods || []).forEach((p: any) => {
-          let media = p.delivery_media;
-          if (typeof media === 'string') { try { media = JSON.parse(media); } catch { media = []; } }
-          map[p.id] = { delivery_instruction: p.delivery_instruction, delivery_media: media };
-        });
-        setProducts(map);
-      }
+      const { data } = await supabase.from('bot_orders').select('*').eq('customer_id', customer.id).neq('status', 'refunded').order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
+      const rows = data || [];
+      setOrders(rows);
+      setHasMore(rows.length === PAGE_SIZE);
+      await loadProductsFor(rows);
       setLoading(false);
     })();
   }, [customer, user, authLoading]);
@@ -205,6 +229,13 @@ export default function Orders() {
           </div>
         );
       })}
+      {hasMore && !query && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…</> : 'Load more orders'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
