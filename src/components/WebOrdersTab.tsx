@@ -177,7 +177,7 @@ const WebOrdersTab = () => {
             </button>
           ))}
         </div>
-        <Button variant="outline" size="sm" onClick={load} className="gap-1.5">
+        <Button variant="outline" size="sm" onClick={() => load(q)} className="gap-1.5">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </Button>
       </div>
