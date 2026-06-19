@@ -1516,22 +1516,29 @@ async function getCustomerSpecialPriceInfo(customerId, productId) {
 }
 
 async function getTieredPrice(productId, qty, fallbackPrice, customerId = null) {
-  // Flash sale + customer special price — whichever is lower wins.
-  // Special price skips bulk/tiered pricing entirely. Special only applies if qty >= MOQ.
+  // Always charge the LOWEST applicable price among:
+  //   base price, bulk/tier price (for current qty), customer special price, active flash sale.
   const flash = await getActiveFlashSale(productId);
   const special = await getCustomerSpecialPrice(customerId, productId, qty);
 
-  if (special !== null && flash) return Math.min(special, Number(flash.sale_price));
-  if (special !== null) return special;
-  if (flash) return Number(flash.sale_price);
-
   const { data: tiers } = await supabase
     .from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity");
-  if (!tiers || tiers.length === 0) return fallbackPrice;
-  for (const tier of tiers) {
-    if (qty >= tier.min_quantity && (tier.max_quantity === null || qty <= tier.max_quantity)) return Number(tier.price);
+  let tierPrice = null;
+  if (tiers && tiers.length > 0) {
+    for (const tier of tiers) {
+      if (qty >= tier.min_quantity && (tier.max_quantity === null || qty <= tier.max_quantity)) {
+        tierPrice = Number(tier.price);
+        break;
+      }
+    }
+    if (tierPrice === null) tierPrice = Number(tiers[tiers.length - 1].price);
   }
-  return Number(tiers[tiers.length - 1].price);
+
+  const candidates = [Number(fallbackPrice)];
+  if (tierPrice !== null) candidates.push(tierPrice);
+  if (special !== null) candidates.push(Number(special));
+  if (flash) candidates.push(Number(flash.sale_price));
+  return Math.min(...candidates.filter((v) => Number.isFinite(v) && v >= 0));
 }
 
 
@@ -3581,14 +3588,25 @@ async function buildProductDetailMessage(product, tiers, customerId = null) {
   const specialInfo = await getCustomerSpecialPriceInfo(customerId, product.id);
   const special = specialInfo?.price ?? null;
   const specialMoq = specialInfo?.minQuantity ?? 1;
-  // Special applies immediately only if MOQ === 1. Otherwise we just show it as a conditional offer.
   const specialEligibleNow = special !== null && specialMoq <= 1;
-  const useSpecial = specialEligibleNow && (!flashSale || Number(flashSale.sale_price) >= special);
 
-  if (flashSale && !useSpecial) {
+  // Always show the lowest of the immediately-applicable prices.
+  const regularPrice = (tiers && tiers.length > 0) ? Number(tiers[0].price) : Number(product.price);
+  const flashPrice = flashSale ? Number(flashSale.sale_price) : null;
+  const eligibleSpecial = specialEligibleNow ? special : null;
+
+  const candidates = [regularPrice];
+  if (flashPrice !== null) candidates.push(flashPrice);
+  if (eligibleSpecial !== null) candidates.push(eligibleSpecial);
+  const lowest = Math.min(...candidates);
+
+  const flashIsLowest = flashPrice !== null && flashPrice <= lowest;
+  const specialIsLowest = !flashIsLowest && eligibleSpecial !== null && eligibleSpecial <= lowest;
+
+  if (flashIsLowest) {
     priceLine = await buildProductFlashSaleSnippet(flashSale, product, tiers);
-  } else if (useSpecial) {
-    priceLine = `Price: <b>$${formatPrice(special)}</b> / code  <i>(special)</i>\n`;
+  } else if (specialIsLowest) {
+    priceLine = `Price: <b>$${formatPrice(eligibleSpecial)}</b> / code  <i>(special)</i>\n`;
   } else if (tiers && tiers.length > 0) {
     priceLine = `Price: <b>$${formatPrice(tiers[0].price)}</b> / code\n`;
     if (tiers.length > 1) {

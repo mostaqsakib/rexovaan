@@ -50,14 +50,13 @@ export default function ProductDetail() {
   if (loading) return <div className="grid place-items-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!product) return <div className="premium-card p-12 text-center"><p className="text-muted-foreground">Product not found.</p><Button asChild className="mt-4"><Link to="/">Back to shop</Link></Button></div>;
 
-  // Resolve unit price
-  let unit = Number(product.price);
-  if (special && qty >= special.min_quantity) unit = Number(special.price);
-  else {
-    const tier = [...tiers].reverse().find(t => qty >= t.min_quantity && (!t.max_quantity || qty <= t.max_quantity));
-    if (tier) unit = Number(tier.price);
-  }
-  if (flash && Number(flash.sale_price) < unit) unit = Number(flash.sale_price);
+  // Resolve unit price — always charge the LOWEST applicable price.
+  const _candidates: number[] = [Number(product.price)];
+  const _tier = [...tiers].reverse().find(t => qty >= t.min_quantity && (!t.max_quantity || qty <= t.max_quantity));
+  if (_tier) _candidates.push(Number(_tier.price));
+  if (special && qty >= special.min_quantity) _candidates.push(Number(special.price));
+  if (flash) _candidates.push(Number(flash.sale_price));
+  const unit = Math.min(..._candidates.filter((v) => Number.isFinite(v) && v >= 0));
   const total = +(unit * qty).toFixed(2);
 
   return (
