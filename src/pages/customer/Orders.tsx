@@ -88,25 +88,29 @@ export default function Orders() {
   useEffect(() => {
     if (!authLoading && !user) { navigate('/login?next=/account/orders'); return; }
     if (!customer) return;
-    (async () => {
-      const { data } = await supabase.from('bot_orders').select('*').eq('customer_id', customer.id).neq('status', 'refunded').order('created_at', { ascending: false }).range(0, PAGE_SIZE - 1);
+    let cancelled = false;
+    const q = query.trim().replace(/^#/, '');
+    setLoading(true);
+    const handle = setTimeout(async () => {
+      let req = supabase.from('bot_orders').select('*').eq('customer_id', customer.id).neq('status', 'refunded').order('created_at', { ascending: false });
+      if (q) {
+        // Server-side search across all orders (not just loaded page)
+        req = req.ilike('product_name', `%${q}%`).limit(500);
+      } else {
+        req = req.range(0, PAGE_SIZE - 1);
+      }
+      const { data } = await req;
+      if (cancelled) return;
       const rows = data || [];
       setOrders(rows);
-      setHasMore(rows.length === PAGE_SIZE);
+      setHasMore(!q && rows.length === PAGE_SIZE);
       await loadProductsFor(rows);
       setLoading(false);
-    })();
-  }, [customer, user, authLoading]);
+    }, query ? 300 : 0);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [customer, user, authLoading, query]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase().replace(/^#/, '');
-    if (!q) return orders;
-    return orders.filter(o => {
-      const name = String(o.product_name || '').toLowerCase();
-      const no = shortId(o.id).toLowerCase();
-      return name.includes(q) || no.includes(q);
-    });
-  }, [orders, query]);
+  const filtered = orders;
 
   if (loading || authLoading) return <div className="grid place-items-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 

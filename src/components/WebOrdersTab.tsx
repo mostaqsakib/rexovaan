@@ -63,12 +63,17 @@ const WebOrdersTab = () => {
 
   const PAGE_SIZE = 500;
 
-  const fetchPage = async (from: number, to: number): Promise<WebOrder[]> => {
-    const { data, error } = await supabase
+  const fetchPage = async (from: number, to: number, search?: string): Promise<WebOrder[]> => {
+    let req = supabase
       .from('bot_orders')
       .select('id, customer_id, product_name, quantity, total_price, status, payment_method, txn_hash, source, details, delivered_items, created_at, delivered_at')
-      .order('created_at', { ascending: false })
-      .range(from, to);
+      .order('created_at', { ascending: false });
+    if (search && search.trim()) {
+      req = req.ilike('product_name', `%${search.trim()}%`).range(0, 1999);
+    } else {
+      req = req.range(from, to);
+    }
+    const { data, error } = await req;
     if (error) {
       toast.error('Orders could not be loaded');
       return [];
@@ -88,11 +93,11 @@ const WebOrdersTab = () => {
     return (data || []).map((r: any) => ({ ...r, customer: customersById[r.customer_id] || null }));
   };
 
-  const load = async () => {
+  const load = async (search?: string) => {
     setLoading(true);
-    const rows = await fetchPage(0, PAGE_SIZE - 1);
+    const rows = await fetchPage(0, PAGE_SIZE - 1, search);
     setOrders(rows);
-    setHasMore(rows.length === PAGE_SIZE);
+    setHasMore(!search?.trim() && rows.length === PAGE_SIZE);
     setLoading(false);
   };
 
@@ -105,7 +110,10 @@ const WebOrdersTab = () => {
     setLoadingMore(false);
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const handle = setTimeout(() => { void load(q); }, q ? 300 : 0);
+    return () => clearTimeout(handle);
+  }, [q]);
 
   const filtered = orders.filter((o) => {
     if (sourceFilter !== 'all' && getOrderSource(o) !== sourceFilter) return false;
@@ -169,7 +177,7 @@ const WebOrdersTab = () => {
             </button>
           ))}
         </div>
-        <Button variant="outline" size="sm" onClick={load} className="gap-1.5">
+        <Button variant="outline" size="sm" onClick={() => load(q)} className="gap-1.5">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </Button>
       </div>
