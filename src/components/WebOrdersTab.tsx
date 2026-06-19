@@ -268,6 +268,14 @@ const WebOrdersTab = () => {
         </div>
       )}
 
+      {hasMore && !loading && !q && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" size="sm" onClick={loadMore} disabled={loadingMore} className="gap-1.5">
+            {loadingMore ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</> : 'Load more orders'}
+          </Button>
+        </div>
+      )}
+
       <AlertDialog open={!!refundTarget} onOpenChange={(o) => !o && !refunding && setRefundTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
