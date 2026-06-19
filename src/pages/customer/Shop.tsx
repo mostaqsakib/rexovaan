@@ -189,7 +189,8 @@ export default function Shop() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map(p => {
               const f = flashMap[p.id];
-              const effective = f && f.sale_price < p.price ? Number(f.sale_price) : Number(p.price);
+              const effective = lowestFor(p);
+              const discounted = effective < Number(p.price);
               const stock = p.last_known_stock;
               const stockBadge = p.is_manual_delivery
                 ? { cls: 'bg-success/10 text-success border-success/30', label: 'In stock' }
@@ -212,7 +213,7 @@ export default function Shop() {
                       <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">Starting at</div>
                       <div className="flex items-baseline gap-2 flex-wrap">
                         <span className="text-2xl font-bold gradient-text">{format(effective)}</span>
-                        {f && f.sale_price < p.price && <span className="text-sm text-muted-foreground line-through">{format(p.price)}</span>}
+                        {discounted && <span className="text-sm text-muted-foreground line-through">{format(p.price)}</span>}
                       </div>
                     </div>
                     <div className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-full border ${stockBadge.cls}`}>
