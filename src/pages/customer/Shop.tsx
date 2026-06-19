@@ -25,30 +25,51 @@ interface Flash { product_id: string; sale_price: number; ends_at: string; }
 
 
 export default function Shop() {
-  const { user } = useCustomerAuth();
+  const { user, customer } = useCustomerAuth();
   const { format } = useCurrency();
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [flashList, setFlashList] = useState<Flash[]>([]);
+  const [specialList, setSpecialList] = useState<Array<{ product_id: string; price: number; min_quantity: number }>>([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [{ data: prods }, { data: flashes }] = await Promise.all([
+      const [{ data: prods }, { data: flashes }, sp] = await Promise.all([
         supabase.from('bot_products').select('id,name,description,price,short_code,last_known_stock,is_manual_delivery,custom_emoji_id').eq('is_active', true).order('sort_order'),
         supabase.from('bot_flash_sales').select('product_id,sale_price,ends_at').eq('is_active', true).gte('ends_at', new Date().toISOString()),
+        customer
+          ? supabase.from('bot_customer_pricing').select('product_id,price,min_quantity').eq('customer_id', customer.id).eq('is_active', true)
+          : Promise.resolve({ data: [] } as any),
       ]);
       setProducts((prods as any) || []);
       setFlashList((flashes as any) || []);
+      setSpecialList(((sp as any)?.data as any) || []);
       setLoading(false);
     })();
-  }, []);
+  }, [customer?.id]);
 
   const flashMap = useMemo(() => {
     const m: Record<string, Flash> = {};
     flashList.forEach(f => { if (!m[f.product_id] || f.sale_price < m[f.product_id].sale_price) m[f.product_id] = f; });
     return m;
   }, [flashList]);
+
+  const specialMap = useMemo(() => {
+    const m: Record<string, { price: number; min_quantity: number }> = {};
+    specialList.forEach(s => { m[s.product_id] = { price: Number(s.price), min_quantity: Number(s.min_quantity || 1) }; });
+    return m;
+  }, [specialList]);
+
+  // Returns the lowest immediately-applicable price for a product (qty=1).
+  const lowestFor = (p: ProductLite) => {
+    const candidates: number[] = [Number(p.price)];
+    const f = flashMap[p.id];
+    if (f) candidates.push(Number(f.sale_price));
+    const s = specialMap[p.id];
+    if (s && s.min_quantity <= 1) candidates.push(s.price);
+    return Math.min(...candidates);
+  };
 
   const filtered = products.filter(p => !q || p.name.toLowerCase().includes(q.toLowerCase()));
   const flashProducts = products.filter(p => flashMap[p.id]);
