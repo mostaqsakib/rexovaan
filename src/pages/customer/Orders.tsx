@@ -229,6 +229,13 @@ export default function Orders() {
           </div>
         );
       })}
+      {hasMore && !query && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…</> : 'Load more orders'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
