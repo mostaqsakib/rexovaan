@@ -3588,14 +3588,25 @@ async function buildProductDetailMessage(product, tiers, customerId = null) {
   const specialInfo = await getCustomerSpecialPriceInfo(customerId, product.id);
   const special = specialInfo?.price ?? null;
   const specialMoq = specialInfo?.minQuantity ?? 1;
-  // Special applies immediately only if MOQ === 1. Otherwise we just show it as a conditional offer.
   const specialEligibleNow = special !== null && specialMoq <= 1;
-  const useSpecial = specialEligibleNow && (!flashSale || Number(flashSale.sale_price) >= special);
 
-  if (flashSale && !useSpecial) {
+  // Always show the lowest of the immediately-applicable prices.
+  const regularPrice = (tiers && tiers.length > 0) ? Number(tiers[0].price) : Number(product.price);
+  const flashPrice = flashSale ? Number(flashSale.sale_price) : null;
+  const eligibleSpecial = specialEligibleNow ? special : null;
+
+  const candidates = [regularPrice];
+  if (flashPrice !== null) candidates.push(flashPrice);
+  if (eligibleSpecial !== null) candidates.push(eligibleSpecial);
+  const lowest = Math.min(...candidates);
+
+  const flashIsLowest = flashPrice !== null && flashPrice <= lowest;
+  const specialIsLowest = !flashIsLowest && eligibleSpecial !== null && eligibleSpecial <= lowest;
+
+  if (flashIsLowest) {
     priceLine = await buildProductFlashSaleSnippet(flashSale, product, tiers);
-  } else if (useSpecial) {
-    priceLine = `Price: <b>$${formatPrice(special)}</b> / code  <i>(special)</i>\n`;
+  } else if (specialIsLowest) {
+    priceLine = `Price: <b>$${formatPrice(eligibleSpecial)}</b> / code  <i>(special)</i>\n`;
   } else if (tiers && tiers.length > 0) {
     priceLine = `Price: <b>$${formatPrice(tiers[0].price)}</b> / code\n`;
     if (tiers.length > 1) {
