@@ -109,6 +109,51 @@ async function purchaseFromSource(product: Record<string, unknown>, quantity: nu
   return payload.accounts || [];
 }
 
+async function resolveLowestUnitPrice(
+  supabase: ReturnType<typeof createClient>,
+  product: Record<string, any>,
+  quantity: number,
+  customerId: string | null,
+) {
+  const candidates: number[] = [Number(product.price || 0)];
+  const { data: tier } = await supabase
+    .from('bot_product_pricing')
+    .select('price')
+    .eq('product_id', product.id)
+    .lte('min_quantity', quantity)
+    .order('min_quantity', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (tier) candidates.push(Number(tier.price));
+
+  if (customerId) {
+    const { data: special } = await supabase
+      .from('bot_customer_pricing')
+      .select('price')
+      .eq('customer_id', customerId)
+      .eq('product_id', product.id)
+      .eq('is_active', true)
+      .lte('min_quantity', quantity)
+      .order('min_quantity', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (special) candidates.push(Number(special.price));
+  }
+
+  const { data: flash } = await supabase
+    .from('bot_flash_sales')
+    .select('sale_price')
+    .eq('product_id', product.id)
+    .eq('is_active', true)
+    .gte('ends_at', new Date().toISOString())
+    .order('sale_price', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (flash) candidates.push(Number(flash.sale_price));
+
+  return Math.min(...candidates.filter((v) => Number.isFinite(v) && v >= 0));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -179,13 +224,25 @@ Deno.serve(async (req) => {
         for (const [pid, c] of counts) stockByProduct.set(pid, c);
       }
 
+      // Compute lowest unit price (qty=1) per product for the reseller's customer.
+      const lowestByProduct = new Map<string, number>();
+      await Promise.all((products || []).map(async (p: any) => {
+        try {
+          const lp = await resolveLowestUnitPrice(supabase, p, 1, reseller.customer_id || null);
+          lowestByProduct.set(p.id, lp);
+        } catch (_) {
+          lowestByProduct.set(p.id, Number(p.price || 0));
+        }
+      }));
+
       return json({
         ok: true,
         reseller: { name: reseller.name, balance: apiBalance },
         products: (products || []).map((product: any) => ({
           id: product.id,
           name: product.name,
-          wholesale_price: Number(product.price || 0),
+          wholesale_price: lowestByProduct.get(product.id) ?? Number(product.price || 0),
+          regular_price: Number(product.price || 0),
           currency: product.currency || "USDT",
           description: product.description || null,
           delivery_instruction: product.delivery_instruction || null,
@@ -210,18 +267,8 @@ Deno.serve(async (req) => {
       if (product.source_id && product.source_product_id) {
         if (product.is_manual_delivery) return json({ ok: false, error: "Manual delivery products are not available via reseller API" }, 400);
 
-        // Resolve unit price: apply active flash sale if cheaper than base
-        let unitPrice = Number(product.price || 0);
-        const { data: flash } = await supabase
-          .from("bot_flash_sales")
-          .select("sale_price")
-          .eq("product_id", product.id)
-          .eq("is_active", true)
-          .gte("ends_at", new Date().toISOString())
-          .order("sale_price", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (flash && Number(flash.sale_price) < unitPrice) unitPrice = Number(flash.sale_price);
+        // Resolve unit price: always the LOWEST of base, tier, customer special, active flash.
+        const unitPrice = await resolveLowestUnitPrice(supabase, product, parsed.data.quantity, reseller.customer_id || null);
 
         const totalCost = +(unitPrice * parsed.data.quantity).toFixed(2);
         if (apiBalance < totalCost) return json({ ok: false, error: "Insufficient reseller balance" }, 400);
@@ -270,6 +317,33 @@ Deno.serve(async (req) => {
       }
       const accounts = normalizeDelivery(order?.details);
       if (!accounts.length) return json({ ok: false, error: "Not enough stock available" }, 409);
+
+      // Apply lowest-price correction (RPC uses regular price). Refund the difference if cheaper.
+      try {
+        const lowestUnit = await resolveLowestUnitPrice(supabase, product, parsed.data.quantity, reseller.customer_id || null);
+        const rpcUnit = Number(order?.unit_cost || product.price || 0);
+        if (Number.isFinite(lowestUnit) && lowestUnit < rpcUnit) {
+          const newTotal = +(lowestUnit * parsed.data.quantity).toFixed(2);
+          const refund = +(Number(order?.total_cost || rpcUnit * parsed.data.quantity) - newTotal).toFixed(2);
+          if (refund > 0) {
+            const correctedBalance = +(apiBalance + refund).toFixed(2);
+            await supabase.from("bot_reseller_orders").update({ unit_cost: lowestUnit, total_cost: newTotal }).eq("id", order.id);
+            await supabase.from("bot_resellers").update({ balance: correctedBalance, updated_at: new Date().toISOString() }).eq("id", reseller.id);
+            if (reseller.customer_id) {
+              await supabase.from("bot_customers").update({ balance: correctedBalance, updated_at: new Date().toISOString() }).eq("id", reseller.customer_id);
+              await supabase.from("bot_orders").update({ total_price: newTotal }).eq("id", order.order_id || order.id).eq("customer_id", reseller.customer_id);
+            }
+            await supabase.from("bot_reseller_balance_transactions").insert({ reseller_id: reseller.id, order_id: order.id, type: "price_adjustment", amount: refund, balance_after: correctedBalance, note: "Lowest-price adjustment (flash/special/tier)" });
+            order.unit_cost = lowestUnit;
+            order.total_cost = newTotal;
+            order.balance_after = correctedBalance;
+            apiBalance = correctedBalance;
+          }
+        }
+      } catch (e) {
+        console.error("reseller_api_price_adjust_failed", e);
+      }
+
       await notifyAdminApiOrder(order || {}, reseller.name);
       return json({ ok: true, order: { ...order, accounts, account: accounts[0] }, accounts, account: accounts[0] });
     }
