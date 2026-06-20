@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
       // price across ALL tiers / customer-special prices / active flash sales.
       const lowestByProduct = new Map<string, number>();
       if (productIds.length > 0) {
-        const nowIso = new Date().toISOString();
+        const nowMs = Date.now();
         const [tiersRes, specialsRes, flashRes] = await Promise.all([
           supabase
             .from('bot_product_pricing')
@@ -243,13 +243,17 @@ Deno.serve(async (req) => {
                 .eq('is_active', true)
                 .in('product_id', productIds)
             : Promise.resolve({ data: [] as any[], error: null }),
+          // Fetch all flash sales for these products; filter active/ends_at in JS so we
+          // never miss rows due to subtle column / timestamp issues.
           supabase
             .from('bot_flash_sales')
-            .select('product_id, sale_price')
-            .eq('is_active', true)
-            .gte('ends_at', nowIso)
+            .select('product_id, sale_price, is_active, ends_at, pending_delete')
             .in('product_id', productIds),
         ]);
+
+        if (tiersRes.error) console.error('reseller_api_tiers_err', tiersRes.error);
+        if ((specialsRes as any).error) console.error('reseller_api_specials_err', (specialsRes as any).error);
+        if (flashRes.error) console.error('reseller_api_flash_err', flashRes.error);
 
         const pushCandidate = (pid: string, value: number) => {
           if (!Number.isFinite(value) || value < 0) return;
@@ -263,12 +267,24 @@ Deno.serve(async (req) => {
         for (const row of (tiersRes.data || [])) {
           pushCandidate(row.product_id, Number(row.price));
         }
-        for (const row of (specialsRes.data || [])) {
+        for (const row of ((specialsRes as any).data || [])) {
           pushCandidate(row.product_id, Number(row.price));
         }
+        let flashApplied = 0;
         for (const row of (flashRes.data || [])) {
+          const active = row.is_active === true && row.pending_delete !== true;
+          const endsMs = row.ends_at ? Date.parse(row.ends_at) : 0;
+          if (!active || !endsMs || endsMs < nowMs) continue;
           pushCandidate(row.product_id, Number(row.sale_price));
+          flashApplied++;
         }
+        console.log('reseller_api_lowest', {
+          products: productIds.length,
+          flashRows: (flashRes.data || []).length,
+          flashApplied,
+          tierRows: (tiersRes.data || []).length,
+          specialRows: ((specialsRes as any).data || []).length,
+        });
       }
 
       return json({
