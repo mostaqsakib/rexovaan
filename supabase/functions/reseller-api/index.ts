@@ -225,17 +225,14 @@ Deno.serve(async (req) => {
         for (const [pid, c] of counts) stockByProduct.set(pid, c);
       }
 
-      // Compute lowest available unit price per product for the reseller's customer.
-      // For listing we ignore min_quantity filters so we surface the best possible
-      // price across ALL tiers / customer-special prices / active flash sales.
+      // Compute lowest single-quantity unit price per product for the reseller's customer.
+      // We deliberately EXCLUDE bulk/tier pricing here because tiers require a min_quantity
+      // and shouldn't surface as the default listing price. Only base, customer-special,
+      // and active flash sale prices are considered.
       const lowestByProduct = new Map<string, number>();
       if (productIds.length > 0) {
         const nowMs = Date.now();
-        const [tiersRes, specialsRes, flashRes] = await Promise.all([
-          supabase
-            .from('bot_product_pricing')
-            .select('product_id, price')
-            .in('product_id', productIds),
+        const [specialsRes, flashRes] = await Promise.all([
           reseller.customer_id
             ? supabase
                 .from('bot_customer_pricing')
@@ -252,7 +249,6 @@ Deno.serve(async (req) => {
             .in('product_id', productIds),
         ]);
 
-        if (tiersRes.error) console.error('reseller_api_tiers_err', tiersRes.error);
         if ((specialsRes as any).error) console.error('reseller_api_specials_err', (specialsRes as any).error);
         if (flashRes.error) console.error('reseller_api_flash_err', flashRes.error);
 
@@ -264,9 +260,6 @@ Deno.serve(async (req) => {
 
         for (const p of (products || [])) {
           pushCandidate(p.id, Number(p.price || 0));
-        }
-        for (const row of (tiersRes.data || [])) {
-          pushCandidate(row.product_id, Number(row.price));
         }
         for (const row of ((specialsRes as any).data || [])) {
           pushCandidate(row.product_id, Number(row.price));
@@ -283,7 +276,6 @@ Deno.serve(async (req) => {
           products: productIds.length,
           flashRows: (flashRes.data || []).length,
           flashApplied,
-          tierRows: (tiersRes.data || []).length,
           specialRows: ((specialsRes as any).data || []).length,
         });
       }
