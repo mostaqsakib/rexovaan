@@ -224,16 +224,52 @@ Deno.serve(async (req) => {
         for (const [pid, c] of counts) stockByProduct.set(pid, c);
       }
 
-      // Compute lowest unit price (qty=1) per product for the reseller's customer.
+      // Compute lowest available unit price per product for the reseller's customer.
+      // For listing we ignore min_quantity filters so we surface the best possible
+      // price across ALL tiers / customer-special prices / active flash sales.
       const lowestByProduct = new Map<string, number>();
-      await Promise.all((products || []).map(async (p: any) => {
-        try {
-          const lp = await resolveLowestUnitPrice(supabase, p, 1, reseller.customer_id || null);
-          lowestByProduct.set(p.id, lp);
-        } catch (_) {
-          lowestByProduct.set(p.id, Number(p.price || 0));
+      if (productIds.length > 0) {
+        const nowIso = new Date().toISOString();
+        const [tiersRes, specialsRes, flashRes] = await Promise.all([
+          supabase
+            .from('bot_product_pricing')
+            .select('product_id, price')
+            .in('product_id', productIds),
+          reseller.customer_id
+            ? supabase
+                .from('bot_customer_pricing')
+                .select('product_id, price')
+                .eq('customer_id', reseller.customer_id)
+                .eq('is_active', true)
+                .in('product_id', productIds)
+            : Promise.resolve({ data: [] as any[], error: null }),
+          supabase
+            .from('bot_flash_sales')
+            .select('product_id, sale_price')
+            .eq('is_active', true)
+            .gte('ends_at', nowIso)
+            .in('product_id', productIds),
+        ]);
+
+        const pushCandidate = (pid: string, value: number) => {
+          if (!Number.isFinite(value) || value < 0) return;
+          const cur = lowestByProduct.get(pid);
+          if (cur === undefined || value < cur) lowestByProduct.set(pid, value);
+        };
+
+        for (const p of (products || [])) {
+          pushCandidate(p.id, Number(p.price || 0));
         }
-      }));
+        for (const row of (tiersRes.data || [])) {
+          pushCandidate(row.product_id, Number(row.price));
+        }
+        for (const row of (specialsRes.data || [])) {
+          pushCandidate(row.product_id, Number(row.price));
+        }
+        for (const row of (flashRes.data || [])) {
+          pushCandidate(row.product_id, Number(row.sale_price));
+        }
+      }
 
       return json({
         ok: true,
