@@ -200,6 +200,7 @@ Deno.serve(async (req) => {
     }
 
     if (req.method === "GET" && action === "products") {
+      console.log('reseller_api_products_start', { reseller_id: reseller.id, customer_id: reseller.customer_id });
       const { data: products, error: productsError } = await supabase
         .from("bot_products")
         .select("id,name,price,currency,description,delivery_instruction,delivery_media,is_manual_delivery,is_active,source_id,last_known_stock")
