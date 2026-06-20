@@ -224,13 +224,25 @@ Deno.serve(async (req) => {
         for (const [pid, c] of counts) stockByProduct.set(pid, c);
       }
 
+      // Compute lowest unit price (qty=1) per product for the reseller's customer.
+      const lowestByProduct = new Map<string, number>();
+      await Promise.all((products || []).map(async (p: any) => {
+        try {
+          const lp = await resolveLowestUnitPrice(supabase, p, 1, reseller.customer_id || null);
+          lowestByProduct.set(p.id, lp);
+        } catch (_) {
+          lowestByProduct.set(p.id, Number(p.price || 0));
+        }
+      }));
+
       return json({
         ok: true,
         reseller: { name: reseller.name, balance: apiBalance },
         products: (products || []).map((product: any) => ({
           id: product.id,
           name: product.name,
-          wholesale_price: Number(product.price || 0),
+          wholesale_price: lowestByProduct.get(product.id) ?? Number(product.price || 0),
+          regular_price: Number(product.price || 0),
           currency: product.currency || "USDT",
           description: product.description || null,
           delivery_instruction: product.delivery_instruction || null,
