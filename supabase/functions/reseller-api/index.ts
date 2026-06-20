@@ -255,18 +255,8 @@ Deno.serve(async (req) => {
       if (product.source_id && product.source_product_id) {
         if (product.is_manual_delivery) return json({ ok: false, error: "Manual delivery products are not available via reseller API" }, 400);
 
-        // Resolve unit price: apply active flash sale if cheaper than base
-        let unitPrice = Number(product.price || 0);
-        const { data: flash } = await supabase
-          .from("bot_flash_sales")
-          .select("sale_price")
-          .eq("product_id", product.id)
-          .eq("is_active", true)
-          .gte("ends_at", new Date().toISOString())
-          .order("sale_price", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (flash && Number(flash.sale_price) < unitPrice) unitPrice = Number(flash.sale_price);
+        // Resolve unit price: always the LOWEST of base, tier, customer special, active flash.
+        const unitPrice = await resolveLowestUnitPrice(supabase, product, parsed.data.quantity, reseller.customer_id || null);
 
         const totalCost = +(unitPrice * parsed.data.quantity).toFixed(2);
         if (apiBalance < totalCost) return json({ ok: false, error: "Insufficient reseller balance" }, 400);
