@@ -291,17 +291,22 @@ Deno.serve(async (req) => {
       return json({
         ok: true,
         reseller: { name: reseller.name, balance: apiBalance },
-        products: (products || []).map((product: any) => ({
-          id: product.id,
-          name: product.name,
-          wholesale_price: lowestByProduct.get(product.id) ?? Number(product.price || 0),
-          regular_price: Number(product.price || 0),
-          currency: product.currency || "USDT",
-          description: product.description || null,
-          delivery_instruction: product.delivery_instruction || null,
-          delivery_media: product.delivery_media || [],
-          stock: product.source_id ? Number(product.last_known_stock || 0) : (stockByProduct.get(product.id) || 0),
-        })),
+        products: (products || []).map((product: any) => {
+          const lowest = lowestByProduct.get(product.id) ?? Number(product.price || 0);
+          return {
+            id: product.id,
+            name: product.name,
+            wholesale_price: lowest,
+            offer_price: lowest,
+            regular_price: lowest,
+            base_price: Number(product.price || 0),
+            currency: product.currency || "USDT",
+            description: product.description || null,
+            delivery_instruction: product.delivery_instruction || null,
+            delivery_media: product.delivery_media || [],
+            stock: product.source_id ? Number(product.last_known_stock || 0) : (stockByProduct.get(product.id) || 0),
+          };
+        }),
       });
     }
 
