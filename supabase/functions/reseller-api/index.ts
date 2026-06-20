@@ -109,6 +109,51 @@ async function purchaseFromSource(product: Record<string, unknown>, quantity: nu
   return payload.accounts || [];
 }
 
+async function resolveLowestUnitPrice(
+  supabase: ReturnType<typeof createClient>,
+  product: Record<string, any>,
+  quantity: number,
+  customerId: string | null,
+) {
+  const candidates: number[] = [Number(product.price || 0)];
+  const { data: tier } = await supabase
+    .from('bot_product_pricing')
+    .select('price')
+    .eq('product_id', product.id)
+    .lte('min_quantity', quantity)
+    .order('min_quantity', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (tier) candidates.push(Number(tier.price));
+
+  if (customerId) {
+    const { data: special } = await supabase
+      .from('bot_customer_pricing')
+      .select('price')
+      .eq('customer_id', customerId)
+      .eq('product_id', product.id)
+      .eq('is_active', true)
+      .lte('min_quantity', quantity)
+      .order('min_quantity', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (special) candidates.push(Number(special.price));
+  }
+
+  const { data: flash } = await supabase
+    .from('bot_flash_sales')
+    .select('sale_price')
+    .eq('product_id', product.id)
+    .eq('is_active', true)
+    .gte('ends_at', new Date().toISOString())
+    .order('sale_price', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (flash) candidates.push(Number(flash.sale_price));
+
+  return Math.min(...candidates.filter((v) => Number.isFinite(v) && v >= 0));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
