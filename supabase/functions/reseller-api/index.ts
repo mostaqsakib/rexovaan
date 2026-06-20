@@ -305,6 +305,33 @@ Deno.serve(async (req) => {
       }
       const accounts = normalizeDelivery(order?.details);
       if (!accounts.length) return json({ ok: false, error: "Not enough stock available" }, 409);
+
+      // Apply lowest-price correction (RPC uses regular price). Refund the difference if cheaper.
+      try {
+        const lowestUnit = await resolveLowestUnitPrice(supabase, product, parsed.data.quantity, reseller.customer_id || null);
+        const rpcUnit = Number(order?.unit_cost || product.price || 0);
+        if (Number.isFinite(lowestUnit) && lowestUnit < rpcUnit) {
+          const newTotal = +(lowestUnit * parsed.data.quantity).toFixed(2);
+          const refund = +(Number(order?.total_cost || rpcUnit * parsed.data.quantity) - newTotal).toFixed(2);
+          if (refund > 0) {
+            const correctedBalance = +(apiBalance + refund).toFixed(2);
+            await supabase.from("bot_reseller_orders").update({ unit_cost: lowestUnit, total_cost: newTotal }).eq("id", order.id);
+            await supabase.from("bot_resellers").update({ balance: correctedBalance, updated_at: new Date().toISOString() }).eq("id", reseller.id);
+            if (reseller.customer_id) {
+              await supabase.from("bot_customers").update({ balance: correctedBalance, updated_at: new Date().toISOString() }).eq("id", reseller.customer_id);
+              await supabase.from("bot_orders").update({ total_price: newTotal }).eq("id", order.order_id || order.id).eq("customer_id", reseller.customer_id);
+            }
+            await supabase.from("bot_reseller_balance_transactions").insert({ reseller_id: reseller.id, order_id: order.id, type: "price_adjustment", amount: refund, balance_after: correctedBalance, note: "Lowest-price adjustment (flash/special/tier)" });
+            order.unit_cost = lowestUnit;
+            order.total_cost = newTotal;
+            order.balance_after = correctedBalance;
+            apiBalance = correctedBalance;
+          }
+        }
+      } catch (e) {
+        console.error("reseller_api_price_adjust_failed", e);
+      }
+
       await notifyAdminApiOrder(order || {}, reseller.name);
       return json({ ok: true, order: { ...order, accounts, account: accounts[0] }, accounts, account: accounts[0] });
     }
