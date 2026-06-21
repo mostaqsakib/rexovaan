@@ -224,48 +224,6 @@ export default function LinkCheckerTab() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="cookies" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Google Account Cookies</CardTitle>
-              <Button size="sm" onClick={() => setCookieDialogOpen(true)}><Plus className="h-4 w-4 mr-1" /> Add</Button>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="text-xs text-muted-foreground mb-2">
-                Add multiple cookies — the checker uses them in order and automatically switches to the next one when the current cookie expires or hits a Google sign-in redirect. Export from Cookie-Editor on <code>one.google.com</code> as JSON.
-              </div>
-              {cookies.length === 0 && <div className="text-sm text-muted-foreground">No cookies saved.</div>}
-              {cookies.map(c => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="font-medium flex items-center gap-2">
-                      {c.label}
-                      {c.is_active && !c.expired && <Badge variant="default" className="text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Active</Badge>}
-                      {!c.is_active && !c.expired && <Badge variant="secondary" className="text-xs">Inactive</Badge>}
-                      {c.expired && <Badge variant="destructive" className="text-xs">Expired</Badge>}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Added {new Date(c.created_at).toLocaleString()}{c.last_verified_at ? ` · Last verified ${new Date(c.last_verified_at).toLocaleString()}` : ''}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    {(!c.is_active || c.expired) && <Button size="sm" variant="outline" onClick={async () => {
-                      await supabase.from('google_account_cookies').update({ is_active: true, expired: false }).eq('id', c.id);
-                      void loadAll();
-                    }}>Enable</Button>}
-                    {c.is_active && !c.expired && <Button size="sm" variant="outline" onClick={async () => {
-                      await supabase.from('google_account_cookies').update({ is_active: false }).eq('id', c.id);
-                      void loadAll();
-                    }}>Disable</Button>}
-                    <Button size="sm" variant="ghost" onClick={async () => {
-                      if (!confirm('Delete?')) return;
-                      await supabase.from('google_account_cookies').delete().eq('id', c.id);
-                      void loadAll();
-                    }}><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="invalid" className="space-y-4">
           <Card>
