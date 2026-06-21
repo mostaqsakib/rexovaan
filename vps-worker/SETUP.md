@@ -86,7 +86,7 @@ cd /opt/link-checker
 DISPLAY=:1 node login.js
 ```
 
-Chrome will open → log into your Google account → close the window. **Done — session saved permanently to `/root/chrome-profile`.**
+Chrome will open → log into your Google account → close the window. **Done — session saved permanently to `/root/chrome-profile`.** Login in your laptop/normal browser does not count; the PM2 worker only uses this VPS profile path.
 
 ## 5. Start the worker (background, 24/7)
 

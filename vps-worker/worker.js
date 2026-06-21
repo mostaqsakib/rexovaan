@@ -73,6 +73,14 @@ function extractUrl(data) {
   return null;
 }
 
+function isGoogleAuthPage(finalUrl, bodyText) {
+  return /accounts\.google\.com\/(signin|servicelogin|v3\/signin|interactive_login|challenge)/i.test(finalUrl)
+    || bodyText.includes('sign in to continue')
+    || bodyText.includes('choose an account')
+    || bodyText.includes("couldn’t sign you in")
+    || bodyText.includes("couldn't sign you in");
+}
+
 async function judgeUrl(page, url) {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
@@ -80,6 +88,10 @@ async function judgeUrl(page, url) {
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
     const bodyText = (await page.evaluate(() => document.body?.innerText || '')).toLowerCase();
     const finalUrl = page.url().toLowerCase();
+
+    if (isGoogleAuthPage(finalUrl, bodyText)) {
+      return { result: 'error', reason: 'google auth required: login using the same CHROME_PROFILE_DIR as the PM2 worker' };
+    }
 
     for (const pat of invalidPatterns) {
       if (bodyText.includes(pat)) return { result: 'invalid', reason: `matched: ${pat}` };
