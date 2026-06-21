@@ -108,7 +108,6 @@ export default function LinkCheckerTab() {
       <Tabs defaultValue="check" className="w-full">
         <TabsList>
           <TabsTrigger value="check">Run Check</TabsTrigger>
-          <TabsTrigger value="cookies">Google Cookies ({cookies.length})</TabsTrigger>
           <TabsTrigger value="invalid">Invalid Archive ({invalidStock.length})</TabsTrigger>
         </TabsList>
 
@@ -116,27 +115,17 @@ export default function LinkCheckerTab() {
           <Card>
             <CardHeader><CardTitle>Start New Check</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div>
-                  <Label>Product</Label>
-                  <Select value={productId} onValueChange={setProductId}>
-                    <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
-                    <SelectContent>
-                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Concurrency (1-10)</Label>
-                  <Input type="number" min={1} max={10} value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} />
-                </div>
-                <div>
-                  <Label>Delay between checks (ms)</Label>
-                  <Input type="number" min={0} max={30000} step={100} value={delayMs} onChange={e => setDelayMs(Number(e.target.value))} />
-                </div>
+              <div>
+                <Label>Product</Label>
+                <Select value={productId} onValueChange={setProductId}>
+                  <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <Button onClick={startJob} disabled={starting}>Start Check</Button>
-              <div className="text-xs text-muted-foreground">Bot uses the persistent Google profile (PROFILE_ZIP_URL). Cookies tab is optional/legacy.</div>
+              <div className="text-xs text-muted-foreground">Worker uses optimized defaults. Bot uses the persistent Google profile.</div>
             </CardContent>
           </Card>
 
