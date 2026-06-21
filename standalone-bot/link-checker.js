@@ -27,7 +27,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const POLL_INTERVAL_MS = 5000;
-const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
+
+function resolveProfileDir() {
+  if (process.env.PROFILE_DIR) return process.env.PROFILE_DIR;
+  if (process.env.CHROME_PROFILE_DIR) return process.env.CHROME_PROFILE_DIR;
+  try {
+    if (fs.existsSync('/root/chrome-profile/Default')) return '/root/chrome-profile';
+  } catch {}
+  return '/data/google-profile';
+}
+
+const PROFILE_DIR = resolveProfileDir();
 const PROFILE_AUTH_EXPIRED_MARKER = `${PROFILE_DIR}/.auth-expired`;
 const AUTH_EXPIRED_NOTIFY_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const COOKIE_REFRESH_SAVE_INTERVAL_MS = 60 * 1000;
