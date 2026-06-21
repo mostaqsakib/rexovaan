@@ -1,0 +1,19 @@
+{
+  "name": "rexovaan-link-checker-worker",
+  "version": "1.0.0",
+  "description": "VPS worker for Rexovaan Shoppie Link Checker — uses persistent Chrome profile so Google login never expires",
+  "type": "module",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js",
+    "login": "node login.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.47.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
