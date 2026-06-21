@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-const PROFILE_DIR = process.env.PROFILE_DIR || '/data/google-profile';
+const PROFILE_DIR = process.env.PROFILE_DIR || process.env.CHROME_PROFILE_DIR || '/data/google-profile';
 const PROFILE_ZIP_URL = process.env.PROFILE_ZIP_URL;
 const GOOGLE_COOKIES_JSON = process.env.GOOGLE_COOKIES_JSON;
 const PROFILE_AUTH_EXPIRED_MARKER = path.join(PROFILE_DIR, '.auth-expired');
