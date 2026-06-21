@@ -2,17 +2,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
-import { Trash2, Download, Plus, RefreshCw, AlertCircle, CheckCircle2, Infinity as InfinityIcon } from 'lucide-react';
+import { Trash2, Download, RefreshCw, Infinity as InfinityIcon } from 'lucide-react';
 
 type Cookie = { id: string; label: string; is_active: boolean; expired: boolean; last_verified_at: string | null; created_at: string };
 type Product = { id: string; name: string; is_manual_delivery: boolean | null; link_check_auto?: boolean };
@@ -24,10 +21,7 @@ export default function LinkCheckerTab() {
   const [products, setProducts] = useState<Product[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [invalidStock, setInvalidStock] = useState<InvalidStock[]>([]);
-  const [cookieDialogOpen, setCookieDialogOpen] = useState(false);
   const [productId, setProductId] = useState<string>('');
-  const [concurrency, setConcurrency] = useState(5);
-  const [delayMs, setDelayMs] = useState(800);
   const [starting, setStarting] = useState(false);
 
   // Only allow this specific product in the Link Checker UI.
@@ -66,8 +60,8 @@ export default function LinkCheckerTab() {
     const { error } = await supabase.from('link_check_jobs').insert({
       product_id: productId,
       cookie_id: activeCookie?.id ?? null,
-      concurrency,
-      delay_ms: delayMs,
+      concurrency: 5,
+      delay_ms: 800,
       status: 'queued',
     });
     setStarting(false);
@@ -111,7 +105,6 @@ export default function LinkCheckerTab() {
       <Tabs defaultValue="check" className="w-full">
         <TabsList>
           <TabsTrigger value="check">Run Check</TabsTrigger>
-          <TabsTrigger value="cookies">Google Cookies ({cookies.length})</TabsTrigger>
           <TabsTrigger value="invalid">Invalid Archive ({invalidStock.length})</TabsTrigger>
         </TabsList>
 
@@ -119,27 +112,17 @@ export default function LinkCheckerTab() {
           <Card>
             <CardHeader><CardTitle>Start New Check</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div>
-                  <Label>Product</Label>
-                  <Select value={productId} onValueChange={setProductId}>
-                    <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
-                    <SelectContent>
-                      {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Concurrency (1-10)</Label>
-                  <Input type="number" min={1} max={10} value={concurrency} onChange={e => setConcurrency(Number(e.target.value))} />
-                </div>
-                <div>
-                  <Label>Delay between checks (ms)</Label>
-                  <Input type="number" min={0} max={30000} step={100} value={delayMs} onChange={e => setDelayMs(Number(e.target.value))} />
-                </div>
+              <div>
+                <Label>Product</Label>
+                <Select value={productId} onValueChange={setProductId}>
+                  <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                  <SelectContent>
+                    {products.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <Button onClick={startJob} disabled={starting}>Start Check</Button>
-              <div className="text-xs text-muted-foreground">Bot uses the persistent Google profile (PROFILE_ZIP_URL). Cookies tab is optional/legacy.</div>
+              <div className="text-xs text-muted-foreground">Worker uses optimized defaults. Bot uses the persistent Google profile.</div>
             </CardContent>
           </Card>
 
@@ -238,48 +221,6 @@ export default function LinkCheckerTab() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="cookies" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Google Account Cookies</CardTitle>
-              <Button size="sm" onClick={() => setCookieDialogOpen(true)}><Plus className="h-4 w-4 mr-1" /> Add</Button>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="text-xs text-muted-foreground mb-2">
-                Add multiple cookies — the checker uses them in order and automatically switches to the next one when the current cookie expires or hits a Google sign-in redirect. Export from Cookie-Editor on <code>one.google.com</code> as JSON.
-              </div>
-              {cookies.length === 0 && <div className="text-sm text-muted-foreground">No cookies saved.</div>}
-              {cookies.map(c => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="font-medium flex items-center gap-2">
-                      {c.label}
-                      {c.is_active && !c.expired && <Badge variant="default" className="text-xs"><CheckCircle2 className="h-3 w-3 mr-1" />Active</Badge>}
-                      {!c.is_active && !c.expired && <Badge variant="secondary" className="text-xs">Inactive</Badge>}
-                      {c.expired && <Badge variant="destructive" className="text-xs">Expired</Badge>}
-                    </div>
-                    <div className="text-xs text-muted-foreground">Added {new Date(c.created_at).toLocaleString()}{c.last_verified_at ? ` · Last verified ${new Date(c.last_verified_at).toLocaleString()}` : ''}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    {(!c.is_active || c.expired) && <Button size="sm" variant="outline" onClick={async () => {
-                      await supabase.from('google_account_cookies').update({ is_active: true, expired: false }).eq('id', c.id);
-                      void loadAll();
-                    }}>Enable</Button>}
-                    {c.is_active && !c.expired && <Button size="sm" variant="outline" onClick={async () => {
-                      await supabase.from('google_account_cookies').update({ is_active: false }).eq('id', c.id);
-                      void loadAll();
-                    }}>Disable</Button>}
-                    <Button size="sm" variant="ghost" onClick={async () => {
-                      if (!confirm('Delete?')) return;
-                      await supabase.from('google_account_cookies').delete().eq('id', c.id);
-                      void loadAll();
-                    }}><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="invalid" className="space-y-4">
           <Card>
@@ -369,52 +310,7 @@ export default function LinkCheckerTab() {
         </TabsContent>
       </Tabs>
 
-      <AddCookieDialog open={cookieDialogOpen} onClose={() => { setCookieDialogOpen(false); void loadAll(); }} />
+      
     </div>
-  );
-}
-
-function AddCookieDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [label, setLabel] = useState('Main account');
-  const [json, setJson] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const save = async () => {
-    let parsed: any;
-    try { parsed = JSON.parse(json); } catch { toast.error('Invalid JSON'); return; }
-    if (!Array.isArray(parsed)) { toast.error('Expected JSON array of cookies'); return; }
-    setSaving(true);
-    // Insert as active. Multiple cookies can be active at once — checker rotates through them.
-    const { error } = await supabase.from('google_account_cookies').insert({ label, cookies_json: parsed, is_active: true, expired: false });
-    setSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Cookies saved');
-    setJson(''); setLabel('Main account');
-    onClose();
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader><DialogTitle>Add Google Cookies</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div>
-            <Label>Label</Label>
-            <Input value={label} onChange={e => setLabel(e.target.value)} />
-          </div>
-          <div>
-            <Label>Cookies JSON (export from Cookie-Editor extension)</Label>
-            <Textarea value={json} onChange={e => setJson(e.target.value)} rows={12} placeholder='[{"name":"SID","value":"...","domain":".google.com",...}]' className="font-mono text-xs" />
-            <div className="text-xs text-muted-foreground mt-1">
-              Open <code>one.google.com</code> in Chrome (logged in) → Cookie-Editor extension → Export → JSON → paste here.
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={saving || !json.trim()}>Save & Activate</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
