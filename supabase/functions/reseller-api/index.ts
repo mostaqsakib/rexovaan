@@ -55,7 +55,7 @@ function getCustomerLabel(order: Record<string, unknown>, resellerName: string) 
 }
 
 async function notifyAdminApiOrder(order: Record<string, unknown>, resellerName: string) {
-  const botToken = (Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY"));
+  const botToken = Deno.env.get("BOT_TOKEN") || Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY");
   const adminChatId = Deno.env.get("ADMIN_CHAT_ID");
   if (!botToken || !adminChatId) return;
 
