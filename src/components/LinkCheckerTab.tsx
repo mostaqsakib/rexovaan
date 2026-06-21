@@ -63,8 +63,8 @@ export default function LinkCheckerTab() {
     const { error } = await supabase.from('link_check_jobs').insert({
       product_id: productId,
       cookie_id: activeCookie?.id ?? null,
-      concurrency,
-      delay_ms: delayMs,
+      concurrency: 5,
+      delay_ms: 800,
       status: 'queued',
     });
     setStarting(false);
