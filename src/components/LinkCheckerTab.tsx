@@ -24,10 +24,7 @@ export default function LinkCheckerTab() {
   const [products, setProducts] = useState<Product[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [invalidStock, setInvalidStock] = useState<InvalidStock[]>([]);
-  const [cookieDialogOpen, setCookieDialogOpen] = useState(false);
   const [productId, setProductId] = useState<string>('');
-  const [concurrency, setConcurrency] = useState(5);
-  const [delayMs, setDelayMs] = useState(800);
   const [starting, setStarting] = useState(false);
 
   // Only allow this specific product in the Link Checker UI.
