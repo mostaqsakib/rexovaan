@@ -313,7 +313,7 @@ export default function LinkCheckerTab() {
         </TabsContent>
       </Tabs>
 
-      <AddCookieDialog open={cookieDialogOpen} onClose={() => { setCookieDialogOpen(false); void loadAll(); }} />
+      
     </div>
   );
 }
