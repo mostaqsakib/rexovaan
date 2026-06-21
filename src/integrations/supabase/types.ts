@@ -1616,28 +1616,52 @@ export type Database = {
         }
         Returns: number
       }
-      place_reseller_api_order: {
-        Args: {
-          _api_key_hash: string
-          _external_order_id?: string
-          _product_id: string
-          _quantity: number
-        }
-        Returns: {
-          balance_after: number
-          customer_chat_id: number
-          customer_first_name: string
-          customer_id: string
-          customer_username: string
-          details: Json
-          order_id: string
-          product_id: string
-          product_name: string
-          quantity: number
-          total_cost: number
-          unit_cost: number
-        }[]
-      }
+      place_reseller_api_order:
+        | {
+            Args: {
+              _api_key_hash: string
+              _external_order_id?: string
+              _product_id: string
+              _quantity: number
+            }
+            Returns: {
+              balance_after: number
+              customer_chat_id: number
+              customer_first_name: string
+              customer_id: string
+              customer_username: string
+              details: Json
+              order_id: string
+              product_id: string
+              product_name: string
+              quantity: number
+              total_cost: number
+              unit_cost: number
+            }[]
+          }
+        | {
+            Args: {
+              _api_key_hash: string
+              _external_order_id?: string
+              _product_id: string
+              _quantity: number
+              _unit_price?: number
+            }
+            Returns: {
+              balance_after: number
+              customer_chat_id: number
+              customer_first_name: string
+              customer_id: string
+              customer_username: string
+              details: Json
+              order_id: string
+              product_id: string
+              product_name: string
+              quantity: number
+              total_cost: number
+              unit_cost: number
+            }[]
+          }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
         Returns: {

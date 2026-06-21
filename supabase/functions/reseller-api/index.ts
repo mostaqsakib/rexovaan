@@ -353,11 +353,23 @@ Deno.serve(async (req) => {
         return json({ ok: true, order, accounts, account: accounts[0] });
       }
 
+      // Compute the LOWEST single-quantity unit price (regular / customer-special / active flash)
+      // BEFORE calling the RPC so the order is charged correctly in a single atomic transaction.
+      let prepaidUnit: number | null = null;
+      try {
+        const lowest = await resolveLowestUnitPrice(supabase, product, parsed.data.quantity, reseller.customer_id || null);
+        if (Number.isFinite(lowest) && lowest >= 0) prepaidUnit = lowest;
+      } catch (e) {
+        console.error("reseller_api_lowest_price_failed", e);
+      }
+      console.log("reseller_api_order_unit", { product_id: product.id, base: Number(product.price || 0), charged: prepaidUnit });
+
       const { data, error } = await supabase.rpc("place_reseller_api_order", {
         _api_key_hash: apiKeyHash,
         _product_id: parsed.data.product_id,
         _quantity: parsed.data.quantity,
         _external_order_id: parsed.data.external_order_id || null,
+        _unit_price: prepaidUnit,
       });
 
       if (error) return json({ ok: false, error: error.message }, 400);
@@ -368,35 +380,10 @@ Deno.serve(async (req) => {
       const accounts = normalizeDelivery(order?.details);
       if (!accounts.length) return json({ ok: false, error: "Not enough stock available" }, 409);
 
-      // Apply lowest-price correction (RPC uses regular price). Refund the difference if cheaper.
-      try {
-        const lowestUnit = await resolveLowestUnitPrice(supabase, product, parsed.data.quantity, reseller.customer_id || null);
-        const rpcUnit = Number(order?.unit_cost || product.price || 0);
-        if (Number.isFinite(lowestUnit) && lowestUnit < rpcUnit) {
-          const newTotal = +(lowestUnit * parsed.data.quantity).toFixed(2);
-          const refund = +(Number(order?.total_cost || rpcUnit * parsed.data.quantity) - newTotal).toFixed(2);
-          if (refund > 0) {
-            const correctedBalance = +(apiBalance + refund).toFixed(2);
-            await supabase.from("bot_reseller_orders").update({ unit_cost: lowestUnit, total_cost: newTotal }).eq("id", order.id);
-            await supabase.from("bot_resellers").update({ balance: correctedBalance, updated_at: new Date().toISOString() }).eq("id", reseller.id);
-            if (reseller.customer_id) {
-              await supabase.from("bot_customers").update({ balance: correctedBalance, updated_at: new Date().toISOString() }).eq("id", reseller.customer_id);
-              await supabase.from("bot_orders").update({ total_price: newTotal }).eq("id", order.order_id || order.id).eq("customer_id", reseller.customer_id);
-            }
-            await supabase.from("bot_reseller_balance_transactions").insert({ reseller_id: reseller.id, order_id: order.id, type: "price_adjustment", amount: refund, balance_after: correctedBalance, note: "Lowest-price adjustment (flash/special/tier)" });
-            order.unit_cost = lowestUnit;
-            order.total_cost = newTotal;
-            order.balance_after = correctedBalance;
-            apiBalance = correctedBalance;
-          }
-        }
-      } catch (e) {
-        console.error("reseller_api_price_adjust_failed", e);
-      }
-
       await notifyAdminApiOrder(order || {}, reseller.name);
       return json({ ok: true, order: { ...order, accounts, account: accounts[0] }, accounts, account: accounts[0] });
     }
+
 
     return json({ ok: false, error: "Unsupported endpoint" }, 404);
   } catch (error) {
