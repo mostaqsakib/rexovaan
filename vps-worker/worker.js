@@ -1,0 +1,230 @@
+// Rexovaan Shoppie — Link Checker VPS Worker
+// Uses a real persistent Chrome profile so Google login never expires.
+//
+// Flow:
+//  1. Poll `link_check_jobs` for status='queued'
+//  2. Claim job → status='running', populate `link_check_items` from available stock
+//  3. Spawn N parallel browser tabs (N = job.concurrency, capped by MAX_CONCURRENCY)
+//  4. Each tab: claim_next_link_check_item → open URL → judge valid/invalid → mark_link_check_result
+//  5. When no more items → finalize job (status='completed' or 'failed')
+//  6. Realtime in admin panel auto-updates from DB changes
+//
+// Run with PM2:  pm2 start worker.js --name link-checker
+
+import 'dotenv/config';
+import { createClient } from '@supabase/supabase-js';
+import { chromium } from 'playwright';
+
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  CHROME_PROFILE_DIR = '/root/chrome-profile',
+  HEADFUL = 'false',
+  MAX_CONCURRENCY = '10',
+  POLL_INTERVAL_MS = '5000',
+  NAV_TIMEOUT_MS = '30000',
+  INVALID_TEXT_PATTERNS = '',
+  VALID_TEXT_PATTERNS = '',
+} = process.env;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env');
+  process.exit(1);
+}
+
+const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+const invalidPatterns = INVALID_TEXT_PATTERNS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const validPatterns = VALID_TEXT_PATTERNS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const navTimeout = parseInt(NAV_TIMEOUT_MS, 10);
+const maxConc = parseInt(MAX_CONCURRENCY, 10);
+const pollMs = parseInt(POLL_INTERVAL_MS, 10);
+
+let browserCtx = null;
+let busy = false;
+
+async function getBrowser() {
+  if (browserCtx && browserCtx.pages) return browserCtx;
+  console.log('🚀 Launching Chrome with profile:', CHROME_PROFILE_DIR);
+  browserCtx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, {
+    headless: HEADFUL !== 'true',
+    viewport: { width: 1280, height: 800 },
+    args: [
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--lang=en-US',
+    ],
+    locale: 'en-US',
+  });
+  browserCtx.on('close', () => {
+    browserCtx = null;
+  });
+  return browserCtx;
+}
+
+function extractUrl(data) {
+  if (!data || typeof data !== 'object') return null;
+  for (const v of Object.values(data)) {
+    if (typeof v === 'string' && /^https?:\/\//.test(v.trim())) return v.trim();
+  }
+  return null;
+}
+
+async function judgeUrl(page, url) {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
+    // small settle for Google redirects
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    const bodyText = (await page.evaluate(() => document.body?.innerText || '')).toLowerCase();
+    const finalUrl = page.url().toLowerCase();
+
+    for (const pat of invalidPatterns) {
+      if (bodyText.includes(pat)) return { result: 'invalid', reason: `matched: ${pat}` };
+    }
+    // Google-specific redirect signals
+    if (/already|redeemed|expired|error/.test(finalUrl)) {
+      return { result: 'invalid', reason: `redirected: ${finalUrl.slice(0, 120)}` };
+    }
+    if (validPatterns.length === 0) return { result: 'valid', reason: 'no invalid markers' };
+    for (const pat of validPatterns) {
+      if (bodyText.includes(pat)) return { result: 'valid', reason: `matched: ${pat}` };
+    }
+    return { result: 'error', reason: 'no valid/invalid markers detected' };
+  } catch (e) {
+    return { result: 'error', reason: String(e?.message || e).slice(0, 240) };
+  }
+}
+
+async function populateItems(job) {
+  // Pull all available stock for this product and insert into link_check_items
+  const { data: stock, error } = await sb
+    .from('bot_product_stock_items')
+    .select('id, data')
+    .eq('product_id', job.product_id)
+    .eq('status', 'available');
+  if (error) throw error;
+
+  const rows = [];
+  for (const s of stock || []) {
+    const url = extractUrl(s.data);
+    if (url) rows.push({ job_id: job.id, stock_item_id: s.id, url, status: 'pending' });
+  }
+  if (rows.length === 0) return 0;
+
+  // Chunk insert (Supabase has a row limit per insert)
+  for (let i = 0; i < rows.length; i += 500) {
+    const slice = rows.slice(i, i + 500);
+    const { error: insErr } = await sb.from('link_check_items').insert(slice);
+    if (insErr) throw insErr;
+  }
+  return rows.length;
+}
+
+async function runWorkerTab(job, signal) {
+  const ctx = await getBrowser();
+  const page = await ctx.newPage();
+  try {
+    while (!signal.cancelled) {
+      const { data: claimed, error } = await sb.rpc('claim_next_link_check_item', { _job_id: job.id });
+      if (error) {
+        console.error('claim error:', error.message);
+        await sleep(2000);
+        continue;
+      }
+      const item = Array.isArray(claimed) ? claimed[0] : claimed;
+      if (!item) return; // no more pending items
+      const { result, reason } = await judgeUrl(page, item.url);
+      await sb.rpc('mark_link_check_result', { _item_id: item.id, _result: result, _reason: reason });
+      if (job.delay_ms > 0) await sleep(job.delay_ms);
+    }
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function processJob(job) {
+  console.log(`\n📋 Job ${job.id.slice(0, 8)} starting (concurrency=${job.concurrency})`);
+  // mark running + populate items
+  await sb.from('link_check_jobs')
+    .update({ status: 'running', started_at: new Date().toISOString() })
+    .eq('id', job.id);
+
+  let total = 0;
+  try {
+    total = await populateItems(job);
+    await sb.from('link_check_jobs').update({ total }).eq('id', job.id);
+    console.log(`   → ${total} URLs to check`);
+
+    if (total === 0) {
+      await sb.from('link_check_jobs')
+        .update({ status: 'completed', finished_at: new Date().toISOString() })
+        .eq('id', job.id);
+      return;
+    }
+
+    const conc = Math.max(1, Math.min(maxConc, job.concurrency || 5));
+    const signal = { cancelled: false };
+
+    // Watch for external cancel
+    const cancelWatcher = setInterval(async () => {
+      const { data } = await sb.from('link_check_jobs').select('status').eq('id', job.id).single();
+      if (data?.status === 'cancelled') signal.cancelled = true;
+    }, 3000);
+
+    const tabs = Array.from({ length: conc }, () => runWorkerTab(job, signal));
+    await Promise.all(tabs);
+    clearInterval(cancelWatcher);
+
+    const finalStatus = signal.cancelled ? 'cancelled' : 'completed';
+    await sb.from('link_check_jobs')
+      .update({ status: finalStatus, finished_at: new Date().toISOString() })
+      .eq('id', job.id);
+    console.log(`   ✅ Job ${job.id.slice(0, 8)} ${finalStatus}`);
+  } catch (e) {
+    console.error('   ❌ Job failed:', e.message);
+    await sb.from('link_check_jobs')
+      .update({ status: 'failed', error_text: String(e.message).slice(0, 500), finished_at: new Date().toISOString() })
+      .eq('id', job.id);
+  }
+}
+
+async function pollLoop() {
+  while (true) {
+    try {
+      if (!busy) {
+        const { data: jobs } = await sb
+          .from('link_check_jobs')
+          .select('*')
+          .eq('status', 'queued')
+          .order('created_at', { ascending: true })
+          .limit(1);
+        if (jobs && jobs[0]) {
+          busy = true;
+          await processJob(jobs[0]);
+          busy = false;
+        }
+      }
+    } catch (e) {
+      console.error('poll error:', e.message);
+      busy = false;
+    }
+    await sleep(pollMs);
+  }
+}
+
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM — closing browser');
+  if (browserCtx) await browserCtx.close().catch(() => {});
+  process.exit(0);
+});
+
+console.log('🤖 Rexovaan Link Checker worker started');
+console.log('   Profile:', CHROME_PROFILE_DIR);
+console.log('   Headful:', HEADFUL);
+console.log('   Poll:', pollMs, 'ms');
+pollLoop();
