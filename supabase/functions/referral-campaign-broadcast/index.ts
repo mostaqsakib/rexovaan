@@ -90,6 +90,8 @@ Deno.serve(async (req) => {
         "referral_campaign_button_text",
         "referral_campaign_button_emoji",
         "referral_campaign_button_emoji_id",
+        "referral_campaign_group_button_emoji",
+        "referral_campaign_group_button_emoji_id",
         "referral_campaign_reward",
       ]);
     const settings: Record<string, string> = Object.fromEntries(
@@ -99,6 +101,8 @@ Deno.serve(async (req) => {
     const template = settings.referral_campaign_message || DEFAULT_REFERRAL_CAMPAIGN_MESSAGE;
     const buttonText = settings.referral_campaign_button_text || "🔗 My Referral Link";
     const buttonEmojiId = settings.referral_campaign_button_emoji_id || "";
+    const groupButtonEmoji = settings.referral_campaign_group_button_emoji || "";
+    const groupButtonEmojiId = settings.referral_campaign_group_button_emoji_id || "";
     const reward = settings.referral_campaign_reward || "0.1";
 
     function buildCampaignButton(label: string, referralLink: string) {
@@ -106,6 +110,14 @@ Deno.serve(async (req) => {
       if (buttonEmojiId) btn.icon_custom_emoji_id = buttonEmojiId;
       return btn;
     }
+
+    function buildGroupButton(url: string) {
+      // Group version: emoji-only label (no default text). Falls back to 🔗 if no emoji configured.
+      const label = groupButtonEmoji || "🔗";
+      const btn: any = { text: label, url };
+      return btn;
+    }
+
 
     let sent = 0;
     let failed = 0;
