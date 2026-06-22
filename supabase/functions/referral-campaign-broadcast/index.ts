@@ -114,10 +114,15 @@ Deno.serve(async (req) => {
     }
 
     function buildGroupButton(url: string) {
-      // If an emoji is configured, show only the emoji as the label.
-      // Otherwise show the plain text label (no emoji).
-      const label = groupButtonEmoji || groupButtonText;
-      const btn: any = { text: label, url };
+      const btn: any = { url };
+      if (groupButtonEmojiId) {
+        // Premium emoji: show only the custom emoji, minimal required text
+        btn.text = groupButtonEmoji || " ";
+        btn.icon_custom_emoji_id = groupButtonEmojiId;
+      } else {
+        // Default: text only, no emoji at all
+        btn.text = groupButtonText;
+      }
       return btn;
     }
 
