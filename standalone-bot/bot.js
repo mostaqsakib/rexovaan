@@ -6677,6 +6677,23 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
+  if (data === "rc_edit_group_btn_emoji" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
+    await supabase.from("bot_customers").update({ pending_action: "admin_rc_group_btn_emoji" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). The group broadcast button will show <b>only this emoji</b> as its label — no other text.\n\nSend <code>clear</code> to remove the button emoji.\n\n❌ /cancel to cancel`);
+    const curEmoji = c.groupButtonEmoji || "";
+    const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
+    const previewLabel = curEmoji || "🔗";
+    await sendMessage(
+      chatId,
+      `📄 <b>Current group button emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}${idNote}\n\n👇 <b>Group preview:</b>\n<i>Note: inline button labels show the fallback character only; premium emoji animation is not rendered on buttons.</i>`,
+      { inline_keyboard: [[{ text: previewLabel, callback_data: "noop_preview" }]] }
+    );
+    return;
+  }
+
+
+
 
 
   if (data === "adm_broadcast" && isAdmin(chatId)) {
