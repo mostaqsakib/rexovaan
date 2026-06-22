@@ -168,6 +168,7 @@ Deno.serve(async (req) => {
         const r = await tgSend("sendMessage", {
           chat_id: g.chat_id,
           text,
+          parse_mode: "HTML",
           disable_web_page_preview: true,
           reply_markup: replyMarkup,
         }, BOT_TOKEN);
