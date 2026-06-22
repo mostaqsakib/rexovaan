@@ -214,6 +214,21 @@ const ReferralStatsTab = () => {
             {savingCampaign && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save Campaign Settings
           </Button>
+
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-2"><Megaphone className="h-4 w-4 text-primary" />📢 Broadcast Campaign</Label>
+            <p className="text-xs text-muted-foreground">Sent messages are tracked and auto-deleted when the campaign is turned OFF.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button variant="outline" disabled={!!broadcasting} onClick={() => doBroadcast('users')}>
+                {broadcasting === 'users' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                👤 Broadcast to Users
+              </Button>
+              <Button variant="outline" disabled={!!broadcasting} onClick={() => doBroadcast('groups')}>
+                {broadcasting === 'groups' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                👥 Broadcast to Groups
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
