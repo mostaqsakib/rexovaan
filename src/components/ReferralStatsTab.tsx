@@ -74,16 +74,45 @@ const ReferralStatsTab = () => {
     }
     setSavingCampaign(true);
     try {
+      const { data: prev } = await supabase
+        .from('bot_settings')
+        .select('value')
+        .eq('key', 'referral_campaign_active')
+        .maybeSingle();
+      const wasActive = String(prev?.value || '').toLowerCase() === 'true';
+      const turningOff = wasActive && !campaignActive;
+
       const [r1, r2] = await Promise.all([
         saveSetting('referral_campaign_active', campaignActive ? 'true' : 'false'),
         saveSetting('referral_campaign_reward', String(rew)),
       ]);
       if (r1.error || r2.error) throw new Error(r1.error?.message || r2.error?.message);
       toast.success('Campaign settings saved');
+
+      if (turningOff) {
+        toast.info('Deleting previously broadcast campaign messages…');
+        const { data: del, error: delErr } = await supabase.functions.invoke('referral-campaign-cleanup', { body: {} });
+        if (delErr) toast.error(`Cleanup failed: ${delErr.message}`);
+        else toast.success(`Deleted ${del?.deleted ?? 0} messages (${del?.skipped ?? 0} skipped)`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     }
     setSavingCampaign(false);
+  };
+
+  const [broadcasting, setBroadcasting] = useState<'users' | 'groups' | null>(null);
+  const doBroadcast = async (target: 'users' | 'groups') => {
+    if (!confirm(`Send referral campaign broadcast to all ${target}?`)) return;
+    setBroadcasting(target);
+    try {
+      const { data, error } = await supabase.functions.invoke('referral-campaign-broadcast', { body: { target } });
+      if (error) throw error;
+      toast.success(`Broadcast complete — sent: ${data?.sent ?? 0}, failed: ${data?.failed ?? 0}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Broadcast failed');
+    }
+    setBroadcasting(null);
   };
 
   const fetchData = async () => {
