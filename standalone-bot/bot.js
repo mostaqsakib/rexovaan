@@ -2141,6 +2141,8 @@ let cachedCampaign = {
   buttonText: "",
   buttonEmoji: "",
   buttonEmojiId: "",
+  groupButtonEmoji: "",
+  groupButtonEmojiId: "",
 };
 let campaignLastFetch = 0;
 
@@ -2154,6 +2156,8 @@ async function getCampaignSettings(force = false) {
         "referral_campaign_button_text",
         "referral_campaign_button_emoji",
         "referral_campaign_button_emoji_id",
+        "referral_campaign_group_button_emoji",
+        "referral_campaign_group_button_emoji_id",
       ]);
       if (data) {
         const map = Object.fromEntries(data.map(r => [r.key, r.value]));
@@ -2164,7 +2168,10 @@ async function getCampaignSettings(force = false) {
         cachedCampaign.buttonText = String(map.referral_campaign_button_text || "");
         cachedCampaign.buttonEmoji = String(map.referral_campaign_button_emoji || "");
         cachedCampaign.buttonEmojiId = String(map.referral_campaign_button_emoji_id || "");
+        cachedCampaign.groupButtonEmoji = String(map.referral_campaign_group_button_emoji || "");
+        cachedCampaign.groupButtonEmojiId = String(map.referral_campaign_group_button_emoji_id || "");
       }
+
       campaignLastFetch = Date.now();
     } catch (e) { console.error("Failed to fetch campaign settings:", e); }
   }
@@ -5503,6 +5510,47 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  if (customer.pending_action === "admin_rc_group_btn_emoji" && isAdmin(chatId)) {
+    let value = "";
+    let customEmojiId = "";
+    const entities = Array.isArray(message.entities) ? message.entities : [];
+    const customEmojiEntity = entities.find((e) => e.type === "custom_emoji");
+    if (customEmojiEntity && typeof customEmojiEntity.offset === "number" && typeof customEmojiEntity.length === "number") {
+      value = rawText.substring(customEmojiEntity.offset, customEmojiEntity.offset + customEmojiEntity.length);
+      customEmojiId = String(customEmojiEntity.custom_emoji_id || "");
+    } else {
+      value = String(rawText || "").trim();
+    }
+    if (!value && String(rawText || "").trim().toLowerCase() !== "clear") {
+      await sendMessage(chatId, "❌ Empty input. Send an emoji, or send <code>clear</code> to remove, or /cancel."); return;
+    }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    if (String(rawText || "").trim().toLowerCase() === "clear") {
+      value = "";
+      customEmojiId = "";
+    }
+
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_emoji").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_emoji");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_emoji", value });
+
+    const { data: existingId } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_emoji_id").maybeSingle();
+    if (existingId) await supabase.from("bot_settings").update({ value: customEmojiId, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_emoji_id");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_emoji_id", value: customEmojiId });
+
+    cachedCampaign.groupButtonEmoji = value;
+    cachedCampaign.groupButtonEmojiId = customEmojiId;
+    campaignLastFetch = Date.now();
+
+    const idNote = customEmojiId ? `\n\n🌟 Premium emoji document_id captured: <code>${customEmojiId}</code>` : "";
+    const display = value ? escapeHtml(value) : "<i>cleared</i>";
+    await sendMessage(chatId, `✅ Group version button emoji updated to: ${display}${idNote}\n\n<i>Note: inline button labels only display the fallback character; premium emoji animation does not render on buttons.</i>`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+  }
+
+
+
   // Broadcast
   // ── Flash Sale: collect sale price ──
   if (customer.pending_action?.startsWith("fs_price_") && isAdmin(chatId)) {
@@ -6463,12 +6511,14 @@ async function handleCallback(callbackQuery, emojiMap) {
     const msgPreview = c.message ? c.message.slice(0, 300) + (c.message.length > 300 ? "…" : "") : "<i>not set</i>";
     const btnDisplay = c.buttonText ? escapeHtml(c.buttonText) : "<i>not set</i>";
     const btnEmojiDisplay = c.buttonEmoji ? escapeHtml(c.buttonEmoji) + (c.buttonEmojiId ? " 🌟" : "") : "<i>none</i>";
+    const groupBtnEmojiDisplay = c.groupButtonEmoji ? escapeHtml(c.groupButtonEmoji) + (c.groupButtonEmojiId ? " 🌟" : "") : "<i>none</i>";
     const text =
       `🎁 <b>Referral Join-Bonus Campaign</b>\n\n` +
       `<b>Status:</b> ${status}\n` +
       `<b>Reward per join:</b> <code>${Number(c.reward).toFixed(2)} USDT</code>\n` +
-      `<b>Button text:</b> ${btnDisplay}\n` +
-      `<b>Button emoji:</b> ${btnEmojiDisplay}\n\n` +
+      `<b>Button text (user DM):</b> ${btnDisplay}\n` +
+      `<b>Button emoji (user DM):</b> ${btnEmojiDisplay}\n` +
+      `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n\n` +
       `<b>Current message template:</b>\n${msgPreview}\n\n` +
       `<i>ℹ️ This campaign only controls the limited-time join bonus. The permanent first-purchase bonus + commission % referral system always stays active regardless of this toggle.</i>`;
     const buttons = [
@@ -6476,10 +6526,12 @@ async function handleCallback(callbackQuery, emojiMap) {
       [{ text: "💰 Edit Reward", callback_data: "rc_edit_reward" }],
       [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
       [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
+      [{ text: "👥 Edit Group Button Emoji", callback_data: "rc_edit_group_btn_emoji" }],
       [{ text: "👁 Preview Message", callback_data: "rc_preview" }],
       [{ text: "📢 Broadcast", callback_data: "rc_broadcast" }],
       [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
     ];
+
     await editOrSend(chatId, msgId, text, { inline_keyboard: buttons });
     return;
   }
@@ -6624,6 +6676,23 @@ async function handleCallback(callbackQuery, emojiMap) {
     );
     return;
   }
+
+  if (data === "rc_edit_group_btn_emoji" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
+    await supabase.from("bot_customers").update({ pending_action: "admin_rc_group_btn_emoji" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). The group broadcast button will show <b>only this emoji</b> as its label — no other text.\n\nSend <code>clear</code> to remove the button emoji.\n\n❌ /cancel to cancel`);
+    const curEmoji = c.groupButtonEmoji || "";
+    const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
+    const previewLabel = curEmoji || "🔗";
+    await sendMessage(
+      chatId,
+      `📄 <b>Current group button emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}${idNote}\n\n👇 <b>Group preview:</b>\n<i>Note: inline button labels show the fallback character only; premium emoji animation is not rendered on buttons.</i>`,
+      { inline_keyboard: [[{ text: previewLabel, callback_data: "noop_preview" }]] }
+    );
+    return;
+  }
+
+
 
 
 

@@ -90,6 +90,8 @@ Deno.serve(async (req) => {
         "referral_campaign_button_text",
         "referral_campaign_button_emoji",
         "referral_campaign_button_emoji_id",
+        "referral_campaign_group_button_emoji",
+        "referral_campaign_group_button_emoji_id",
         "referral_campaign_reward",
       ]);
     const settings: Record<string, string> = Object.fromEntries(
@@ -99,6 +101,8 @@ Deno.serve(async (req) => {
     const template = settings.referral_campaign_message || DEFAULT_REFERRAL_CAMPAIGN_MESSAGE;
     const buttonText = settings.referral_campaign_button_text || "🔗 My Referral Link";
     const buttonEmojiId = settings.referral_campaign_button_emoji_id || "";
+    const groupButtonEmoji = settings.referral_campaign_group_button_emoji || "";
+    const groupButtonEmojiId = settings.referral_campaign_group_button_emoji_id || "";
     const reward = settings.referral_campaign_reward || "0.1";
 
     function buildCampaignButton(label: string, referralLink: string) {
@@ -106,6 +110,14 @@ Deno.serve(async (req) => {
       if (buttonEmojiId) btn.icon_custom_emoji_id = buttonEmojiId;
       return btn;
     }
+
+    function buildGroupButton(url: string) {
+      // Group version: emoji-only label (no default text). Falls back to 🔗 if no emoji configured.
+      const label = groupButtonEmoji || "🔗";
+      const btn: any = { text: label, url };
+      return btn;
+    }
+
 
     let sent = 0;
     let failed = 0;
@@ -139,7 +151,7 @@ Deno.serve(async (req) => {
         text: userText,
         parse_mode: "HTML",
         disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: "🤖 Get My Referral Link", url: groupBtnUrl }]] },
+        reply_markup: { inline_keyboard: [[buildGroupButton(groupBtnUrl)]] },
       }, BOT_TOKEN);
 
       const errors: string[] = [];
@@ -243,7 +255,7 @@ Deno.serve(async (req) => {
           .replaceAll("{referral_link}", groupCta)
           .replaceAll("{reward}", reward);
         const replyMarkup = {
-          inline_keyboard: [[{ text: "🤖 Get My Referral Link", url: groupBtnUrl }]],
+          inline_keyboard: [[buildGroupButton(groupBtnUrl)]],
         };
         const r = await tgSend("sendMessage", {
           chat_id: g.chat_id,
