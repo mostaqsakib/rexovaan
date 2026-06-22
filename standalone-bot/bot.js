@@ -2143,6 +2143,7 @@ let cachedCampaign = {
   buttonEmojiId: "",
   groupButtonEmoji: "",
   groupButtonEmojiId: "",
+  groupButtonText: "",
 };
 let campaignLastFetch = 0;
 
@@ -2158,6 +2159,7 @@ async function getCampaignSettings(force = false) {
         "referral_campaign_button_emoji_id",
         "referral_campaign_group_button_emoji",
         "referral_campaign_group_button_emoji_id",
+        "referral_campaign_group_button_text",
       ]);
       if (data) {
         const map = Object.fromEntries(data.map(r => [r.key, r.value]));
@@ -2170,6 +2172,7 @@ async function getCampaignSettings(force = false) {
         cachedCampaign.buttonEmojiId = String(map.referral_campaign_button_emoji_id || "");
         cachedCampaign.groupButtonEmoji = String(map.referral_campaign_group_button_emoji || "");
         cachedCampaign.groupButtonEmojiId = String(map.referral_campaign_group_button_emoji_id || "");
+        cachedCampaign.groupButtonText = String(map.referral_campaign_group_button_text || "");
       }
 
       campaignLastFetch = Date.now();
@@ -5549,6 +5552,28 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  if (customer.pending_action === "admin_rc_group_btn_text" && isAdmin(chatId)) {
+    let value = String(rawText || "").trim();
+    if (!value) { await sendMessage(chatId, "❌ Empty input. Send the button text, or <code>clear</code> to reset, or /cancel."); return; }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    if (value.toLowerCase() === "clear") value = "";
+
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_text").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_text");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_text", value });
+
+    cachedCampaign.groupButtonText = value;
+    campaignLastFetch = Date.now();
+
+    const display = value ? escapeHtml(value) : "<i>Get My Referral Link</i> (default)";
+    await sendMessage(chatId, `✅ Group version button text updated to: ${display}`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+  }
+
+
+
+
+
 
 
   // Broadcast
@@ -6512,13 +6537,16 @@ async function handleCallback(callbackQuery, emojiMap) {
     const btnDisplay = c.buttonText ? escapeHtml(c.buttonText) : "<i>not set</i>";
     const btnEmojiDisplay = c.buttonEmoji ? escapeHtml(c.buttonEmoji) + (c.buttonEmojiId ? " 🌟" : "") : "<i>none</i>";
     const groupBtnEmojiDisplay = c.groupButtonEmoji ? escapeHtml(c.groupButtonEmoji) + (c.groupButtonEmojiId ? " 🌟" : "") : "<i>none</i>";
+    const groupBtnTextDisplay = c.groupButtonText ? escapeHtml(c.groupButtonText) : "<i>Get My Referral Link</i> (default)";
     const text =
       `🎁 <b>Referral Join-Bonus Campaign</b>\n\n` +
       `<b>Status:</b> ${status}\n` +
       `<b>Reward per join:</b> <code>${Number(c.reward).toFixed(2)} USDT</code>\n` +
       `<b>Button text (user DM):</b> ${btnDisplay}\n` +
       `<b>Button emoji (user DM):</b> ${btnEmojiDisplay}\n` +
+      `<b>Group version button text:</b> ${groupBtnTextDisplay}\n` +
       `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n\n` +
+      `<i>ℹ️ If a group button emoji is set, the group broadcast button shows only that emoji. Otherwise it shows the group button text.</i>\n\n` +
       `<b>Current message template:</b>\n${msgPreview}\n\n` +
       `<i>ℹ️ This campaign only controls the limited-time join bonus. The permanent first-purchase bonus + commission % referral system always stays active regardless of this toggle.</i>`;
     const buttons = [
@@ -6526,7 +6554,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       [{ text: "💰 Edit Reward", callback_data: "rc_edit_reward" }],
       [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
       [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
-      [{ text: "👥 Edit Group Button Emoji", callback_data: "rc_edit_group_btn_emoji" }],
+      [{ text: "👥 Edit Group Btn Text", callback_data: "rc_edit_group_btn_text" }, { text: "✨ Edit Group Btn Emoji", callback_data: "rc_edit_group_btn_emoji" }],
       [{ text: "👁 Preview Message", callback_data: "rc_preview" }],
       [{ text: "📢 Broadcast", callback_data: "rc_broadcast" }],
       [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
@@ -6680,15 +6708,23 @@ async function handleCallback(callbackQuery, emojiMap) {
   if (data === "rc_edit_group_btn_emoji" && isAdmin(chatId)) {
     const c = await getCampaignSettings(true);
     await supabase.from("bot_customers").update({ pending_action: "admin_rc_group_btn_emoji" }).eq("chat_id", chatId);
-    await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). The group broadcast button will show <b>only this emoji</b> as its label — no other text.\n\nSend <code>clear</code> to remove the button emoji.\n\n❌ /cancel to cancel`);
+    await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). When an emoji is set, the group broadcast button shows <b>only this emoji</b> as its label (no text).\n\nSend <code>clear</code> to remove the emoji and fall back to the button text.\n\n❌ /cancel to cancel`);
     const curEmoji = c.groupButtonEmoji || "";
     const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
-    const previewLabel = curEmoji || "🔗";
+    const previewLabel = curEmoji || (c.groupButtonText || "Get My Referral Link");
     await sendMessage(
       chatId,
       `📄 <b>Current group button emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}${idNote}\n\n👇 <b>Group preview:</b>\n<i>Note: inline button labels show the fallback character only; premium emoji animation is not rendered on buttons.</i>`,
       { inline_keyboard: [[{ text: previewLabel, callback_data: "noop_preview" }]] }
     );
+    return;
+  }
+
+  if (data === "rc_edit_group_btn_text" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
+    await supabase.from("bot_customers").update({ pending_action: "admin_rc_group_btn_text" }).eq("chat_id", chatId);
+    const cur = c.groupButtonText || "";
+    await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Text</b>\n\nSend the text for the group broadcast button (shown when no group button emoji is set).\n\n<b>Current:</b> ${cur ? escapeHtml(cur) : "<i>Get My Referral Link</i> (default)"}\n\nSend <code>clear</code> to restore the default.\n\n❌ /cancel to cancel`);
     return;
   }
 
