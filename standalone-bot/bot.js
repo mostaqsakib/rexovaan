@@ -6549,8 +6549,9 @@ async function handleCallback(callbackQuery, emojiMap) {
       `<b>Button text (user DM):</b> ${btnDisplay}\n` +
       `<b>Button emoji (user DM):</b> ${btnEmojiDisplay}\n` +
       `<b>Group version button text:</b> ${groupBtnTextDisplay}\n` +
-      `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n\n` +
-      `<i>ℹ️ If a group button emoji is set, the group broadcast button shows only that emoji. Otherwise it shows the group button text.</i>\n\n` +
+      `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n` +
+      `<b>Group version button color:</b> <code>${escapeHtml(c.groupButtonStyle || "primary")}</code>\n\n` +
+      `<i>ℹ️ If a group button emoji is set, the group broadcast button shows only that emoji. Otherwise it shows the group button text. Color requires Telegram client supporting Bot API 9.4+.</i>\n\n` +
       `<b>Current message template:</b>\n${msgPreview}\n\n` +
       `<i>ℹ️ This campaign only controls the limited-time join bonus. The permanent first-purchase bonus + commission % referral system always stays active regardless of this toggle.</i>`;
     const buttons = [
@@ -6559,6 +6560,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
       [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
       [{ text: "👥 Edit Group Btn Text", callback_data: "rc_edit_group_btn_text" }, { text: "✨ Edit Group Btn Emoji", callback_data: "rc_edit_group_btn_emoji" }],
+      [{ text: "🎨 Edit Group Btn Color", callback_data: "rc_edit_group_btn_style" }],
       [{ text: "👁 Preview Message", callback_data: "rc_preview" }],
       [{ text: "📢 Broadcast", callback_data: "rc_broadcast" }],
       [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
