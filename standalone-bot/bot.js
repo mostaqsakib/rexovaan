@@ -2141,6 +2141,8 @@ let cachedCampaign = {
   buttonText: "",
   buttonEmoji: "",
   buttonEmojiId: "",
+  groupButtonEmoji: "",
+  groupButtonEmojiId: "",
 };
 let campaignLastFetch = 0;
 
@@ -2154,6 +2156,8 @@ async function getCampaignSettings(force = false) {
         "referral_campaign_button_text",
         "referral_campaign_button_emoji",
         "referral_campaign_button_emoji_id",
+        "referral_campaign_group_button_emoji",
+        "referral_campaign_group_button_emoji_id",
       ]);
       if (data) {
         const map = Object.fromEntries(data.map(r => [r.key, r.value]));
@@ -2164,7 +2168,10 @@ async function getCampaignSettings(force = false) {
         cachedCampaign.buttonText = String(map.referral_campaign_button_text || "");
         cachedCampaign.buttonEmoji = String(map.referral_campaign_button_emoji || "");
         cachedCampaign.buttonEmojiId = String(map.referral_campaign_button_emoji_id || "");
+        cachedCampaign.groupButtonEmoji = String(map.referral_campaign_group_button_emoji || "");
+        cachedCampaign.groupButtonEmojiId = String(map.referral_campaign_group_button_emoji_id || "");
       }
+
       campaignLastFetch = Date.now();
     } catch (e) { console.error("Failed to fetch campaign settings:", e); }
   }
