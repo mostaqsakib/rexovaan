@@ -2144,6 +2144,7 @@ let cachedCampaign = {
   groupButtonEmoji: "",
   groupButtonEmojiId: "",
   groupButtonText: "",
+  groupButtonStyle: "primary",
 };
 let campaignLastFetch = 0;
 
