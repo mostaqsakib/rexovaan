@@ -6515,13 +6515,16 @@ async function handleCallback(callbackQuery, emojiMap) {
     const btnDisplay = c.buttonText ? escapeHtml(c.buttonText) : "<i>not set</i>";
     const btnEmojiDisplay = c.buttonEmoji ? escapeHtml(c.buttonEmoji) + (c.buttonEmojiId ? " 🌟" : "") : "<i>none</i>";
     const groupBtnEmojiDisplay = c.groupButtonEmoji ? escapeHtml(c.groupButtonEmoji) + (c.groupButtonEmojiId ? " 🌟" : "") : "<i>none</i>";
+    const groupBtnTextDisplay = c.groupButtonText ? escapeHtml(c.groupButtonText) : "<i>Get My Referral Link</i> (default)";
     const text =
       `🎁 <b>Referral Join-Bonus Campaign</b>\n\n` +
       `<b>Status:</b> ${status}\n` +
       `<b>Reward per join:</b> <code>${Number(c.reward).toFixed(2)} USDT</code>\n` +
       `<b>Button text (user DM):</b> ${btnDisplay}\n` +
       `<b>Button emoji (user DM):</b> ${btnEmojiDisplay}\n` +
+      `<b>Group version button text:</b> ${groupBtnTextDisplay}\n` +
       `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n\n` +
+      `<i>ℹ️ If a group button emoji is set, the group broadcast button shows only that emoji. Otherwise it shows the group button text.</i>\n\n` +
       `<b>Current message template:</b>\n${msgPreview}\n\n` +
       `<i>ℹ️ This campaign only controls the limited-time join bonus. The permanent first-purchase bonus + commission % referral system always stays active regardless of this toggle.</i>`;
     const buttons = [
@@ -6529,7 +6532,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       [{ text: "💰 Edit Reward", callback_data: "rc_edit_reward" }],
       [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
       [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
-      [{ text: "👥 Edit Group Button Emoji", callback_data: "rc_edit_group_btn_emoji" }],
+      [{ text: "👥 Edit Group Btn Text", callback_data: "rc_edit_group_btn_text" }, { text: "✨ Edit Group Btn Emoji", callback_data: "rc_edit_group_btn_emoji" }],
       [{ text: "👁 Preview Message", callback_data: "rc_preview" }],
       [{ text: "📢 Broadcast", callback_data: "rc_broadcast" }],
       [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
