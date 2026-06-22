@@ -5510,6 +5510,47 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  if (customer.pending_action === "admin_rc_group_btn_emoji" && isAdmin(chatId)) {
+    let value = "";
+    let customEmojiId = "";
+    const entities = Array.isArray(message.entities) ? message.entities : [];
+    const customEmojiEntity = entities.find((e) => e.type === "custom_emoji");
+    if (customEmojiEntity && typeof customEmojiEntity.offset === "number" && typeof customEmojiEntity.length === "number") {
+      value = rawText.substring(customEmojiEntity.offset, customEmojiEntity.offset + customEmojiEntity.length);
+      customEmojiId = String(customEmojiEntity.custom_emoji_id || "");
+    } else {
+      value = String(rawText || "").trim();
+    }
+    if (!value && String(rawText || "").trim().toLowerCase() !== "clear") {
+      await sendMessage(chatId, "❌ Empty input. Send an emoji, or send <code>clear</code> to remove, or /cancel."); return;
+    }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    if (String(rawText || "").trim().toLowerCase() === "clear") {
+      value = "";
+      customEmojiId = "";
+    }
+
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_emoji").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_emoji");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_emoji", value });
+
+    const { data: existingId } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_emoji_id").maybeSingle();
+    if (existingId) await supabase.from("bot_settings").update({ value: customEmojiId, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_emoji_id");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_emoji_id", value: customEmojiId });
+
+    cachedCampaign.groupButtonEmoji = value;
+    cachedCampaign.groupButtonEmojiId = customEmojiId;
+    campaignLastFetch = Date.now();
+
+    const idNote = customEmojiId ? `\n\n🌟 Premium emoji document_id captured: <code>${customEmojiId}</code>` : "";
+    const display = value ? escapeHtml(value) : "<i>cleared</i>";
+    await sendMessage(chatId, `✅ Group version button emoji updated to: ${display}${idNote}\n\n<i>Note: inline button labels only display the fallback character; premium emoji animation does not render on buttons.</i>`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+  }
+
+
+
   // Broadcast
   // ── Flash Sale: collect sale price ──
   if (customer.pending_action?.startsWith("fs_price_") && isAdmin(chatId)) {
