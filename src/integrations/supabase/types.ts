@@ -104,6 +104,33 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_campaign_messages: {
+        Row: {
+          campaign_key: string
+          chat_id: number
+          created_at: string
+          id: string
+          message_id: number
+          target_type: string
+        }
+        Insert: {
+          campaign_key?: string
+          chat_id: number
+          created_at?: string
+          id?: string
+          message_id: number
+          target_type?: string
+        }
+        Update: {
+          campaign_key?: string
+          chat_id?: number
+          created_at?: string
+          id?: string
+          message_id?: number
+          target_type?: string
+        }
+        Relationships: []
+      }
       bot_custom_emoji_cache: {
         Row: {
           created_at: string
