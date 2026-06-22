@@ -2176,7 +2176,7 @@ async function getCampaignSettings(force = false) {
         cachedCampaign.groupButtonEmojiId = String(map.referral_campaign_group_button_emoji_id || "");
         cachedCampaign.groupButtonText = String(map.referral_campaign_group_button_text || "");
         const style = String(map.referral_campaign_group_button_style || "").toLowerCase();
-        cachedCampaign.groupButtonStyle = ["primary","secondary","success","danger"].includes(style) ? style : "primary";
+        cachedCampaign.groupButtonStyle = ["primary","success","danger"].includes(style) ? style : "primary";
       }
 
       campaignLastFetch = Date.now();
@@ -6717,7 +6717,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). When an emoji is set, the group broadcast button shows <b>only this emoji</b> as its label (no text).\n\nSend <code>clear</code> to remove the emoji and fall back to the button text.\n\n❌ /cancel to cancel`);
     const curEmoji = c.groupButtonEmoji || "";
     const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
-    const previewBtn = { text: (c.groupButtonEmojiId || c.groupButtonEmoji) ? (c.groupButtonEmoji || "⭐") : (c.groupButtonText || "Get My Referral Link"), callback_data: "noop_preview" };
+    const previewBtn = { text: c.groupButtonEmojiId ? " " : (c.groupButtonEmoji || c.groupButtonText || "Get My Referral Link"), callback_data: "noop_preview" };
     if (c.groupButtonEmojiId) previewBtn.icon_custom_emoji_id = c.groupButtonEmojiId;
     if (c.groupButtonStyle) previewBtn.style = c.groupButtonStyle;
     await sendMessage(
@@ -6741,19 +6741,18 @@ async function handleCallback(callbackQuery, emojiMap) {
     const cur = c.groupButtonStyle || "primary";
     const styles = [
       { key: "primary", label: "🔵 Primary (Blue)" },
-      { key: "secondary", label: "⚪ Secondary" },
       { key: "success", label: "🟢 Success (Green)" },
       { key: "danger", label: "🔴 Danger (Red)" },
     ];
     const kb = styles.map(s => [{ text: (s.key === cur ? "✅ " : "") + s.label, callback_data: `rc_set_group_style:${s.key}` }]);
     kb.push([{ text: "◀️ Back", callback_data: "adm_refcamp" }]);
-    await editOrSend(chatId, msgId, `🎨 <b>Group Version Button Color</b>\n\nSelect the button style (Bot API 9.4+). The button color depends on the user's Telegram theme.\n\n<b>Current:</b> <code>${escapeHtml(cur)}</code>`, { inline_keyboard: kb });
+    await editOrSend(chatId, msgId, `🎨 <b>Group Version Button Color</b>\n\nSelect the button style (Bot API 9.4+: only primary/success/danger are valid).\n\n<b>Current:</b> <code>${escapeHtml(cur)}</code>`, { inline_keyboard: kb });
     return;
   }
 
   if (data.startsWith("rc_set_group_style:") && isAdmin(chatId)) {
     const style = data.split(":")[1];
-    if (!["primary","secondary","success","danger"].includes(style)) { answerCallbackQuery(callbackQuery.id, "Invalid style"); return; }
+    if (!["primary","success","danger"].includes(style)) { answerCallbackQuery(callbackQuery.id, "Invalid style"); return; }
     const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_style").maybeSingle();
     if (existing) await supabase.from("bot_settings").update({ value: style, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_style");
     else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_style", value: style });

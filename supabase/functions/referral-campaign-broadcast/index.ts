@@ -106,8 +106,9 @@ Deno.serve(async (req) => {
     const groupButtonEmoji = settings.referral_campaign_group_button_emoji || "";
     const groupButtonEmojiId = settings.referral_campaign_group_button_emoji_id || "";
     const groupButtonText = settings.referral_campaign_group_button_text || "Get My Referral Link";
+    // Telegram Bot API 9.4: style must be exactly "primary" (blue), "success" (green), or "danger" (red).
     const rawStyle = String(settings.referral_campaign_group_button_style || "primary").toLowerCase();
-    const groupButtonStyle = ["primary","secondary","success","danger"].includes(rawStyle) ? rawStyle : "primary";
+    const groupButtonStyle = ["primary","success","danger"].includes(rawStyle) ? rawStyle : "primary";
     const reward = settings.referral_campaign_reward || "0.1";
 
     function buildCampaignButton(label: string, referralLink: string) {
@@ -118,13 +119,18 @@ Deno.serve(async (req) => {
 
     function buildGroupButton(url: string) {
       const btn: any = { url };
-      if (groupButtonEmojiId || groupButtonEmoji) {
-        btn.text = groupButtonEmoji || "⭐";
-        if (groupButtonEmojiId) btn.icon_custom_emoji_id = groupButtonEmojiId;
+      if (groupButtonEmojiId) {
+        // Premium custom emoji: render emoji only. `text` is required by Telegram
+        // but a single space keeps the visual to just the premium emoji icon.
+        btn.text = " ";
+        btn.icon_custom_emoji_id = groupButtonEmojiId;
+      } else if (groupButtonEmoji) {
+        btn.text = groupButtonEmoji;
       } else {
         btn.text = groupButtonText;
       }
-      if (groupButtonStyle) btn.style = groupButtonStyle;
+      // Bot API 9.4+: style renders the button in the chosen color.
+      btn.style = groupButtonStyle;
       return btn;
     }
 
