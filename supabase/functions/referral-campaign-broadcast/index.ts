@@ -94,12 +94,44 @@ Deno.serve(async (req) => {
         reply_markup: { inline_keyboard: [[{ text: "🤖 Get My Referral Link", url: groupBtnUrl }]] },
       }, BOT_TOKEN);
 
-      if (!r1.ok && !r2.ok) {
-        return new Response(JSON.stringify({ error: "Failed to send preview", details: r1.data || r2.data }), { status: 500, headers: corsHeaders });
+      const errors: string[] = [];
+      if (!r1.ok) errors.push(`Admin preview: ${r1.data?.description || JSON.stringify(r1.data)}`);
+      if (!r2.ok) errors.push(`Group preview: ${r2.data?.description || JSON.stringify(r2.data)}`);
+
+      if (errors.length > 0) {
+        // Try a plaintext fallback so the admin still receives content + sees the HTML error
+        const plain = (s: string) => s.replace(/<\/?[^>]+>/g, "");
+        if (!r1.ok) {
+          await tgSend("sendMessage", {
+            chat_id: cid,
+            text: "⚠️ HTML parse failed for admin preview. Plaintext fallback:\n\n" + plain(text),
+            disable_web_page_preview: true,
+          }, BOT_TOKEN);
+        }
+        if (!r2.ok) {
+          await tgSend("sendMessage", {
+            chat_id: cid,
+            text: "⚠️ HTML parse failed for group preview. Plaintext fallback:\n\n" + plain(userText),
+            disable_web_page_preview: true,
+          }, BOT_TOKEN);
+        }
       }
-      return new Response(JSON.stringify({ ok: true, preview: true, sent: (r1.ok?1:0)+(r2.ok?1:0) }), {
+
+      if (!r1.ok && !r2.ok) {
+        return new Response(JSON.stringify({
+          error: "Telegram rejected the message: " + errors.join(" | "),
+          details: { r1: r1.data, r2: r2.data },
+        }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        preview: true,
+        sent: (r1.ok?1:0)+(r2.ok?1:0),
+        warnings: errors.length ? errors : undefined,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+
     }
 
     if (target === "users") {
