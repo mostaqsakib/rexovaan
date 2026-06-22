@@ -2134,21 +2134,36 @@ async function getRefSettings() {
 // ── Join-reward referral campaign (admin toggleable) ──
 // NOTE: This ONLY controls the limited-time join bonus.
 // The existing first-purchase bonus + commission % system is permanent and always active.
-let cachedCampaign = { active: false, reward: 0.1 };
+let cachedCampaign = {
+  active: false,
+  reward: 0.1,
+  message: "",
+  buttonText: "",
+  buttonEmoji: "",
+  buttonEmojiId: "",
+};
 let campaignLastFetch = 0;
 
-async function getCampaignSettings() {
-  if (Date.now() - campaignLastFetch > 30000) {
+async function getCampaignSettings(force = false) {
+  if (force || Date.now() - campaignLastFetch > 30000) {
     try {
       const { data } = await supabase.from("bot_settings").select("key, value").in("key", [
         "referral_campaign_active",
         "referral_campaign_reward",
+        "referral_campaign_message",
+        "referral_campaign_button_text",
+        "referral_campaign_button_emoji",
+        "referral_campaign_button_emoji_id",
       ]);
       if (data) {
         const map = Object.fromEntries(data.map(r => [r.key, r.value]));
         cachedCampaign.active = String(map.referral_campaign_active || "").toLowerCase() === "true";
         const rew = parseFloat(map.referral_campaign_reward);
         if (Number.isFinite(rew) && rew >= 0) cachedCampaign.reward = rew;
+        cachedCampaign.message = String(map.referral_campaign_message || "");
+        cachedCampaign.buttonText = String(map.referral_campaign_button_text || "");
+        cachedCampaign.buttonEmoji = String(map.referral_campaign_button_emoji || "");
+        cachedCampaign.buttonEmojiId = String(map.referral_campaign_button_emoji_id || "");
       }
       campaignLastFetch = Date.now();
     } catch (e) { console.error("Failed to fetch campaign settings:", e); }
