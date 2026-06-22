@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
         text: userText,
         parse_mode: "HTML",
         disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: "🤖 Get My Referral Link", url: groupBtnUrl }]] },
+        reply_markup: { inline_keyboard: [[buildGroupButton(groupBtnUrl)]] },
       }, BOT_TOKEN);
 
       const errors: string[] = [];
