@@ -4851,15 +4851,41 @@ async function handleMessage(message, emojiMap) {
     if (startParam && startParam.startsWith("ref_")) {
       const refCode = startParam.replace("ref_", "").toLowerCase();
       // Find referrer by matching code
-      const { data: allCustomers } = await supabase.from("bot_customers").select("id, chat_id").neq("id", customer.id);
+      const { data: allCustomers } = await supabase.from("bot_customers").select("id, chat_id, balance").neq("id", customer.id);
       if (allCustomers) {
         const referrer = allCustomers.find(c => generateReferralCode(c.chat_id) === refCode);
         if (referrer) {
-          // Check if already referred
+          // Check if already referred (one-time per referred user)
           const { data: existingRef } = await supabase.from("bot_referrals").select("id").eq("referred_id", customer.id).maybeSingle();
           if (!existingRef) {
             await supabase.from("bot_referrals").insert({ referrer_id: referrer.id, referred_id: customer.id });
             console.log(`Referral registered: ${customer.id} referred by ${referrer.id}`);
+
+            // ── Limited-time JOIN-BONUS campaign (independent of existing commission/first-purchase system) ──
+            try {
+              const campaign = await getCampaignSettings();
+              if (campaign.active && campaign.reward > 0) {
+                const reward = Number(campaign.reward);
+                const newBalance = Number(referrer.balance || 0) + reward;
+                await supabase.from("bot_customers").update({
+                  balance: newBalance,
+                  updated_at: new Date().toISOString(),
+                }).eq("id", referrer.id);
+                await supabase.from("bot_referral_earnings").insert({
+                  referrer_id: referrer.id,
+                  referred_id: customer.id,
+                  amount: reward,
+                  type: "join_bonus",
+                });
+                sendMessage(
+                  referrer.chat_id,
+                  `🎉 <b>Referral Join Bonus!</b>\n\nA new user joined via your referral link.\nYou earned <b>${reward.toFixed(2)} USDT</b>!\n\n💳 Wallet Balance: <b>${newBalance.toFixed(2)} USDT</b>`
+                ).catch(() => {});
+                console.log(`Join bonus paid: ${reward} USDT to ${referrer.id}`);
+              }
+            } catch (e) {
+              console.error("Join-bonus credit failed:", e?.message || e);
+            }
           }
         }
       }
