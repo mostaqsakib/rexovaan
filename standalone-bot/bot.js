@@ -2176,7 +2176,7 @@ async function getCampaignSettings(force = false) {
         cachedCampaign.groupButtonEmojiId = String(map.referral_campaign_group_button_emoji_id || "");
         cachedCampaign.groupButtonText = String(map.referral_campaign_group_button_text || "");
         const style = String(map.referral_campaign_group_button_style || "").toLowerCase();
-        cachedCampaign.groupButtonStyle = ["primary","secondary","success","danger"].includes(style) ? style : "primary";
+        cachedCampaign.groupButtonStyle = ["primary","success","danger"].includes(style) ? style : "primary";
       }
 
       campaignLastFetch = Date.now();
