@@ -5552,6 +5552,23 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  if (customer.pending_action === "admin_rc_group_btn_text" && isAdmin(chatId)) {
+    let value = String(rawText || "").trim();
+    if (!value) { await sendMessage(chatId, "❌ Empty input. Send the button text, or <code>clear</code> to reset, or /cancel."); return; }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    if (value.toLowerCase() === "clear") value = "";
+
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_text").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_text");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_text", value });
+
+    cachedCampaign.groupButtonText = value;
+    campaignLastFetch = Date.now();
+
+    const display = value ? escapeHtml(value) : "<i>Get My Referral Link</i> (default)";
+    await sendMessage(chatId, `✅ Group version button text updated to: ${display}`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    return;
+
 
 
   // Broadcast
