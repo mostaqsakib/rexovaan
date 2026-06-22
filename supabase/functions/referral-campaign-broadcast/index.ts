@@ -33,12 +33,13 @@ Deno.serve(async (req) => {
   );
 
   try {
-    const { target } = await req.json();
-    if (target !== "users" && target !== "groups") {
-      return new Response(JSON.stringify({ error: "target must be 'users' or 'groups'" }), {
+    const { target, preview_chat_id } = await req.json();
+    if (target !== "users" && target !== "groups" && target !== "preview") {
+      return new Response(JSON.stringify({ error: "target must be 'users', 'groups', or 'preview'" }), {
         status: 400, headers: corsHeaders,
       });
     }
+
 
     // Load campaign settings
     const { data: settingsRows } = await supabase
