@@ -255,7 +255,7 @@ Deno.serve(async (req) => {
           .replaceAll("{referral_link}", groupCta)
           .replaceAll("{reward}", reward);
         const replyMarkup = {
-          inline_keyboard: [[{ text: "🤖 Get My Referral Link", url: groupBtnUrl }]],
+          inline_keyboard: [[buildGroupButton(groupBtnUrl)]],
         };
         const r = await tgSend("sendMessage", {
           chat_id: g.chat_id,
