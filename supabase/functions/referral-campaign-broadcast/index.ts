@@ -9,13 +9,53 @@ const tgUrl = (token: string, method: string) =>
   `https://api.telegram.org/bot${token}/${method}`;
 
 async function tgSend(method: string, body: Record<string, unknown>, token: string) {
-  const res = await fetch(tgUrl(token, method), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok && data?.ok !== false, data };
+  try {
+    const res = await fetch(tgUrl(token, method), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    const ok = res.ok && data?.ok !== false;
+    if (!ok) {
+      console.error("[referral-campaign-broadcast] Telegram API failed", JSON.stringify({
+        method,
+        status: res.status,
+        error_code: data?.error_code,
+        description: data?.description,
+        parameters: data?.parameters,
+      }));
+    }
+    return { ok, status: res.status, data };
+  } catch (err) {
+    const description = `Telegram request failed: ${err instanceof Error ? err.message : String(err)}`;
+    console.error("[referral-campaign-broadcast] Telegram request threw", JSON.stringify({ method, description }));
+    return { ok: false, status: 0, data: { description } };
+  }
+}
+
+const DEFAULT_REFERRAL_CAMPAIGN_MESSAGE = `<tg-emoji emoji-id="5787601128669584115">⭐️</tg-emoji> <b>Refer & Earn!</b>
+
+Use our bot and earn bonus on every successful referral!
+
+<tg-emoji emoji-id="5931347928810526429">👥</tg-emoji> <b>How it works?</b>
+<blockquote>• Share your referral link
+• When a friend clicks your link and starts the bot, you earn a bonus
+• Bonus is credited directly to your wallet</blockquote>
+
+<tg-emoji emoji-id="5271604874419647061">🔗</tg-emoji> <b>Your Referral Link:</b>
+{referral_link}
+
+<tg-emoji emoji-id="5409048419211682843">💵</tg-emoji> <b>Earn per referral:</b> {reward} USDT
+
+<i>(Limited Time Campaign)</i>`;
+
+function telegramError(label: string, result: { status?: number; data?: any }) {
+  const data = result?.data || {};
+  const status = result?.status ? `HTTP ${result.status}` : "HTTP unknown";
+  const code = data?.error_code ? `error_code ${data.error_code}` : "no error_code";
+  const description = data?.description || JSON.stringify(data);
+  return `${label}: ${status}, ${code}, ${description}`;
 }
 
 Deno.serve(async (req) => {
@@ -54,8 +94,7 @@ Deno.serve(async (req) => {
       (settingsRows || []).map((r: any) => [r.key, r.value || ""]),
     );
 
-    const template = settings.referral_campaign_message ||
-      "🎁 Refer & Earn!\n\n{referral_link}";
+    const template = settings.referral_campaign_message || DEFAULT_REFERRAL_CAMPAIGN_MESSAGE;
     const buttonText = settings.referral_campaign_button_text || "🔗 My Referral Link";
     const reward = settings.referral_campaign_reward || "0.1";
 
@@ -95,8 +134,8 @@ Deno.serve(async (req) => {
       }, BOT_TOKEN);
 
       const errors: string[] = [];
-      if (!r1.ok) errors.push(`Admin preview: ${r1.data?.description || JSON.stringify(r1.data)}`);
-      if (!r2.ok) errors.push(`Group preview: ${r2.data?.description || JSON.stringify(r2.data)}`);
+      if (!r1.ok) errors.push(telegramError("Admin preview", r1));
+      if (!r2.ok) errors.push(telegramError("Group preview", r2));
 
       if (errors.length > 0) {
         // Try a plaintext fallback so the admin still receives content + sees the HTML error
