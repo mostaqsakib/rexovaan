@@ -2144,6 +2144,7 @@ let cachedCampaign = {
   groupButtonEmoji: "",
   groupButtonEmojiId: "",
   groupButtonText: "",
+  groupButtonStyle: "primary",
 };
 let campaignLastFetch = 0;
 
@@ -2160,6 +2161,7 @@ async function getCampaignSettings(force = false) {
         "referral_campaign_group_button_emoji",
         "referral_campaign_group_button_emoji_id",
         "referral_campaign_group_button_text",
+        "referral_campaign_group_button_style",
       ]);
       if (data) {
         const map = Object.fromEntries(data.map(r => [r.key, r.value]));
@@ -2173,6 +2175,8 @@ async function getCampaignSettings(force = false) {
         cachedCampaign.groupButtonEmoji = String(map.referral_campaign_group_button_emoji || "");
         cachedCampaign.groupButtonEmojiId = String(map.referral_campaign_group_button_emoji_id || "");
         cachedCampaign.groupButtonText = String(map.referral_campaign_group_button_text || "");
+        const style = String(map.referral_campaign_group_button_style || "").toLowerCase();
+        cachedCampaign.groupButtonStyle = ["primary","secondary","success","danger"].includes(style) ? style : "primary";
       }
 
       campaignLastFetch = Date.now();
@@ -6545,8 +6549,9 @@ async function handleCallback(callbackQuery, emojiMap) {
       `<b>Button text (user DM):</b> ${btnDisplay}\n` +
       `<b>Button emoji (user DM):</b> ${btnEmojiDisplay}\n` +
       `<b>Group version button text:</b> ${groupBtnTextDisplay}\n` +
-      `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n\n` +
-      `<i>ℹ️ If a group button emoji is set, the group broadcast button shows only that emoji. Otherwise it shows the group button text.</i>\n\n` +
+      `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n` +
+      `<b>Group version button color:</b> <code>${escapeHtml(c.groupButtonStyle || "primary")}</code>\n\n` +
+      `<i>ℹ️ If a group button emoji is set, the group broadcast button shows only that emoji. Otherwise it shows the group button text. Color requires Telegram client supporting Bot API 9.4+.</i>\n\n` +
       `<b>Current message template:</b>\n${msgPreview}\n\n` +
       `<i>ℹ️ This campaign only controls the limited-time join bonus. The permanent first-purchase bonus + commission % referral system always stays active regardless of this toggle.</i>`;
     const buttons = [
@@ -6555,6 +6560,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
       [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
       [{ text: "👥 Edit Group Btn Text", callback_data: "rc_edit_group_btn_text" }, { text: "✨ Edit Group Btn Emoji", callback_data: "rc_edit_group_btn_emoji" }],
+      [{ text: "🎨 Edit Group Btn Color", callback_data: "rc_edit_group_btn_style" }],
       [{ text: "👁 Preview Message", callback_data: "rc_preview" }],
       [{ text: "📢 Broadcast", callback_data: "rc_broadcast" }],
       [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
@@ -6713,6 +6719,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
     const previewBtn = { text: (c.groupButtonEmojiId || c.groupButtonEmoji) ? (c.groupButtonEmoji || "⭐") : (c.groupButtonText || "Get My Referral Link"), callback_data: "noop_preview" };
     if (c.groupButtonEmojiId) previewBtn.icon_custom_emoji_id = c.groupButtonEmojiId;
+    if (c.groupButtonStyle) previewBtn.style = c.groupButtonStyle;
     await sendMessage(
       chatId,
       `📄 <b>Current group button emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}${idNote}\n\n👇 <b>Group preview:</b>\n<i>Note: inline button labels show the fallback character only; premium emoji animation is not rendered on buttons.</i>`,
@@ -6726,6 +6733,34 @@ async function handleCallback(callbackQuery, emojiMap) {
     await supabase.from("bot_customers").update({ pending_action: "admin_rc_group_btn_text" }).eq("chat_id", chatId);
     const cur = c.groupButtonText || "";
     await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Text</b>\n\nSend the text for the group broadcast button (shown when no group button emoji is set).\n\n<b>Current:</b> ${cur ? escapeHtml(cur) : "<i>Get My Referral Link</i> (default)"}\n\nSend <code>clear</code> to restore the default.\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+  if (data === "rc_edit_group_btn_style" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
+    const cur = c.groupButtonStyle || "primary";
+    const styles = [
+      { key: "primary", label: "🔵 Primary (Blue)" },
+      { key: "secondary", label: "⚪ Secondary" },
+      { key: "success", label: "🟢 Success (Green)" },
+      { key: "danger", label: "🔴 Danger (Red)" },
+    ];
+    const kb = styles.map(s => [{ text: (s.key === cur ? "✅ " : "") + s.label, callback_data: `rc_set_group_style:${s.key}` }]);
+    kb.push([{ text: "◀️ Back", callback_data: "adm_refcamp" }]);
+    await editOrSend(chatId, msgId, `🎨 <b>Group Version Button Color</b>\n\nSelect the button style (Bot API 9.4+). The button color depends on the user's Telegram theme.\n\n<b>Current:</b> <code>${escapeHtml(cur)}</code>`, { inline_keyboard: kb });
+    return;
+  }
+
+  if (data.startsWith("rc_set_group_style:") && isAdmin(chatId)) {
+    const style = data.split(":")[1];
+    if (!["primary","secondary","success","danger"].includes(style)) { answerCallbackQuery(callbackQuery.id, "Invalid style"); return; }
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_style").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value: style, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_style");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_style", value: style });
+    cachedCampaign.groupButtonStyle = style;
+    campaignLastFetch = Date.now();
+    answerCallbackQuery(callbackQuery.id, `✅ Color set to ${style}`);
+    await editOrSend(chatId, msgId, `✅ <b>Group button color updated to:</b> <code>${escapeHtml(style)}</code>`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }]] });
     return;
   }
 
