@@ -6711,11 +6711,12 @@ async function handleCallback(callbackQuery, emojiMap) {
     await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). When an emoji is set, the group broadcast button shows <b>only this emoji</b> as its label (no text).\n\nSend <code>clear</code> to remove the emoji and fall back to the button text.\n\n❌ /cancel to cancel`);
     const curEmoji = c.groupButtonEmoji || "";
     const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
-    const previewLabel = curEmoji || (c.groupButtonText || "Get My Referral Link");
+    const previewBtn = { text: c.groupButtonEmoji || (c.groupButtonEmojiId ? " " : (c.groupButtonText || "Get My Referral Link")), callback_data: "noop_preview" };
+    if (c.groupButtonEmojiId) previewBtn.icon_custom_emoji_id = c.groupButtonEmojiId;
     await sendMessage(
       chatId,
       `📄 <b>Current group button emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}${idNote}\n\n👇 <b>Group preview:</b>\n<i>Note: inline button labels show the fallback character only; premium emoji animation is not rendered on buttons.</i>`,
-      { inline_keyboard: [[{ text: previewLabel, callback_data: "noop_preview" }]] }
+      { inline_keyboard: [[previewBtn]] }
     );
     return;
   }
