@@ -6717,7 +6717,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). When an emoji is set, the group broadcast button shows <b>only this emoji</b> as its label (no text).\n\nSend <code>clear</code> to remove the emoji and fall back to the button text.\n\n❌ /cancel to cancel`);
     const curEmoji = c.groupButtonEmoji || "";
     const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
-    const previewBtn = { text: (c.groupButtonEmojiId || c.groupButtonEmoji) ? (c.groupButtonEmoji || "⭐") : (c.groupButtonText || "Get My Referral Link"), callback_data: "noop_preview" };
+    const previewBtn = { text: c.groupButtonEmojiId ? " " : (c.groupButtonEmoji || c.groupButtonText || "Get My Referral Link"), callback_data: "noop_preview" };
     if (c.groupButtonEmojiId) previewBtn.icon_custom_emoji_id = c.groupButtonEmojiId;
     if (c.groupButtonStyle) previewBtn.style = c.groupButtonStyle;
     await sendMessage(
