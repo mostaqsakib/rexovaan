@@ -88,6 +88,8 @@ Deno.serve(async (req) => {
       .in("key", [
         "referral_campaign_message",
         "referral_campaign_button_text",
+        "referral_campaign_button_emoji",
+        "referral_campaign_button_emoji_id",
         "referral_campaign_reward",
       ]);
     const settings: Record<string, string> = Object.fromEntries(
