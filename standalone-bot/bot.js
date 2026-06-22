@@ -6714,10 +6714,11 @@ async function handleCallback(callbackQuery, emojiMap) {
   if (data === "rc_edit_group_btn_emoji" && isAdmin(chatId)) {
     const c = await getCampaignSettings(true);
     await supabase.from("bot_customers").update({ pending_action: "admin_rc_group_btn_emoji" }).eq("chat_id", chatId);
-    await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). When an emoji is set, the group broadcast button shows <b>only this emoji</b> as its label (no text).\n\nSend <code>clear</code> to remove the emoji and fall back to the button text.\n\n❌ /cancel to cancel`);
+    await editOrSend(chatId, msgId, `👥 <b>Edit Group Version Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported). The premium emoji renders <b>alongside the button text</b>.\n\nSend <code>clear</code> to remove the emoji.\n\n❌ /cancel to cancel`);
     const curEmoji = c.groupButtonEmoji || "";
     const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
-    const previewBtn = { text: c.groupButtonEmojiId ? " " : (c.groupButtonEmoji || c.groupButtonText || "Get My Referral Link"), callback_data: "noop_preview" };
+    const btnLabel = (c.groupButtonEmoji ? `${c.groupButtonEmoji} ` : "") + (c.groupButtonText || "Get My Referral Link");
+    const previewBtn = { text: btnLabel, callback_data: "noop_preview" };
     if (c.groupButtonEmojiId) previewBtn.icon_custom_emoji_id = c.groupButtonEmojiId;
     if (c.groupButtonStyle) previewBtn.style = c.groupButtonStyle;
     await sendMessage(
