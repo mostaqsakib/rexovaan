@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
       const btn: any = { url };
       if (groupButtonEmojiId) {
         // Premium emoji: show only the custom emoji, minimal required text
-        btn.text = groupButtonEmoji || " ";
+        btn.text = " ";
         btn.icon_custom_emoji_id = groupButtonEmojiId;
       } else {
         // Default: text only, no emoji at all
