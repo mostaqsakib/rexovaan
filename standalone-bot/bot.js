@@ -6511,12 +6511,14 @@ async function handleCallback(callbackQuery, emojiMap) {
     const msgPreview = c.message ? c.message.slice(0, 300) + (c.message.length > 300 ? "…" : "") : "<i>not set</i>";
     const btnDisplay = c.buttonText ? escapeHtml(c.buttonText) : "<i>not set</i>";
     const btnEmojiDisplay = c.buttonEmoji ? escapeHtml(c.buttonEmoji) + (c.buttonEmojiId ? " 🌟" : "") : "<i>none</i>";
+    const groupBtnEmojiDisplay = c.groupButtonEmoji ? escapeHtml(c.groupButtonEmoji) + (c.groupButtonEmojiId ? " 🌟" : "") : "<i>none</i>";
     const text =
       `🎁 <b>Referral Join-Bonus Campaign</b>\n\n` +
       `<b>Status:</b> ${status}\n` +
       `<b>Reward per join:</b> <code>${Number(c.reward).toFixed(2)} USDT</code>\n` +
-      `<b>Button text:</b> ${btnDisplay}\n` +
-      `<b>Button emoji:</b> ${btnEmojiDisplay}\n\n` +
+      `<b>Button text (user DM):</b> ${btnDisplay}\n` +
+      `<b>Button emoji (user DM):</b> ${btnEmojiDisplay}\n` +
+      `<b>Group version button emoji:</b> ${groupBtnEmojiDisplay}\n\n` +
       `<b>Current message template:</b>\n${msgPreview}\n\n` +
       `<i>ℹ️ This campaign only controls the limited-time join bonus. The permanent first-purchase bonus + commission % referral system always stays active regardless of this toggle.</i>`;
     const buttons = [
@@ -6524,10 +6526,12 @@ async function handleCallback(callbackQuery, emojiMap) {
       [{ text: "💰 Edit Reward", callback_data: "rc_edit_reward" }],
       [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
       [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
+      [{ text: "👥 Edit Group Button Emoji", callback_data: "rc_edit_group_btn_emoji" }],
       [{ text: "👁 Preview Message", callback_data: "rc_preview" }],
       [{ text: "📢 Broadcast", callback_data: "rc_broadcast" }],
       [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
     ];
+
     await editOrSend(chatId, msgId, text, { inline_keyboard: buttons });
     return;
   }
