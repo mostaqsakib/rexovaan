@@ -82,12 +82,14 @@ Deno.serve(async (req) => {
       const r1 = await tgSend("sendMessage", {
         chat_id: cid,
         text,
+        parse_mode: "HTML",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [[{ text: buttonText, url: link }]] },
       }, BOT_TOKEN);
       const r2 = await tgSend("sendMessage", {
         chat_id: cid,
         text: userText,
+        parse_mode: "HTML",
         disable_web_page_preview: true,
         reply_markup: { inline_keyboard: [[{ text: "🤖 Get My Referral Link", url: groupBtnUrl }]] },
       }, BOT_TOKEN);
