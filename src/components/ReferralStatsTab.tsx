@@ -101,7 +101,7 @@ const ReferralStatsTab = () => {
     setSavingCampaign(false);
   };
 
-  const [broadcasting, setBroadcasting] = useState<'users' | 'groups' | null>(null);
+  const [broadcasting, setBroadcasting] = useState<'users' | 'groups' | 'preview' | null>(null);
   const doBroadcast = async (target: 'users' | 'groups') => {
     if (!confirm(`Send referral campaign broadcast to all ${target}?`)) return;
     setBroadcasting(target);
@@ -114,6 +114,28 @@ const ReferralStatsTab = () => {
     }
     setBroadcasting(null);
   };
+
+  const doPreview = async () => {
+    setBroadcasting('preview');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const chatId = (user?.user_metadata as any)?.telegram_chat_id;
+      if (!chatId) {
+        toast.error('No Telegram account bound to your admin login. Sign in via Telegram first.');
+        setBroadcasting(null);
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke('referral-campaign-broadcast', {
+        body: { target: 'preview', preview_chat_id: chatId },
+      });
+      if (error) throw error;
+      toast.success(`Preview sent to your Telegram (${data?.sent ?? 0} messages). Check your DMs.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Preview failed');
+    }
+    setBroadcasting(null);
+  };
+
 
   const fetchData = async () => {
     setLoading(true);
@@ -218,6 +240,10 @@ const ReferralStatsTab = () => {
           <div className="rounded-lg border p-3 space-y-2">
             <Label className="text-sm font-medium flex items-center gap-2"><Megaphone className="h-4 w-4 text-primary" />📢 Broadcast Campaign</Label>
             <p className="text-xs text-muted-foreground">Sent messages are tracked and auto-deleted when the campaign is turned OFF.</p>
+            <Button variant="secondary" disabled={!!broadcasting} onClick={doPreview} className="w-full">
+              {broadcasting === 'preview' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              👁 Preview Message (sends to your Telegram)
+            </Button>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Button variant="outline" disabled={!!broadcasting} onClick={() => doBroadcast('users')}>
                 {broadcasting === 'users' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -229,6 +255,7 @@ const ReferralStatsTab = () => {
               </Button>
             </div>
           </div>
+
         </CardContent>
       </Card>
 

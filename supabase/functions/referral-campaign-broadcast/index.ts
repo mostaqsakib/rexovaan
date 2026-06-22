@@ -33,12 +33,13 @@ Deno.serve(async (req) => {
   );
 
   try {
-    const { target } = await req.json();
-    if (target !== "users" && target !== "groups") {
-      return new Response(JSON.stringify({ error: "target must be 'users' or 'groups'" }), {
+    const { target, preview_chat_id } = await req.json();
+    if (target !== "users" && target !== "groups" && target !== "preview") {
+      return new Response(JSON.stringify({ error: "target must be 'users', 'groups', or 'preview'" }), {
         status: 400, headers: corsHeaders,
       });
     }
+
 
     // Load campaign settings
     const { data: settingsRows } = await supabase
@@ -62,7 +63,45 @@ Deno.serve(async (req) => {
     let failed = 0;
     const stored: Array<{ chat_id: number; message_id: number; target_type: string }> = [];
 
+    if (target === "preview") {
+      const cid = Number(preview_chat_id);
+      if (!cid) {
+        return new Response(JSON.stringify({ error: "preview_chat_id required. Bind your Telegram account first." }), { status: 400, headers: corsHeaders });
+      }
+      const link = BOT_USERNAME
+        ? `https://t.me/${BOT_USERNAME}?start=ref_${cid}`
+        : `(link unavailable)`;
+      const text = "👁 PREVIEW (only visible to you)\n\n" + template
+        .replaceAll("{referral_link}", link)
+        .replaceAll("{reward}", reward);
+      const userText = "— — — — —\n👥 GROUP VERSION PREVIEW:\n\n" + template
+        .replaceAll("{referral_link}", "👉 Start the bot to get your referral link!")
+        .replaceAll("{reward}", reward);
+      const groupBtnUrl = BOT_USERNAME ? `https://t.me/${BOT_USERNAME}?start=ref` : "https://t.me/";
+
+      const r1 = await tgSend("sendMessage", {
+        chat_id: cid,
+        text,
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: [[{ text: buttonText, url: link }]] },
+      }, BOT_TOKEN);
+      const r2 = await tgSend("sendMessage", {
+        chat_id: cid,
+        text: userText,
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: [[{ text: "🤖 Get My Referral Link", url: groupBtnUrl }]] },
+      }, BOT_TOKEN);
+
+      if (!r1.ok && !r2.ok) {
+        return new Response(JSON.stringify({ error: "Failed to send preview", details: r1.data || r2.data }), { status: 500, headers: corsHeaders });
+      }
+      return new Response(JSON.stringify({ ok: true, preview: true, sent: (r1.ok?1:0)+(r2.ok?1:0) }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (target === "users") {
+
       const { data: customers, error } = await supabase
         .from("bot_customers")
         .select("chat_id")
