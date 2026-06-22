@@ -74,16 +74,45 @@ const ReferralStatsTab = () => {
     }
     setSavingCampaign(true);
     try {
+      const { data: prev } = await supabase
+        .from('bot_settings')
+        .select('value')
+        .eq('key', 'referral_campaign_active')
+        .maybeSingle();
+      const wasActive = String(prev?.value || '').toLowerCase() === 'true';
+      const turningOff = wasActive && !campaignActive;
+
       const [r1, r2] = await Promise.all([
         saveSetting('referral_campaign_active', campaignActive ? 'true' : 'false'),
         saveSetting('referral_campaign_reward', String(rew)),
       ]);
       if (r1.error || r2.error) throw new Error(r1.error?.message || r2.error?.message);
       toast.success('Campaign settings saved');
+
+      if (turningOff) {
+        toast.info('Deleting previously broadcast campaign messages…');
+        const { data: del, error: delErr } = await supabase.functions.invoke('referral-campaign-cleanup', { body: {} });
+        if (delErr) toast.error(`Cleanup failed: ${delErr.message}`);
+        else toast.success(`Deleted ${del?.deleted ?? 0} messages (${del?.skipped ?? 0} skipped)`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     }
     setSavingCampaign(false);
+  };
+
+  const [broadcasting, setBroadcasting] = useState<'users' | 'groups' | null>(null);
+  const doBroadcast = async (target: 'users' | 'groups') => {
+    if (!confirm(`Send referral campaign broadcast to all ${target}?`)) return;
+    setBroadcasting(target);
+    try {
+      const { data, error } = await supabase.functions.invoke('referral-campaign-broadcast', { body: { target } });
+      if (error) throw error;
+      toast.success(`Broadcast complete — sent: ${data?.sent ?? 0}, failed: ${data?.failed ?? 0}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Broadcast failed');
+    }
+    setBroadcasting(null);
   };
 
   const fetchData = async () => {
@@ -185,6 +214,21 @@ const ReferralStatsTab = () => {
             {savingCampaign && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             Save Campaign Settings
           </Button>
+
+          <div className="rounded-lg border p-3 space-y-2">
+            <Label className="text-sm font-medium flex items-center gap-2"><Megaphone className="h-4 w-4 text-primary" />📢 Broadcast Campaign</Label>
+            <p className="text-xs text-muted-foreground">Sent messages are tracked and auto-deleted when the campaign is turned OFF.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button variant="outline" disabled={!!broadcasting} onClick={() => doBroadcast('users')}>
+                {broadcasting === 'users' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                👤 Broadcast to Users
+              </Button>
+              <Button variant="outline" disabled={!!broadcasting} onClick={() => doBroadcast('groups')}>
+                {broadcasting === 'groups' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                👥 Broadcast to Groups
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
