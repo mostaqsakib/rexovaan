@@ -6719,6 +6719,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     const idNote = c.groupButtonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.groupButtonEmojiId)}</code>` : "";
     const previewBtn = { text: (c.groupButtonEmojiId || c.groupButtonEmoji) ? (c.groupButtonEmoji || "⭐") : (c.groupButtonText || "Get My Referral Link"), callback_data: "noop_preview" };
     if (c.groupButtonEmojiId) previewBtn.icon_custom_emoji_id = c.groupButtonEmojiId;
+    if (c.groupButtonStyle) previewBtn.style = c.groupButtonStyle;
     await sendMessage(
       chatId,
       `📄 <b>Current group button emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}${idNote}\n\n👇 <b>Group preview:</b>\n<i>Note: inline button labels show the fallback character only; premium emoji animation is not rendered on buttons.</i>`,
