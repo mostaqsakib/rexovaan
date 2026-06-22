@@ -2143,6 +2143,7 @@ let cachedCampaign = {
   buttonEmojiId: "",
   groupButtonEmoji: "",
   groupButtonEmojiId: "",
+  groupButtonText: "",
 };
 let campaignLastFetch = 0;
 
