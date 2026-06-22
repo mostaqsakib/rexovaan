@@ -41,6 +41,51 @@ const ReferralStatsTab = () => {
   const [earnings, setEarnings] = useState<EarningRow[]>([]);
   const [topReferrers, setTopReferrers] = useState<{ id: string; name: string; count: number; earned: number }[]>([]);
 
+  // Campaign settings (limited-time join bonus — independent of permanent commission/first-purchase system)
+  const [campaignActive, setCampaignActive] = useState(false);
+  const [campaignReward, setCampaignReward] = useState('0.1');
+  const [savingCampaign, setSavingCampaign] = useState(false);
+
+  const loadCampaignSettings = async () => {
+    const { data } = await supabase
+      .from('bot_settings')
+      .select('key, value')
+      .in('key', ['referral_campaign_active', 'referral_campaign_reward']);
+    if (data) {
+      const map = Object.fromEntries(data.map((r) => [r.key, r.value]));
+      setCampaignActive(String(map.referral_campaign_active || '').toLowerCase() === 'true');
+      if (map.referral_campaign_reward) setCampaignReward(String(map.referral_campaign_reward));
+    }
+  };
+
+  const saveSetting = async (key: string, value: string) => {
+    const { data: existing } = await supabase.from('bot_settings').select('id').eq('key', key).maybeSingle();
+    if (existing) {
+      return supabase.from('bot_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
+    }
+    return supabase.from('bot_settings').insert({ key, value });
+  };
+
+  const saveCampaign = async () => {
+    const rew = parseFloat(campaignReward);
+    if (!Number.isFinite(rew) || rew < 0) {
+      toast.error('Reward must be a non-negative number');
+      return;
+    }
+    setSavingCampaign(true);
+    try {
+      const [r1, r2] = await Promise.all([
+        saveSetting('referral_campaign_active', campaignActive ? 'true' : 'false'),
+        saveSetting('referral_campaign_reward', String(rew)),
+      ]);
+      if (r1.error || r2.error) throw new Error(r1.error?.message || r2.error?.message);
+      toast.success('Campaign settings saved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save');
+    }
+    setSavingCampaign(false);
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
