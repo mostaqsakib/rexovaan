@@ -118,18 +118,13 @@ Deno.serve(async (req) => {
     }
 
     function buildGroupButton(url: string) {
-      const btn: any = { url };
-      if (groupButtonEmojiId) {
-        // Premium custom emoji: render emoji only. `text` is required by Telegram
-        // but a single space keeps the visual to just the premium emoji icon.
-        btn.text = " ";
-        btn.icon_custom_emoji_id = groupButtonEmojiId;
-      } else if (groupButtonEmoji) {
-        btn.text = groupButtonEmoji;
-      } else {
-        btn.text = groupButtonText;
-      }
-      // Bot API 9.4+: style renders the button in the chosen color.
+      // Always render the real button text. When a premium emoji is set,
+      // icon_custom_emoji_id renders alongside the text (Bot API 9.4+).
+      const baseText = groupButtonEmoji
+        ? `${groupButtonEmoji} ${groupButtonText}`.trim()
+        : groupButtonText;
+      const btn: any = { url, text: baseText };
+      if (groupButtonEmojiId) btn.icon_custom_emoji_id = groupButtonEmojiId;
       btn.style = groupButtonStyle;
       return btn;
     }
