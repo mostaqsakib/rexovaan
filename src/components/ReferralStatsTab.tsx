@@ -130,7 +130,7 @@ const ReferralStatsTab = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); loadCampaignSettings(); }, []);
 
   const totalReferrals = referrals.length;
   const totalEarned = earnings.reduce((s, e) => s + Number(e.amount), 0);
