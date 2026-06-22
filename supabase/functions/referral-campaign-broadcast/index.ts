@@ -98,7 +98,14 @@ Deno.serve(async (req) => {
 
     const template = settings.referral_campaign_message || DEFAULT_REFERRAL_CAMPAIGN_MESSAGE;
     const buttonText = settings.referral_campaign_button_text || "🔗 My Referral Link";
+    const buttonEmojiId = settings.referral_campaign_button_emoji_id || "";
     const reward = settings.referral_campaign_reward || "0.1";
+
+    function buildCampaignButton(label: string, referralLink: string) {
+      const btn: any = { text: label, copy_text: { text: referralLink } };
+      if (buttonEmojiId) btn.icon_custom_emoji_id = buttonEmojiId;
+      return btn;
+    }
 
     let sent = 0;
     let failed = 0;
