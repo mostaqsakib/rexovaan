@@ -6476,9 +6476,79 @@ async function handleCallback(callbackQuery, emojiMap) {
       [{ text: "💰 Edit Reward", callback_data: "rc_edit_reward" }],
       [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
       [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
+      [{ text: "👁 Preview Message", callback_data: "rc_preview" }],
+      [{ text: "📢 Broadcast", callback_data: "rc_broadcast" }],
       [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
     ];
     await editOrSend(chatId, msgId, text, { inline_keyboard: buttons });
+    return;
+  }
+
+  if (data === "rc_preview" && isAdmin(chatId)) {
+    await editOrSend(chatId, msgId, "👁 Sending preview to your Telegram…");
+    try {
+      const resp = await fetch(`${process.env.SUPABASE_URL}/functions/v1/referral-campaign-broadcast`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          "apikey": process.env.SUPABASE_SERVICE_ROLE_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ target: "preview", preview_chat_id: chatId }),
+      });
+      const out = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(out?.error || `HTTP ${resp.status}`);
+      await sendMessage(chatId, `✅ Preview sent (${out?.sent ?? 0} messages). Check the messages above to see exactly how the campaign will look.`, {
+        inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]],
+      });
+    } catch (e) {
+      await sendMessage(chatId, `❌ Preview failed: ${e.message}`, {
+        inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }]],
+      });
+    }
+    return;
+  }
+
+  if (data === "rc_broadcast" && isAdmin(chatId)) {
+    await editOrSend(chatId, msgId,
+      "📢 <b>Broadcast Campaign</b>\n\nChoose where to send the referral campaign message:\n\n" +
+      "• <b>Users</b> — each user gets a DM with their own personal referral link\n" +
+      "• <b>Groups</b> — sent to all connected groups with a CTA button (no personal links)\n\n" +
+      "⚠️ Tip: use <b>👁 Preview Message</b> first to verify the content.",
+      { inline_keyboard: [
+        [{ text: "👤 Broadcast to Users", callback_data: "rc_bcast_users" }],
+        [{ text: "👥 Broadcast to Groups", callback_data: "rc_bcast_groups" }],
+        [{ text: "◀️ Back", callback_data: "adm_refcamp" }],
+      ] }
+    );
+    return;
+  }
+
+  if ((data === "rc_bcast_users" || data === "rc_bcast_groups") && isAdmin(chatId)) {
+    const target = data === "rc_bcast_users" ? "users" : "groups";
+    const label = target === "users" ? "👤 users" : "👥 groups";
+    await editOrSend(chatId, msgId, `📢 Broadcasting to ${label}… this may take a while.`);
+    try {
+      const resp = await fetch(`${process.env.SUPABASE_URL}/functions/v1/referral-campaign-broadcast`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          "apikey": process.env.SUPABASE_SERVICE_ROLE_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ target }),
+      });
+      const out = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(out?.error || `HTTP ${resp.status}`);
+      await sendMessage(chatId,
+        `✅ <b>Broadcast Complete!</b>\n\n📤 Sent: <b>${out?.sent ?? 0}</b>\n❌ Failed: <b>${out?.failed ?? 0}</b>\n👥 Total: <b>${out?.total ?? 0}</b>`,
+        { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] }
+      );
+    } catch (e) {
+      await sendMessage(chatId, `❌ Broadcast failed: ${e.message}`, {
+        inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }]],
+      });
+    }
     return;
   }
 
