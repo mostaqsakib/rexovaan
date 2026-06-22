@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
         text,
         parse_mode: "HTML",
         disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: buttonText, url: link }]] },
+        reply_markup: { inline_keyboard: [[buildCampaignButton(buttonText, link)]] },
       }, BOT_TOKEN);
       const r2 = await tgSend("sendMessage", {
         chat_id: cid,
