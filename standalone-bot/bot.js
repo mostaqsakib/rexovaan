@@ -6736,6 +6736,34 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
+  if (data === "rc_edit_group_btn_style" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
+    const cur = c.groupButtonStyle || "primary";
+    const styles = [
+      { key: "primary", label: "🔵 Primary (Blue)" },
+      { key: "secondary", label: "⚪ Secondary" },
+      { key: "success", label: "🟢 Success (Green)" },
+      { key: "danger", label: "🔴 Danger (Red)" },
+    ];
+    const kb = styles.map(s => [{ text: (s.key === cur ? "✅ " : "") + s.label, callback_data: `rc_set_group_style:${s.key}` }]);
+    kb.push([{ text: "◀️ Back", callback_data: "adm_refcamp" }]);
+    await editOrSend(chatId, msgId, `🎨 <b>Group Version Button Color</b>\n\nSelect the button style (Bot API 9.4+). The button color depends on the user's Telegram theme.\n\n<b>Current:</b> <code>${escapeHtml(cur)}</code>`, { inline_keyboard: kb });
+    return;
+  }
+
+  if (data.startsWith("rc_set_group_style:") && isAdmin(chatId)) {
+    const style = data.split(":")[1];
+    if (!["primary","secondary","success","danger"].includes(style)) { await answerCallback(callbackQuery.id, "Invalid style"); return; }
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_style").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value: style, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_style");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_style", value: style });
+    cachedCampaign.groupButtonStyle = style;
+    campaignLastFetch = Date.now();
+    await answerCallback(callbackQuery.id, `✅ Color set to ${style}`);
+    await editOrSend(chatId, msgId, `✅ <b>Group button color updated to:</b> <code>${escapeHtml(style)}</code>`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }]] });
+    return;
+  }
+
 
 
 
