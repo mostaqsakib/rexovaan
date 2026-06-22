@@ -6501,22 +6501,52 @@ async function handleCallback(callbackQuery, emojiMap) {
   }
 
   if (data === "rc_edit_msg" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
     await supabase.from("bot_customers").update({ pending_action: "admin_rc_msg" }).eq("chat_id", chatId);
     await editOrSend(chatId, msgId, `✏️ <b>Edit Campaign Message</b>\n\nSend the new message text now. HTML formatting and premium/custom emojis are supported.\n\n❌ /cancel to cancel`);
+    if (c.message) {
+      try {
+        await sendMessage(chatId, `📄 <b>Current saved message:</b>\n\n${c.message}`);
+      } catch (e) {
+        await sendMessage(chatId, `📄 <b>Current saved message (raw):</b>\n\n<code>${escapeHtml(c.message)}</code>`);
+      }
+    } else {
+      await sendMessage(chatId, `📄 <i>No campaign message is set yet.</i>`);
+    }
     return;
   }
 
   if (data === "rc_edit_btn" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
     await supabase.from("bot_customers").update({ pending_action: "admin_rc_btn" }).eq("chat_id", chatId);
     await editOrSend(chatId, msgId, `🔘 <b>Edit Campaign Button Text</b>\n\nSend the new button text (e.g. <code>🎁 Join &amp; Earn 0.1 USDT</code>).\n\n❌ /cancel to cancel`);
+    const curText = c.buttonText || "";
+    const curEmoji = c.buttonEmoji || "";
+    const previewLabel = (curEmoji ? curEmoji + " " : "") + (curText || "Refer & Earn");
+    await sendMessage(
+      chatId,
+      `📄 <b>Current button text:</b> ${curText ? escapeHtml(curText) : "<i>not set</i>"}\n<b>Current emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}\n\n👇 <b>User preview:</b>`,
+      { inline_keyboard: [[{ text: previewLabel, callback_data: "noop_preview" }]] }
+    );
     return;
   }
 
   if (data === "rc_edit_btn_emoji" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
     await supabase.from("bot_customers").update({ pending_action: "admin_rc_btn_emoji" }).eq("chat_id", chatId);
     await editOrSend(chatId, msgId, `✨ <b>Edit Campaign Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported).\n\n❌ /cancel to cancel`);
+    const curText = c.buttonText || "Refer & Earn";
+    const curEmoji = c.buttonEmoji || "";
+    const previewLabel = (curEmoji ? curEmoji + " " : "") + curText;
+    const idNote = c.buttonEmojiId ? `\n🌟 Premium emoji document_id: <code>${escapeHtml(c.buttonEmojiId)}</code>` : "";
+    await sendMessage(
+      chatId,
+      `📄 <b>Current emoji:</b> ${curEmoji ? escapeHtml(curEmoji) : "<i>none</i>"}${idNote}\n\n👇 <b>User preview:</b>\n<i>Note: inline button labels show the fallback character only; premium emoji animation is not rendered on buttons.</i>`,
+      { inline_keyboard: [[{ text: previewLabel, callback_data: "noop_preview" }]] }
+    );
     return;
   }
+
 
 
   if (data === "adm_broadcast" && isAdmin(chatId)) {
