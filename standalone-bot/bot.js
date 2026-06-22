@@ -5568,6 +5568,11 @@ async function handleMessage(message, emojiMap) {
     const display = value ? escapeHtml(value) : "<i>Get My Referral Link</i> (default)";
     await sendMessage(chatId, `✅ Group version button text updated to: ${display}`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
     return;
+  }
+
+
+
+
 
 
 
