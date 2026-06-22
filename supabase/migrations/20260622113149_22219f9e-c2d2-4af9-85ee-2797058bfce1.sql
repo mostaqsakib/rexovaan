@@ -1,0 +1,2 @@
+UPDATE bot_settings SET value = 'Get My Referral Link', updated_at = now() WHERE key = 'referral_campaign_group_button_text';
+UPDATE bot_settings SET value = '', updated_at = now() WHERE key = 'referral_campaign_group_button_emoji';
