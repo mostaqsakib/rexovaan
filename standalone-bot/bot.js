@@ -6753,7 +6753,7 @@ async function handleCallback(callbackQuery, emojiMap) {
 
   if (data.startsWith("rc_set_group_style:") && isAdmin(chatId)) {
     const style = data.split(":")[1];
-    if (!["primary","secondary","success","danger"].includes(style)) { await answerCallback(callbackQuery.id, "Invalid style"); return; }
+    if (!["primary","secondary","success","danger"].includes(style)) { answerCallbackQuery(callbackQuery.id, "Invalid style"); return; }
     const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_group_button_style").maybeSingle();
     if (existing) await supabase.from("bot_settings").update({ value: style, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_group_button_style");
     else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_style", value: style });
