@@ -6759,7 +6759,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     else await supabase.from("bot_settings").insert({ key: "referral_campaign_group_button_style", value: style });
     cachedCampaign.groupButtonStyle = style;
     campaignLastFetch = Date.now();
-    await answerCallback(callbackQuery.id, `✅ Color set to ${style}`);
+    answerCallbackQuery(callbackQuery.id, `✅ Color set to ${style}`);
     await editOrSend(chatId, msgId, `✅ <b>Group button color updated to:</b> <code>${escapeHtml(style)}</code>`, { inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }]] });
     return;
   }
