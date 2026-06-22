@@ -1,0 +1,2 @@
+UPDATE public.bot_settings SET value = 'primary', updated_at = now() WHERE key = 'referral_campaign_group_button_style' AND value NOT IN ('primary','success','danger');
+INSERT INTO public.bot_settings (key, value) SELECT 'referral_campaign_group_button_style', 'primary' WHERE NOT EXISTS (SELECT 1 FROM public.bot_settings WHERE key = 'referral_campaign_group_button_style');
