@@ -147,6 +147,47 @@ const ReferralStatsTab = () => {
 
   return (
     <div className="space-y-4">
+      {/* Limited-Time Join-Bonus Campaign (independent of permanent commission/first-purchase system) */}
+      <Card className="border-primary/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Megaphone className="h-5 w-5 text-primary" />
+            Join-Bonus Campaign
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Pays a one-time fixed reward to the referrer the moment a new user joins via their referral link.
+            <br />
+            <span className="text-foreground/80">This is independent of the permanent commission % + first-purchase bonus system, which is always active.</span>
+          </p>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label className="text-sm font-medium">Campaign Active</Label>
+              <p className="text-xs text-muted-foreground">When OFF, no join bonus is credited. Existing referral system keeps working.</p>
+            </div>
+            <Switch checked={campaignActive} onCheckedChange={setCampaignActive} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="campaign-reward" className="text-sm font-medium">Join Reward (USDT)</Label>
+            <Input
+              id="campaign-reward"
+              type="number"
+              step="0.01"
+              min="0"
+              value={campaignReward}
+              onChange={(e) => setCampaignReward(e.target.value)}
+              placeholder="0.1"
+            />
+            <p className="text-xs text-muted-foreground">Credited to the referrer's main wallet balance, one-time per new referred user.</p>
+          </div>
+          <Button onClick={saveCampaign} disabled={savingCampaign} className="w-full">
+            {savingCampaign && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Save Campaign Settings
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
