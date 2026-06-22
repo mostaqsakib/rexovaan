@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
             .replaceAll("{referral_link}", link)
             .replaceAll("{reward}", reward);
           const replyMarkup = {
-            inline_keyboard: [[{ text: buttonText, url: link }]],
+            inline_keyboard: [[buildCampaignButton(buttonText, link)]],
           };
           const r = await tgSend("sendMessage", {
             chat_id: c.chat_id,
