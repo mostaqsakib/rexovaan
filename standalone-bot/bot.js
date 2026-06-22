@@ -6497,7 +6497,12 @@ async function handleCallback(callbackQuery, emojiMap) {
         body: JSON.stringify({ target: "preview", preview_chat_id: chatId }),
       });
       const out = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(out?.error || `HTTP ${resp.status}`);
+      if (!resp.ok) {
+        const details = out?.details ? ` | details: ${JSON.stringify(out.details)}` : "";
+        const warnings = Array.isArray(out?.warnings) && out.warnings.length ? ` | warnings: ${out.warnings.join(" | ")}` : "";
+        console.error("[referral-campaign-preview] failed", JSON.stringify({ status: resp.status, error: out?.error, warnings: out?.warnings, details: out?.details }));
+        throw new Error(`${out?.error || `HTTP ${resp.status}`}${warnings}${details}`);
+      }
       const warnLine = Array.isArray(out?.warnings) && out.warnings.length
         ? `\n\n⚠️ <b>Warnings:</b>\n${out.warnings.map((w) => "• " + escapeHtml(String(w))).join("\n")}`
         : "";
