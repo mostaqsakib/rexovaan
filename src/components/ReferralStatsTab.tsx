@@ -3,7 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, RefreshCw, Users, DollarSign, TrendingUp, Gift } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Loader2, RefreshCw, Users, DollarSign, TrendingUp, Gift, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ReferralRow {
@@ -37,6 +40,51 @@ const ReferralStatsTab = () => {
   const [referrals, setReferrals] = useState<ReferralRow[]>([]);
   const [earnings, setEarnings] = useState<EarningRow[]>([]);
   const [topReferrers, setTopReferrers] = useState<{ id: string; name: string; count: number; earned: number }[]>([]);
+
+  // Campaign settings (limited-time join bonus — independent of permanent commission/first-purchase system)
+  const [campaignActive, setCampaignActive] = useState(false);
+  const [campaignReward, setCampaignReward] = useState('0.1');
+  const [savingCampaign, setSavingCampaign] = useState(false);
+
+  const loadCampaignSettings = async () => {
+    const { data } = await supabase
+      .from('bot_settings')
+      .select('key, value')
+      .in('key', ['referral_campaign_active', 'referral_campaign_reward']);
+    if (data) {
+      const map = Object.fromEntries(data.map((r) => [r.key, r.value]));
+      setCampaignActive(String(map.referral_campaign_active || '').toLowerCase() === 'true');
+      if (map.referral_campaign_reward) setCampaignReward(String(map.referral_campaign_reward));
+    }
+  };
+
+  const saveSetting = async (key: string, value: string) => {
+    const { data: existing } = await supabase.from('bot_settings').select('id').eq('key', key).maybeSingle();
+    if (existing) {
+      return supabase.from('bot_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
+    }
+    return supabase.from('bot_settings').insert({ key, value });
+  };
+
+  const saveCampaign = async () => {
+    const rew = parseFloat(campaignReward);
+    if (!Number.isFinite(rew) || rew < 0) {
+      toast.error('Reward must be a non-negative number');
+      return;
+    }
+    setSavingCampaign(true);
+    try {
+      const [r1, r2] = await Promise.all([
+        saveSetting('referral_campaign_active', campaignActive ? 'true' : 'false'),
+        saveSetting('referral_campaign_reward', String(rew)),
+      ]);
+      if (r1.error || r2.error) throw new Error(r1.error?.message || r2.error?.message);
+      toast.success('Campaign settings saved');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save');
+    }
+    setSavingCampaign(false);
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -82,7 +130,7 @@ const ReferralStatsTab = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); loadCampaignSettings(); }, []);
 
   const totalReferrals = referrals.length;
   const totalEarned = earnings.reduce((s, e) => s + Number(e.amount), 0);
@@ -99,6 +147,47 @@ const ReferralStatsTab = () => {
 
   return (
     <div className="space-y-4">
+      {/* Limited-Time Join-Bonus Campaign (independent of permanent commission/first-purchase system) */}
+      <Card className="border-primary/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Megaphone className="h-5 w-5 text-primary" />
+            Join-Bonus Campaign
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Pays a one-time fixed reward to the referrer the moment a new user joins via their referral link.
+            <br />
+            <span className="text-foreground/80">This is independent of the permanent commission % + first-purchase bonus system, which is always active.</span>
+          </p>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label className="text-sm font-medium">Campaign Active</Label>
+              <p className="text-xs text-muted-foreground">When OFF, no join bonus is credited. Existing referral system keeps working.</p>
+            </div>
+            <Switch checked={campaignActive} onCheckedChange={setCampaignActive} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="campaign-reward" className="text-sm font-medium">Join Reward (USDT)</Label>
+            <Input
+              id="campaign-reward"
+              type="number"
+              step="0.01"
+              min="0"
+              value={campaignReward}
+              onChange={(e) => setCampaignReward(e.target.value)}
+              placeholder="0.1"
+            />
+            <p className="text-xs text-muted-foreground">Credited to the referrer's main wallet balance, one-time per new referred user.</p>
+          </div>
+          <Button onClick={saveCampaign} disabled={savingCampaign} className="w-full">
+            {savingCampaign && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Save Campaign Settings
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
