@@ -112,18 +112,15 @@ Deno.serve(async (req) => {
     const reward = settings.referral_campaign_reward || "0.1";
 
     function buildCampaignButton(label: string, referralLink: string) {
-      const btn: any = { text: label, copy_text: { text: referralLink } };
+      const btn: any = { text: label, copy_text: { text: referralLink }, style: "primary" };
       if (buttonEmojiId) btn.icon_custom_emoji_id = buttonEmojiId;
       return btn;
     }
 
     function buildGroupButton(url: string) {
-      // Always render the real button text. When a premium emoji is set,
-      // icon_custom_emoji_id renders alongside the text (Bot API 9.4+).
-      const baseText = groupButtonEmoji
-        ? `${groupButtonEmoji} ${groupButtonText}`.trim()
-        : groupButtonText;
-      const btn: any = { url, text: baseText };
+      // Only the raw button text + optional premium icon_custom_emoji_id.
+      // No hardcoded/default emoji prefix.
+      const btn: any = { url, text: groupButtonText };
       if (groupButtonEmojiId) btn.icon_custom_emoji_id = groupButtonEmojiId;
       btn.style = groupButtonStyle;
       return btn;
