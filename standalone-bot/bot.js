@@ -6384,6 +6384,69 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
+  // ── 🎁 Referral Join-Bonus Campaign admin ──
+  if (data === "adm_refcamp" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
+    const status = c.active ? "🟢 ON" : "🔴 OFF";
+    const msgPreview = c.message ? c.message.slice(0, 300) + (c.message.length > 300 ? "…" : "") : "<i>not set</i>";
+    const btnDisplay = c.buttonText ? escapeHtml(c.buttonText) : "<i>not set</i>";
+    const btnEmojiDisplay = c.buttonEmoji ? escapeHtml(c.buttonEmoji) + (c.buttonEmojiId ? " 🌟" : "") : "<i>none</i>";
+    const text =
+      `🎁 <b>Referral Join-Bonus Campaign</b>\n\n` +
+      `<b>Status:</b> ${status}\n` +
+      `<b>Reward per join:</b> <code>${Number(c.reward).toFixed(2)} USDT</code>\n` +
+      `<b>Button text:</b> ${btnDisplay}\n` +
+      `<b>Button emoji:</b> ${btnEmojiDisplay}\n\n` +
+      `<b>Current message template:</b>\n${msgPreview}\n\n` +
+      `<i>ℹ️ This campaign only controls the limited-time join bonus. The permanent first-purchase bonus + commission % referral system always stays active regardless of this toggle.</i>`;
+    const buttons = [
+      [{ text: c.active ? "🔴 Disable" : "🟢 Enable", callback_data: "rc_toggle" }],
+      [{ text: "💰 Edit Reward", callback_data: "rc_edit_reward" }],
+      [{ text: "✏️ Edit Message", callback_data: "rc_edit_msg" }],
+      [{ text: "🔘 Edit Button Text", callback_data: "rc_edit_btn" }, { text: "✨ Edit Button Emoji", callback_data: "rc_edit_btn_emoji" }],
+      [{ text: "◀️ Admin Menu", callback_data: "adm_menu" }],
+    ];
+    await editOrSend(chatId, msgId, text, { inline_keyboard: buttons });
+    return;
+  }
+
+  if (data === "rc_toggle" && isAdmin(chatId)) {
+    const c = await getCampaignSettings(true);
+    const newVal = c.active ? "false" : "true";
+    const { data: existing } = await supabase.from("bot_settings").select("id").eq("key", "referral_campaign_active").maybeSingle();
+    if (existing) await supabase.from("bot_settings").update({ value: newVal, updated_at: new Date().toISOString() }).eq("key", "referral_campaign_active");
+    else await supabase.from("bot_settings").insert({ key: "referral_campaign_active", value: newVal });
+    cachedCampaign.active = newVal === "true";
+    campaignLastFetch = Date.now();
+    await sendMessage(chatId, `✅ Join-bonus campaign is now <b>${newVal === "true" ? "ON" : "OFF"}</b>.`);
+    return;
+  }
+
+  if (data === "rc_edit_reward" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_rc_reward" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `💰 <b>Edit Join Reward</b>\n\nSend the new reward amount in USDT (e.g. <code>0.1</code>).\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+  if (data === "rc_edit_msg" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_rc_msg" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `✏️ <b>Edit Campaign Message</b>\n\nSend the new message text now. HTML formatting and premium/custom emojis are supported.\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+  if (data === "rc_edit_btn" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_rc_btn" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `🔘 <b>Edit Campaign Button Text</b>\n\nSend the new button text (e.g. <code>🎁 Join &amp; Earn 0.1 USDT</code>).\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+  if (data === "rc_edit_btn_emoji" && isAdmin(chatId)) {
+    await supabase.from("bot_customers").update({ pending_action: "admin_rc_btn_emoji" }).eq("chat_id", chatId);
+    await editOrSend(chatId, msgId, `✨ <b>Edit Campaign Button Emoji</b>\n\nSend a single emoji (premium/custom emojis supported).\n\n❌ /cancel to cancel`);
+    return;
+  }
+
+
   if (data === "adm_broadcast" && isAdmin(chatId)) {
     await supabase.from("bot_customers").update({ pending_action: "admin_broadcast", pending_inputs: null }).eq("chat_id", chatId);
     await editOrSend(chatId, msgId, `📢 <b>Broadcast Mode</b>\n\nType your broadcast message now. After that you can attach product buttons.\n\nHTML formatting: <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>\n\n❌ /cancel to cancel`);
