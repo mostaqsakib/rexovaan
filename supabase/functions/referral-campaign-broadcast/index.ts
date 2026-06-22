@@ -93,6 +93,7 @@ Deno.serve(async (req) => {
         "referral_campaign_group_button_emoji",
         "referral_campaign_group_button_emoji_id",
         "referral_campaign_group_button_text",
+        "referral_campaign_group_button_style",
         "referral_campaign_reward",
       ]);
     const settings: Record<string, string> = Object.fromEntries(
@@ -105,6 +106,8 @@ Deno.serve(async (req) => {
     const groupButtonEmoji = settings.referral_campaign_group_button_emoji || "";
     const groupButtonEmojiId = settings.referral_campaign_group_button_emoji_id || "";
     const groupButtonText = settings.referral_campaign_group_button_text || "Get My Referral Link";
+    const rawStyle = String(settings.referral_campaign_group_button_style || "primary").toLowerCase();
+    const groupButtonStyle = ["primary","secondary","success","danger"].includes(rawStyle) ? rawStyle : "primary";
     const reward = settings.referral_campaign_reward || "0.1";
 
     function buildCampaignButton(label: string, referralLink: string) {
@@ -116,13 +119,12 @@ Deno.serve(async (req) => {
     function buildGroupButton(url: string) {
       const btn: any = { url };
       if (groupButtonEmojiId || groupButtonEmoji) {
-        // Emoji set: show only the emoji character (premium emoji icon if supported)
         btn.text = groupButtonEmoji || "⭐";
         if (groupButtonEmojiId) btn.icon_custom_emoji_id = groupButtonEmojiId;
       } else {
-        // Default: text only
         btn.text = groupButtonText;
       }
+      if (groupButtonStyle) btn.style = groupButtonStyle;
       return btn;
     }
 
