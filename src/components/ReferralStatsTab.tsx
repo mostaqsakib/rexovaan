@@ -240,6 +240,10 @@ const ReferralStatsTab = () => {
           <div className="rounded-lg border p-3 space-y-2">
             <Label className="text-sm font-medium flex items-center gap-2"><Megaphone className="h-4 w-4 text-primary" />📢 Broadcast Campaign</Label>
             <p className="text-xs text-muted-foreground">Sent messages are tracked and auto-deleted when the campaign is turned OFF.</p>
+            <Button variant="secondary" disabled={!!broadcasting} onClick={doPreview} className="w-full">
+              {broadcasting === 'preview' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              👁 Preview Message (sends to your Telegram)
+            </Button>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Button variant="outline" disabled={!!broadcasting} onClick={() => doBroadcast('users')}>
                 {broadcasting === 'users' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -251,6 +255,7 @@ const ReferralStatsTab = () => {
               </Button>
             </div>
           </div>
+
         </CardContent>
       </Card>
 
