@@ -2132,7 +2132,9 @@ async function getRefSettings() {
 }
 
 // ── Join-reward referral campaign (admin toggleable) ──
-let cachedCampaign = { active: false, reward: 0.1, buttonText: "🎁 Refer & Earn", messageHtml: null };
+// NOTE: This ONLY controls the limited-time join bonus.
+// The existing first-purchase bonus + commission % system is permanent and always active.
+let cachedCampaign = { active: false, reward: 0.1 };
 let campaignLastFetch = 0;
 
 async function getCampaignSettings() {
@@ -2141,26 +2143,18 @@ async function getCampaignSettings() {
       const { data } = await supabase.from("bot_settings").select("key, value").in("key", [
         "referral_campaign_active",
         "referral_campaign_reward",
-        "referral_campaign_button_text",
-        "referral_campaign_message",
       ]);
       if (data) {
         const map = Object.fromEntries(data.map(r => [r.key, r.value]));
         cachedCampaign.active = String(map.referral_campaign_active || "").toLowerCase() === "true";
         const rew = parseFloat(map.referral_campaign_reward);
         if (Number.isFinite(rew) && rew >= 0) cachedCampaign.reward = rew;
-        if (map.referral_campaign_button_text) cachedCampaign.buttonText = String(map.referral_campaign_button_text);
-        cachedCampaign.messageHtml = map.referral_campaign_message ? String(map.referral_campaign_message) : null;
       }
       campaignLastFetch = Date.now();
     } catch (e) { console.error("Failed to fetch campaign settings:", e); }
   }
   return cachedCampaign;
 }
-
-// Pre-warm campaign cache + refresh every 30s so sync mainMenuKeyboard sees fresh state.
-getCampaignSettings().catch(() => {});
-setInterval(() => { getCampaignSettings().catch(() => {}); }, 30000);
 
 function generateReferralCode(chatId) {
   // Create a short alphanumeric code from chat_id
