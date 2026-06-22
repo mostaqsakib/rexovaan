@@ -6498,7 +6498,10 @@ async function handleCallback(callbackQuery, emojiMap) {
       });
       const out = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(out?.error || `HTTP ${resp.status}`);
-      await sendMessage(chatId, `✅ Preview sent (${out?.sent ?? 0} messages). Check the messages above to see exactly how the campaign will look.`, {
+      const warnLine = Array.isArray(out?.warnings) && out.warnings.length
+        ? `\n\n⚠️ <b>Warnings:</b>\n${out.warnings.map((w) => "• " + escapeHtml(String(w))).join("\n")}`
+        : "";
+      await sendMessage(chatId, `✅ Preview sent (${out?.sent ?? 0} messages). Check the messages above to see exactly how the campaign will look.${warnLine}`, {
         inline_keyboard: [[{ text: "🎁 Refer Campaign", callback_data: "adm_refcamp" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]],
       });
     } catch (e) {
