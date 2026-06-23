@@ -50,10 +50,10 @@ BEGIN
   VALUES ('TEST-ATOMIC-RACE', 'test-atomic-race', 1.00, true, false, 'manual', 'race product')
   RETURNING id INTO v_tp_race;
 
-  INSERT INTO bot_product_stock_items (product_id, data, status, sort_index)
+  INSERT INTO bot_product_stock_items (product_id, data, status)
   SELECT v_tp_race,
          jsonb_build_object('email', 'race'||gs||'@x.io', 'pass', 'r'||gs),
-         'available', gs
+         'available'
   FROM generate_series(1,5) gs;
 
   RAISE NOTICE 'Seeded customer=%, product=%, race=%', v_tc, v_tp, v_tp_race;
