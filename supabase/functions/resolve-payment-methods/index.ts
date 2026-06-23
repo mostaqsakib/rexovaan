@@ -12,9 +12,10 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// IMPORTANT: do NOT resolve environment variables from DB values.
+// An admin or DB compromise could otherwise exfiltrate any secret (incl. service-role)
+// by setting payment_details to a secret name. Always return the literal string as stored.
 function resolvePaymentDetails(value: string) {
-  const key = value.trim();
-  if (/^[A-Z][A-Z0-9_]{2,}$/.test(key)) return Deno.env.get(key) || value;
   return value;
 }
 

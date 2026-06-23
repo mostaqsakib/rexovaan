@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { timingSafeEqual } from "../_shared/timing-safe.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +22,7 @@ async function validateInitData(initData: string, botToken: string): Promise<{ v
     const key = await crypto.subtle.importKey("raw", secretKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(dataCheckString));
     const hexHash = Array.from(new Uint8Array(signature)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    if (hexHash !== hash) return { valid: false };
+    if (!timingSafeEqual(hexHash, hash)) return { valid: false };
 
     const authDate = parseInt(params.get("auth_date") || "0");
     if (Math.floor(Date.now() / 1000) - authDate > 86400) return { valid: false };
@@ -39,12 +40,13 @@ async function validateLaunchToken(token: string): Promise<{ valid: boolean; use
   try {
     const [payloadBase64, signature] = token.split(".");
     if (!payloadBase64 || !signature) return { valid: false };
-    const signingSecret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    // Prefer dedicated secret; fall back to legacy service-role only if not yet rotated.
+    const signingSecret = Deno.env.get("ADMIN_LAUNCH_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!signingSecret) return { valid: false };
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(signingSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadBase64));
     const expectedSignature = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    if (expectedSignature !== signature) return { valid: false };
+    if (!timingSafeEqual(expectedSignature, signature)) return { valid: false };
     const json = new TextDecoder().decode(Uint8Array.from(atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)));
     const payload = JSON.parse(json);
     if (!payload.chat_id || !payload.exp || Math.floor(Date.now() / 1000) > payload.exp) return { valid: false };

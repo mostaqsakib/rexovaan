@@ -26,16 +26,19 @@ export default function Withdraw() {
     if (amt > Number(customer?.balance || 0)) { toast.error('Insufficient balance'); return; }
     if (!details.trim()) { toast.error('Enter wallet address'); return; }
     setSubmitting(true);
-    const { error } = await supabase.from('bot_withdrawals').insert({
-      customer_id: customer!.id,
-      amount: amt,
-      payment_details: details.trim(),
-      network,
-      asset: 'USDT',
+    const { data, error } = await supabase.functions.invoke('create-withdrawal', {
+      body: {
+        amount: amt,
+        payment_details: details.trim(),
+        network,
+        asset: 'USDT',
+      },
     });
-    if (error) { toast.error(error.message); setSubmitting(false); return; }
-    // deduct
-    await supabase.rpc('deduct_customer_balance', { _customer_id: customer!.id, _amount: amt });
+    if (error || (data as any)?.error) {
+      toast.error((data as any)?.error || error?.message || 'Withdrawal failed');
+      setSubmitting(false);
+      return;
+    }
     await refreshCustomer();
     toast.success('Withdrawal request submitted');
     setSubmitting(false);

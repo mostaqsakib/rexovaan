@@ -209,13 +209,21 @@ Deno.serve(async (req) => {
       return htmlResp("success", "Payment already processed.");
     }
 
-    const currentBalance = Number(customer?.balance || 0);
-    const newBalance = currentBalance + usdtAmount;
-    await supabase.from("bot_customers").update({
-      balance: newBalance,
-      pending_action: null,
-      updated_at: new Date().toISOString(),
-    }).eq("id", deposit.customer_id);
+    // Atomic balance credit via SECURITY DEFINER RPC (FOR UPDATE row lock).
+    const { data: rpcRows, error: creditErr } = await supabase.rpc("refund_customer_balance", {
+      _customer_id: deposit.customer_id,
+      _amount: usdtAmount,
+    });
+    if (creditErr) {
+      console.error("[bKash] refund_customer_balance failed", creditErr);
+    }
+    const newBalance = Array.isArray(rpcRows)
+      ? Number(rpcRows[0]?.new_balance ?? 0)
+      : Number((rpcRows as any)?.new_balance ?? 0);
+
+    await supabase.from("bot_customers")
+      .update({ pending_action: null, updated_at: new Date().toISOString() })
+      .eq("id", deposit.customer_id);
 
     const chatId = customer?.chat_id;
     if (chatId) {

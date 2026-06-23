@@ -1,5 +1,6 @@
 // Verify Telegram Login Widget callback, upsert customer, return magic action link
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { timingSafeEqual } from '../_shared/timing-safe.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,7 +40,7 @@ Deno.serve(async (req) => {
     const dataCheck = Object.keys(fields).sort().map(k => `${k}=${fields[k]}`).join('\n');
     const secret = await sha256(botToken);
     const calc = await hmacSha256(secret, dataCheck);
-    if (toHex(calc) !== String(hash).toLowerCase()) {
+    if (!timingSafeEqual(toHex(calc), String(hash).toLowerCase())) {
       return new Response(JSON.stringify({ error: 'invalid hash' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

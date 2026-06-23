@@ -224,12 +224,13 @@ export const useProductStore = create<ProductStore>()(
           let rowNumbers: number[] = [];
           let remainingStock = 0;
 
-          const { data: reserved, error } = await supabase.rpc('reserve_internal_stock_items', {
-            _product_id: productId,
-            _quantity: quantity,
+          const { data: invokeData, error } = await supabase.functions.invoke('admin-reserve-stock', {
+            body: { product_id: productId, quantity },
           });
           if (error) throw error;
-          details = (reserved || []).map((item) => item.data as Record<string, string>);
+          if ((invokeData as any)?.error) throw new Error((invokeData as any).error);
+          const reserved = (invokeData as any)?.items ?? [];
+          details = (reserved || []).map((item: any) => item.data as Record<string, string>);
           if (details.length < quantity) throw new Error(`Only ${details.length} items available, requested ${quantity}`);
           remainingStock = Math.max(0, product.stock - quantity);
 

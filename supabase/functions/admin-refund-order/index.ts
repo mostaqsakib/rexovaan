@@ -36,16 +36,23 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+    // Atomic conditional gate — only the first caller transitions out of non-refunded state.
     const { data: order, error: orderErr } = await supabase
       .from("bot_orders")
-      .select("id, customer_id, total_price, status, delivery_message_ids, product_name, quantity")
+      .update({
+        status: "refunded",
+        refunded_at: new Date().toISOString(),
+        refund_note: note || null,
+      })
       .eq("id", order_id)
+      .neq("status", "refunded")
+      .select("id, customer_id, total_price, status, delivery_message_ids, product_name, quantity")
       .maybeSingle();
-    if (orderErr || !order) {
-      return new Response(JSON.stringify({ error: "Order not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (orderErr) {
+      return new Response(JSON.stringify({ error: orderErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (order.status === "refunded") {
-      return new Response(JSON.stringify({ error: "Order already refunded" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!order) {
+      return new Response(JSON.stringify({ error: "Order not found or already refunded" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // 1. Restore stock items linked to this order back to available
@@ -58,6 +65,7 @@ Deno.serve(async (req) => {
       _amount: Number(order.total_price || 0),
     });
     if (refundErr) {
+      console.error("refund_customer_balance failed", refundErr);
       return new Response(JSON.stringify({ error: `Refund failed: ${refundErr.message}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -71,13 +79,6 @@ Deno.serve(async (req) => {
         if (r?.ok) deleted++;
       }
     }
-
-    // 4. Mark order as refunded
-    await supabase.from("bot_orders").update({
-      status: "refunded",
-      refunded_at: new Date().toISOString(),
-      refund_note: note || null,
-    }).eq("id", order.id);
 
     // 5. Notify customer over Telegram + email (best-effort)
     if (customer) {

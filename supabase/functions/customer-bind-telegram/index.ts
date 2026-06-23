@@ -3,6 +3,7 @@
 //   action='widget'        -> verify Telegram Login Widget payload, then bind
 //   action='generate_code' -> issue a short code; user pastes /bind <code> in the bot
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { timingSafeEqual } from '../_shared/timing-safe.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
       const dataCheck = Object.keys(fields).sort().map(k => `${k}=${fields[k]}`).join('\n');
       const secret = await sha256(botToken);
       const calc = await hmacSha256(secret, dataCheck);
-      if (toHex(calc) !== String(hash).toLowerCase()) return json({ error: 'Invalid Telegram signature' }, 401);
+      if (!timingSafeEqual(toHex(calc), String(hash).toLowerCase())) return json({ error: 'Invalid Telegram signature' }, 401);
 
       const authDate = Number(fields.auth_date || 0);
       if (!authDate || (Date.now() / 1000 - authDate) > 86400) return json({ error: 'Telegram login expired, try again' }, 401);

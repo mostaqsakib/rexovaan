@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/require-admin.ts";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 
@@ -9,6 +9,10 @@ const corsHeaders = {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Admin-only: this function delivers arbitrary HTML from our bot to any chat.
+  const guard = await requireAdmin(req, corsHeaders);
+  if (guard) return guard;
 
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY");
