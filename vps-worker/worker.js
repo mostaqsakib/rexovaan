@@ -14,6 +14,11 @@
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
+import WebSocket from 'ws';
+
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = WebSocket;
+}
 
 const {
   SUPABASE_URL,
@@ -34,6 +39,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { transport: WebSocket },
 });
 
 const invalidPatterns = INVALID_TEXT_PATTERNS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -44,6 +50,7 @@ const pollMs = parseInt(POLL_INTERVAL_MS, 10);
 
 let browserCtx = null;
 let busy = false;
+const QUEUED_STATUSES = ['vps_queued', 'queued'];
 
 async function getBrowser() {
   if (browserCtx && browserCtx.pages) return browserCtx;
@@ -205,14 +212,46 @@ async function processJob(job) {
   }
 }
 
+async function autoEnqueueIfNeeded() {
+  const { data: autoProducts, error } = await sb
+    .from('bot_products')
+    .select('id, name')
+    .eq('link_check_auto', true)
+    .eq('is_active', true);
+  if (error) throw error;
+  if (!autoProducts || autoProducts.length === 0) return;
+
+  for (const product of autoProducts) {
+    const { data: existing, error: existingError } = await sb
+      .from('link_check_jobs')
+      .select('id')
+      .eq('product_id', product.id)
+      .in('status', [...QUEUED_STATUSES, 'running'])
+      .limit(1);
+    if (existingError) throw existingError;
+    if (existing && existing.length > 0) continue;
+
+    const { error: insertError } = await sb.from('link_check_jobs').insert({
+      product_id: product.id,
+      cookie_id: null,
+      concurrency: 5,
+      delay_ms: 800,
+      status: 'vps_queued',
+    });
+    if (insertError) throw insertError;
+    console.log(`   🔁 Auto-loop queued for ${product.name}`);
+  }
+}
+
 async function pollLoop() {
   while (true) {
     try {
       if (!busy) {
+        await autoEnqueueIfNeeded();
         const { data: jobs } = await sb
           .from('link_check_jobs')
           .select('*')
-          .eq('status', 'queued')
+          .in('status', QUEUED_STATUSES)
           .order('created_at', { ascending: true })
           .limit(1);
         if (jobs && jobs[0]) {
