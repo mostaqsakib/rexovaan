@@ -15,6 +15,11 @@ import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
 import WebSocket from 'ws';
+import fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
@@ -73,13 +78,39 @@ let browserLaunchPromise = null;
 let busy = false;
 const QUEUED_STATUSES = ['vps_queued', 'queued'];
 
+async function isProfileInUse(profileDir) {
+  try {
+    const { stdout } = await execFileAsync('pgrep', ['-af', profileDir], { timeout: 3000 });
+    return stdout.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function cleanupStaleChromeProfileLocks(profileDir) {
+  if (await isProfileInUse(profileDir)) return false;
+  await Promise.all(['SingletonLock', 'SingletonSocket', 'SingletonCookie'].map((name) =>
+    fs.rm(`${profileDir}/${name}`, { force: true, recursive: true }).catch(() => {}),
+  ));
+  return true;
+}
+
+function isChromeProfileLockError(error) {
+  const msg = String(error?.message || error).toLowerCase();
+  return msg.includes('opening in existing browser session')
+    || msg.includes('processsingleton')
+    || msg.includes('singletonlock')
+    || msg.includes('user data directory is already in use');
+}
+
 async function getBrowser() {
   if (browserCtx && browserCtx.pages) return browserCtx;
   if (browserLaunchPromise) return browserLaunchPromise;
 
   browserLaunchPromise = (async () => {
     console.log('🚀 Launching Chrome with profile:', CHROME_PROFILE_DIR);
-    const ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, {
+    await cleanupStaleChromeProfileLocks(CHROME_PROFILE_DIR);
+    const launchOptions = {
       headless: HEADFUL !== 'true',
       viewport: { width: 1280, height: 800 },
       args: [
@@ -89,7 +120,17 @@ async function getBrowser() {
         '--lang=en-US',
       ],
       locale: 'en-US',
-    });
+    };
+    let ctx;
+    try {
+      ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, launchOptions);
+    } catch (error) {
+      if (!isChromeProfileLockError(error) || !(await cleanupStaleChromeProfileLocks(CHROME_PROFILE_DIR))) {
+        throw error;
+      }
+      console.warn('⚠️ Removed stale Chrome profile lock; retrying launch once...');
+      ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, launchOptions);
+    }
     browserCtx = ctx;
     ctx.on('close', () => {
       browserCtx = null;
