@@ -107,8 +107,8 @@ DECLARE
   v_tc UUID := (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
   v_tp UUID := (SELECT id FROM bot_products  WHERE name = 'TEST-ATOMIC-PRODUCT');
 BEGIN
-  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'k-t3-a');
-  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'k-t3-b');
+  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'k-t3-a-fixed');
+  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'k-t3-b-fixed');
 END $$;
 
 SELECT balance FROM bot_customers WHERE chat_id = -9999000001;  -- expect 996.00
