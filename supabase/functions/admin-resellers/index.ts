@@ -43,11 +43,22 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const { data, error } = await supabase
         .from("bot_resellers")
-        .select("id,name,balance,api_key_prefix,is_active,created_at,updated_at,customer_id,bot_customers(id,balance,username,first_name,chat_id)")
+        .select("id,name,balance,api_key_prefix,is_active,created_at,updated_at,customer_id")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const resellers = (data || []).map((r: any) => {
-        const linked = r.bot_customers || null;
+      const rows = data || [];
+      const customerIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
+      const customersById: Record<string, any> = {};
+      if (customerIds.length > 0) {
+        const { data: customers, error: custErr } = await supabase
+          .from("bot_customers")
+          .select("id,balance,username,first_name,chat_id")
+          .in("id", customerIds as string[]);
+        if (custErr) throw custErr;
+        for (const c of customers || []) customersById[c.id] = c;
+      }
+      const resellers = rows.map((r: any) => {
+        const linked = r.customer_id ? customersById[r.customer_id] || null : null;
         const effective_balance = linked ? Number(linked.balance) : Number(r.balance);
         return {
           id: r.id,
