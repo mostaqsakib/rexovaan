@@ -60,7 +60,8 @@ cat > package.json <<'EOF'
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.5",
-    "playwright": "^1.47.0"
+    "playwright": "^1.47.0",
+    "ws": "^8.18.0"
   }
 }
 EOF
@@ -101,6 +102,9 @@ cat > worker.js <<'JSEOF'
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
+import WebSocket from 'ws';
+
+if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
 
 const {
   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
@@ -115,6 +119,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 }
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { transport: WebSocket },
 });
 const invalidPatterns = INVALID_TEXT_PATTERNS.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 const validPatterns = VALID_TEXT_PATTERNS.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
@@ -122,6 +127,7 @@ const navTimeout = parseInt(NAV_TIMEOUT_MS,10);
 const maxConc = parseInt(MAX_CONCURRENCY,10);
 const pollMs = parseInt(POLL_INTERVAL_MS,10);
 let browserCtx = null, busy = false;
+const QUEUED_STATUSES = ['vps_queued', 'queued'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function getBrowser() {
