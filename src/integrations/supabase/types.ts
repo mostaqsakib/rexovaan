@@ -503,6 +503,7 @@ export type Database = {
           delivery_notes: Json
           details: Json | null
           id: string
+          idempotency_key: string | null
           payment_method: string | null
           product_id: string
           product_name: string
@@ -525,6 +526,7 @@ export type Database = {
           delivery_notes?: Json
           details?: Json | null
           id?: string
+          idempotency_key?: string | null
           payment_method?: string | null
           product_id: string
           product_name: string
@@ -547,6 +549,7 @@ export type Database = {
           delivery_notes?: Json
           details?: Json | null
           id?: string
+          idempotency_key?: string | null
           payment_method?: string | null
           product_id?: string
           product_name?: string
@@ -1612,6 +1615,22 @@ export type Database = {
         Returns: {
           message: string
           status: string
+        }[]
+      }
+      checkout_balance_atomic: {
+        Args: {
+          _customer_id: string
+          _expected_unit: number
+          _idempotency_key: string
+          _product_id: string
+          _quantity: number
+        }
+        Returns: {
+          details: Json
+          new_balance: number
+          order_id: string
+          total_price: number
+          unit_price: number
         }[]
       }
       claim_next_link_check_item: {
