@@ -378,12 +378,17 @@ async function getStocksForItems(
   };
 }
 
+import { requireAdmin } from "../_shared/require-admin.ts";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  const _adminGuard = await requireAdmin(req, corsHeaders);
+  if (_adminGuard) return _adminGuard;
 
   try {
+
     const serviceAccountRaw = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_KEY");
     if (!serviceAccountRaw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY not configured");
 
