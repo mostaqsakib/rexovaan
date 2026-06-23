@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_action_log: {
+        Row: {
+          action: string
+          admin_user_id: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          id: string
+          note: string | null
+          target_id: string | null
+          target_table: string | null
+        }
+        Insert: {
+          action: string
+          admin_user_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          target_id?: string | null
+          target_table?: string | null
+        }
+        Update: {
+          action?: string
+          admin_user_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          target_id?: string | null
+          target_table?: string | null
+        }
+        Relationships: []
+      }
       bot_balance_adjustments: {
         Row: {
           created_at: string
@@ -44,6 +80,27 @@ export type Database = {
           note?: string
           old_balance?: number
           source?: string
+        }
+        Relationships: []
+      }
+      bot_bind_attempts: {
+        Row: {
+          chat_id: number
+          fails: number
+          locked_until: string | null
+          updated_at: string
+        }
+        Insert: {
+          chat_id: number
+          fails?: number
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chat_id?: number
+          fails?: number
+          locked_until?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

@@ -31,15 +31,33 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
+    // Anti-brute-force: lock chat for 1 hour after 10 failures.
+    const { data: attempts } = await supabase
+      .from('bot_bind_attempts')
+      .select('fails, locked_until')
+      .eq('chat_id', chatId)
+      .maybeSingle();
+    if (attempts?.locked_until && new Date(attempts.locked_until).getTime() > Date.now()) {
+      return json({ error: 'Too many failed attempts. Try again later.' }, 429);
+    }
+
+    const recordFail = async () => {
+      const fails = (attempts?.fails ?? 0) + 1;
+      const lockedUntil = fails >= 10 ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : null;
+      await supabase.from('bot_bind_attempts').upsert({
+        chat_id: chatId, fails, locked_until: lockedUntil, updated_at: new Date().toISOString(),
+      }, { onConflict: 'chat_id' });
+    };
+
     const { data: codeRow, error: codeErr } = await supabase
       .from('bot_telegram_bind_codes')
       .select('auth_user_id, expires_at, used_at')
       .eq('code', code)
       .maybeSingle();
     if (codeErr) return json({ error: codeErr.message }, 500);
-    if (!codeRow) return json({ error: 'Code not found' }, 404);
-    if (codeRow.used_at) return json({ error: 'Code already used' }, 410);
-    if (new Date(codeRow.expires_at).getTime() < Date.now()) return json({ error: 'Code expired' }, 410);
+    if (!codeRow) { await recordFail(); return json({ error: 'Code not found' }, 404); }
+    if (codeRow.used_at) { await recordFail(); return json({ error: 'Code already used' }, 410); }
+    if (new Date(codeRow.expires_at).getTime() < Date.now()) { await recordFail(); return json({ error: 'Code expired' }, 410); }
 
     const { data: result, error: rpcErr } = await supabase.rpc('bind_telegram_to_customer', {
       _auth_user_id: codeRow.auth_user_id,
@@ -52,6 +70,8 @@ Deno.serve(async (req) => {
     if (row?.status === 'conflict') return json({ error: row.message || 'Telegram already linked elsewhere' }, 409);
 
     await supabase.from('bot_telegram_bind_codes').update({ used_at: new Date().toISOString() }).eq('code', code);
+    // Clear failure counter on success.
+    await supabase.from('bot_bind_attempts').delete().eq('chat_id', chatId);
     return json({ ok: true, status: row?.status || 'ok' });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);

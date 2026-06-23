@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
+import { logAdminAction } from "../_shared/audit-log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,6 +65,16 @@ Deno.serve(async (req) => {
     const newBalance = Array.isArray(refundRows)
       ? Number(refundRows[0]?.new_balance ?? customer.balance)
       : Number((refundRows as any)?.new_balance ?? customer.balance);
+
+    await logAdminAction(supabase, req, {
+      action: "reject_withdrawal",
+      target_table: "bot_withdrawals",
+      target_id: withdrawal_id,
+      before: { status: "pending", amount: withdrawal.amount },
+      after: { status: "rejected", new_balance: newBalance },
+      note: note || null,
+    });
+
 
     const tgText = `❌ <b>Withdrawal Rejected</b>\n\n` +
       `Your withdrawal request of <b>${Number(withdrawal.amount).toFixed(2)} USDT</b> has been rejected.\n` +
