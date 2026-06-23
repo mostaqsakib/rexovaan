@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
     if (row?.status === 'conflict') return json({ error: row.message || 'Telegram already linked elsewhere' }, 409);
 
     await supabase.from('bot_telegram_bind_codes').update({ used_at: new Date().toISOString() }).eq('code', code);
+    // Clear failure counter on success.
+    await supabase.from('bot_bind_attempts').delete().eq('chat_id', chatId);
     return json({ ok: true, status: row?.status || 'ok' });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
