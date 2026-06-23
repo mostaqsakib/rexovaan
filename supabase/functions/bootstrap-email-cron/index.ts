@@ -1,6 +1,18 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { timingSafeEqual } from '../_shared/timing-safe.ts'
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  // Admin/operator-only endpoint. Requires CRON_SHARED_SECRET in the Authorization header.
+  const expected = Deno.env.get('CRON_SHARED_SECRET')
+  if (!expected) {
+    return new Response(JSON.stringify({ error: 'Server not configured (CRON_SHARED_SECRET)' }), { status: 500 })
+  }
+  const auth = req.headers.get('Authorization') || ''
+  const provided = auth.replace(/^Bearer\s+/i, '')
+  if (!timingSafeEqual(provided, expected)) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+  }
+
   const url = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('NEW_SUPABASE_SERVICE_ROLE_KEY')!
   const supabase = createClient(url, serviceKey)

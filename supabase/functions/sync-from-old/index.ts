@@ -133,6 +133,20 @@ async function runOnce(fullStock = false) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
+  const expected = Deno.env.get('SYNC_SHARED_SECRET');
+  if (!expected) {
+    return new Response(JSON.stringify({ ok: false, error: 'Server not configured (missing SYNC_SHARED_SECRET)' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  const { timingSafeEqual } = await import('../_shared/timing-safe.ts');
+  const provided = req.headers.get('x-sync-secret') || '';
+  if (!timingSafeEqual(provided, expected)) {
+    return new Response(JSON.stringify({ ok: false, error: 'unauthorized' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   const started = Date.now();
   try {
     const url = new URL(req.url);

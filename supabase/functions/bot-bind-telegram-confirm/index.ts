@@ -1,6 +1,7 @@
 // Called by the Telegram bot when a user runs /bind <code>.
 // Authentication: Authorization: Bearer <BOT_TOKEN>
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { timingSafeEqual } from '../_shared/timing-safe.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,7 +18,7 @@ Deno.serve(async (req) => {
 
     const auth = req.headers.get('Authorization') || '';
     const provided = auth.replace(/^Bearer\s+/i, '');
-    if (provided !== botToken) return json({ error: 'unauthorized' }, 401);
+    if (!timingSafeEqual(provided, botToken)) return json({ error: 'unauthorized' }, 401);
 
     const body = await req.json().catch(() => ({}));
     const code = String(body?.code || '').trim().toUpperCase();

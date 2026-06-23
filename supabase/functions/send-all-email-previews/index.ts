@@ -10,6 +10,7 @@ import { RecoveryEmail } from '../_shared/email-templates/recovery.tsx'
 import { EmailChangeEmail } from '../_shared/email-templates/email-change.tsx'
 import { ReauthenticationEmail } from '../_shared/email-templates/reauthentication.tsx'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
+import { requireAdmin } from '../_shared/require-admin.ts'
 
 const SITE_NAME = 'Rexovaan Shoppie'
 const SENDER_DOMAIN = 'notify.rexovaanshoppie.com'
@@ -28,8 +29,11 @@ const AUTH_TEMPLATES: Array<{ name: string; subject: string; component: any; pro
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
+  const guard = await requireAdmin(req, corsHeaders)
+  if (guard) return guard
+
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const to = 'mostaqahmmeds@gmail.com'
+  const to = Deno.env.get('EMAIL_PREVIEW_RECIPIENT') || 'mostaqahmmeds@gmail.com'
   const results: any[] = []
 
   // Ensure an unsubscribe token exists for this recipient

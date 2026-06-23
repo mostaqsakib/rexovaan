@@ -139,16 +139,15 @@ const PendingDeliveriesTab = () => {
   const cancelRefund = async (order: PendingOrder) => {
     if (!confirm(`Cancel & refund "${order.product_name}"?`)) return;
     setBusy(order.id);
-    const paymentMethod = (order.payment_method || '').toLowerCase();
-    const rpc = paymentMethod === 'pay later' ? 'refund_pay_later_credit' : 'refund_customer_balance';
-    const { error: claimErr } = await supabase
-      .from('bot_orders')
-      .update({ status: 'cancelled' })
-      .eq('id', order.id)
-      .eq('status', 'pending_delivery');
-    if (claimErr) { toast.error(claimErr.message); setBusy(null); return; }
-    if (order.customer?.id) {
-      await supabase.rpc(rpc as 'refund_customer_balance' | 'refund_pay_later_credit', { _customer_id: order.customer.id, _amount: Number(order.total_price) });
+    const { data, error } = await supabase.functions.invoke('admin-cancel-pending-delivery', {
+      body: { order_id: order.id },
+    });
+    if (error || (data as any)?.error) {
+      toast.error((data as any)?.error || error?.message || 'Cancel failed');
+      setBusy(null);
+      return;
+    }
+    if (order.customer?.chat_id) {
       await sendBotMessage(order.customer.chat_id, `❌ <b>Order Cancelled & Refunded</b>\n\nProduct: <b>${order.product_name}</b> x${order.quantity}\nAmount: <b>${Number(order.total_price).toFixed(2)} USDT</b> refunded.`);
     }
     toast.success('Cancelled & refunded');

@@ -29,13 +29,23 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const { data: withdrawal, error: wErr } = await supabase.from("bot_withdrawals").select("*").eq("id", withdrawal_id).single();
-    if (wErr || !withdrawal) {
-      return new Response(JSON.stringify({ error: "Withdrawal not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Atomic conditional update — only first caller wins.
+    const { data: withdrawal, error: wErr } = await supabase
+      .from("bot_withdrawals")
+      .update({
+        status: "rejected",
+        admin_note: note || null,
+        processed_at: new Date().toISOString(),
+      })
+      .eq("id", withdrawal_id)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+    if (wErr) {
+      return new Response(JSON.stringify({ error: wErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    if (withdrawal.status !== "pending") {
-      return new Response(JSON.stringify({ error: "Already processed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!withdrawal) {
+      return new Response(JSON.stringify({ error: "Withdrawal not found or already processed" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const { data: customer } = await supabase.from("bot_customers").select("*").eq("id", withdrawal.customer_id).single();
@@ -43,14 +53,17 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Customer not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const newBalance = Number(customer.balance) + Number(withdrawal.amount);
-    await supabase.from("bot_customers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", customer.id);
-
-    await supabase.from("bot_withdrawals").update({
-      status: "rejected",
-      admin_note: note || null,
-      processed_at: new Date().toISOString(),
-    }).eq("id", withdrawal_id);
+    // Refund balance atomically via SECURITY DEFINER RPC.
+    const { data: refundRows, error: refundErr } = await supabase.rpc("refund_customer_balance", {
+      _customer_id: customer.id,
+      _amount: Number(withdrawal.amount),
+    });
+    if (refundErr) {
+      console.error("refund_customer_balance failed", refundErr);
+    }
+    const newBalance = Array.isArray(refundRows)
+      ? Number(refundRows[0]?.new_balance ?? customer.balance)
+      : Number((refundRows as any)?.new_balance ?? customer.balance);
 
     const tgText = `❌ <b>Withdrawal Rejected</b>\n\n` +
       `Your withdrawal request of <b>${Number(withdrawal.amount).toFixed(2)} USDT</b> has been rejected.\n` +

@@ -1,5 +1,6 @@
 // Verify Telegram WebApp initData, upsert customer, return a Supabase session
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { timingSafeEqual } from '../_shared/timing-safe.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,7 +25,10 @@ async function verifyInitData(initData: string, botToken: string): Promise<Recor
   const dataCheck = [...params.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => `${k}=${v}`).join('\n');
   const secret = await hmacSha256(new TextEncoder().encode('WebAppData'), botToken);
   const calc = await hmacSha256(secret, dataCheck);
-  if (toHex(calc) !== hash) return null;
+  if (!timingSafeEqual(toHex(calc), hash)) return null;
+  // Freshness: reject initData older than 1 day to block replay.
+  const authDate = Number(params.get('auth_date') || 0);
+  if (!authDate || (Date.now() / 1000 - authDate) > 86400) return null;
   return Object.fromEntries(params.entries());
 }
 

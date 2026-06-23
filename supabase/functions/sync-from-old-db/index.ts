@@ -106,6 +106,21 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Validate shared sync secret — this endpoint is invoked by cron, never by users.
+  const expected = Deno.env.get("SYNC_SHARED_SECRET");
+  if (!expected) {
+    return new Response(JSON.stringify({ error: "Server not configured (missing SYNC_SHARED_SECRET)" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const { timingSafeEqual } = await import("../_shared/timing-safe.ts");
+  const provided = req.headers.get("x-sync-secret") || "";
+  if (!timingSafeEqual(provided, expected)) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const sb = createClient(NEW_URL, NEW_KEY, {
     auth: { persistSession: false },
   });

@@ -1576,6 +1576,19 @@ export type Database = {
           total_price: number
         }[]
       }
+      create_withdrawal_atomic: {
+        Args: {
+          _amount: number
+          _asset: string
+          _customer_id: string
+          _network: string
+          _payment_details: string
+        }
+        Returns: {
+          new_balance: number
+          withdrawal_id: string
+        }[]
+      }
       current_customer_id: { Args: never; Returns: string }
       deduct_customer_balance: {
         Args: { _amount: number; _customer_id: string }

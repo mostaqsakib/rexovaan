@@ -11,6 +11,7 @@
 //  - Rotation limited to 5/hour per customer
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://esm.sh/zod@3.23.8";
+import { timingSafeEqual } from "../_shared/timing-safe.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,7 +60,7 @@ Deno.serve(async (req) => {
     if (!botToken) return json({ error: "Bot token missing" }, 500);
     const auth = req.headers.get("Authorization") || "";
     const provided = auth.replace(/^Bearer\s+/i, "");
-    if (provided !== botToken) return json({ error: "unauthorized" }, 401);
+    if (!timingSafeEqual(provided, botToken)) return json({ error: "unauthorized" }, 401);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

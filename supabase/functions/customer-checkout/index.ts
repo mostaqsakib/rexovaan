@@ -64,11 +64,11 @@ Deno.serve(async (req) => {
     const userClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: claims, error: claimsErr } = await userClient.auth.getClaims(authHeader.replace('Bearer ', ''));
-    if (claimsErr || !claims?.claims) {
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    const authUserId = claims.claims.sub;
+    const authUserId = userData.user.id;
 
     const { productId, quantity, paymentMethod } = await req.json();
     if (!productId || !quantity || quantity < 1 || quantity > 500) {
@@ -120,7 +120,10 @@ Deno.serve(async (req) => {
     if (tier) candidates.push(Number(tier.price));
     if (special) candidates.push(Number(special.price));
     if (flash) candidates.push(Number(flash.sale_price));
-    unitPrice = Math.min(...candidates.filter((v) => Number.isFinite(v) && v >= 0));
+    unitPrice = Math.min(...candidates.filter((v) => Number.isFinite(v) && v > 0));
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      return new Response(JSON.stringify({ error: 'Product is not purchasable' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     const totalPrice = +(unitPrice * quantity).toFixed(2);
 

@@ -33,6 +33,20 @@ async function downloadFile(filePath: string): Promise<Uint8Array> {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
+    // Allow anonymous reads, but only authenticated users may trigger
+    // the Telegram fetch + storage upload path. This blocks storage-write amplification.
+    const authHeader = req.headers.get('Authorization') || '';
+    let isAuthenticated = false;
+    if (authHeader.startsWith('Bearer ')) {
+      try {
+        const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const { data: userData } = await userClient.auth.getUser();
+        if (userData?.user) isAuthenticated = true;
+      } catch {/* anon */}
+    }
+
     const { ids } = await req.json();
     if (!Array.isArray(ids) || ids.length === 0) {
       return new Response(JSON.stringify({ emojis: {} }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -55,7 +69,9 @@ Deno.serve(async (req) => {
       else missing.push(id);
     }
 
-    if (missing.length === 0) {
+    if (missing.length === 0 || !isAuthenticated) {
+      // Anonymous callers only get cached results. Authenticated users may trigger
+      // the upstream fetch + storage upload that populates the cache.
       return new Response(JSON.stringify({ emojis: out }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

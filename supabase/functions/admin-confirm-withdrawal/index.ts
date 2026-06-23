@@ -29,26 +29,30 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const { data: withdrawal, error: wErr } = await supabase.from("bot_withdrawals").select("*").eq("id", withdrawal_id).single();
-    if (wErr || !withdrawal) {
-      return new Response(JSON.stringify({ error: "Withdrawal not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // Atomic conditional update — only the first caller wins.
+    const { data: withdrawal, error: wErr } = await supabase
+      .from("bot_withdrawals")
+      .update({
+        status: "completed",
+        proof_url: proof_url || null,
+        admin_note: admin_note || null,
+        processed_at: new Date().toISOString(),
+      })
+      .eq("id", withdrawal_id)
+      .eq("status", "pending")
+      .select("*")
+      .maybeSingle();
+    if (wErr) {
+      return new Response(JSON.stringify({ error: wErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    if (withdrawal.status !== "pending") {
-      return new Response(JSON.stringify({ error: "Already processed" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!withdrawal) {
+      return new Response(JSON.stringify({ error: "Withdrawal not found or already processed" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const { data: customer } = await supabase.from("bot_customers").select("*").eq("id", withdrawal.customer_id).single();
     if (!customer) {
       return new Response(JSON.stringify({ error: "Customer not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
-    await supabase.from("bot_withdrawals").update({
-      status: "completed",
-      proof_url: proof_url || null,
-      admin_note: admin_note || null,
-      processed_at: new Date().toISOString(),
-    }).eq("id", withdrawal_id);
 
     const caption = `✅ <b>Withdrawal Completed!</b>\n\n` +
       `Amount: <b>${Number(withdrawal.amount).toFixed(2)} USDT</b>\n` +
