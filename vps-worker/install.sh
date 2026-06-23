@@ -126,21 +126,28 @@ const validPatterns = VALID_TEXT_PATTERNS.split(',').map(s=>s.trim().toLowerCase
 const navTimeout = parseInt(NAV_TIMEOUT_MS,10);
 const maxConc = parseInt(MAX_CONCURRENCY,10);
 const pollMs = parseInt(POLL_INTERVAL_MS,10);
-let browserCtx = null, busy = false;
+const autoRetryFailedCooldownMs = parseInt(process.env.AUTO_RETRY_FAILED_COOLDOWN_MS || '300000', 10);
+let browserCtx = null, browserLaunchPromise = null, busy = false;
 const QUEUED_STATUSES = ['vps_queued', 'queued'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function getBrowser() {
-  if (browserCtx) return browserCtx;
-  console.log('🚀 Launching Chrome:', CHROME_PROFILE_DIR);
-  browserCtx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, {
-    headless: HEADFUL !== 'true',
-    viewport: { width: 1280, height: 800 },
-    args: ['--no-sandbox','--disable-dev-shm-usage','--disable-blink-features=AutomationControlled','--lang=en-US'],
-    locale: 'en-US',
-  });
-  browserCtx.on('close', () => { browserCtx = null; });
-  return browserCtx;
+  if (browserCtx && browserCtx.pages) return browserCtx;
+  if (browserLaunchPromise) return browserLaunchPromise;
+  browserLaunchPromise = (async () => {
+    console.log('🚀 Launching Chrome:', CHROME_PROFILE_DIR);
+    const ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, {
+      headless: HEADFUL !== 'true',
+      viewport: { width: 1280, height: 800 },
+      args: ['--no-sandbox','--disable-dev-shm-usage','--disable-blink-features=AutomationControlled','--lang=en-US'],
+      locale: 'en-US',
+    });
+    browserCtx = ctx;
+    ctx.on('close', () => { browserCtx = null; browserLaunchPromise = null; });
+    return ctx;
+  })();
+  try { return await browserLaunchPromise; }
+  catch (e) { browserLaunchPromise = null; throw e; }
 }
 function extractUrl(data) {
   if (!data || typeof data !== 'object') return null;
@@ -198,9 +205,10 @@ async function populateItems(job) {
   return rows.length;
 }
 async function runTab(job, signal) {
-  const ctx = await getBrowser();
-  const page = await ctx.newPage();
+  let page = null;
   try {
+    const ctx = await getBrowser();
+    page = await ctx.newPage();
     while (!signal.cancelled) {
       const { data: claimed, error } = await sb.rpc('claim_next_link_check_item', { _job_id: job.id });
       if (error) { console.error('claim:', error.message); await sleep(2000); continue; }
@@ -210,12 +218,16 @@ async function runTab(job, signal) {
       await sb.rpc('mark_link_check_result', { _item_id: item.id, _result: result, _reason: reason });
       if (job.delay_ms > 0) await sleep(job.delay_ms);
     }
-  } finally { await page.close().catch(()=>{}); }
+  } catch (e) { signal.cancelled = true; throw e; }
+  finally { if (page) await page.close().catch(()=>{}); }
 }
 async function processJob(job) {
   console.log(`\n📋 Job ${job.id.slice(0,8)} (concurrency=${job.concurrency})`);
+  const signal = { cancelled: false };
+  let watcher = null;
   await sb.from('link_check_jobs').update({ status:'running', started_at: new Date().toISOString() }).eq('id', job.id);
   try {
+    await getBrowser();
     const total = await populateItems(job);
     await sb.from('link_check_jobs').update({ total }).eq('id', job.id);
     console.log(`   ${total} URLs to check`);
@@ -224,29 +236,40 @@ async function processJob(job) {
       return;
     }
     const conc = Math.max(1, Math.min(maxConc, job.concurrency || 5));
-    const signal = { cancelled: false };
-    const watcher = setInterval(async () => {
+    watcher = setInterval(async () => {
       const { data } = await sb.from('link_check_jobs').select('status').eq('id', job.id).single();
       if (data?.status === 'cancelled') signal.cancelled = true;
     }, 3000);
     const tabs = Array.from({ length: conc }, () => runTab(job, signal));
-    await Promise.all(tabs);
-    clearInterval(watcher);
+    const tabResults = await Promise.allSettled(tabs);
+    const failedTab = tabResults.find(r => r.status === 'rejected');
+    if (failedTab) throw failedTab.reason;
     const finalStatus = signal.cancelled ? 'cancelled' : 'completed';
     await sb.from('link_check_jobs').update({ status: finalStatus, finished_at: new Date().toISOString() }).eq('id', job.id);
     console.log(`   ✅ ${finalStatus}`);
   } catch (e) {
     console.error('   ❌', e.message);
     await sb.from('link_check_jobs').update({ status:'failed', error_text: String(e.message).slice(0,500), finished_at: new Date().toISOString() }).eq('id', job.id);
+  } finally {
+    signal.cancelled = true;
+    if (watcher) clearInterval(watcher);
   }
 }
 async function autoEnqueueIfNeeded() {
   const { data: products, error } = await sb.from('bot_products').select('id, name').eq('link_check_auto', true).eq('is_active', true);
   if (error) throw error;
   for (const p of products || []) {
-    const { data: existing, error: existingError } = await sb.from('link_check_jobs').select('id').eq('product_id', p.id).in('status', [...QUEUED_STATUSES, 'running']).limit(1);
+    const { data: existing, error: existingError } = await sb.from('link_check_jobs').select('id, status, error_text, finished_at').eq('product_id', p.id).order('created_at', { ascending: false }).limit(1);
     if (existingError) throw existingError;
-    if (existing && existing.length > 0) continue;
+    const latestJob = existing?.[0];
+    if (latestJob && [...QUEUED_STATUSES, 'running'].includes(latestJob.status)) continue;
+    const lastFailedAt = latestJob?.status === 'failed' && latestJob.finished_at ? new Date(latestJob.finished_at).getTime() : 0;
+    const failureText = String(latestJob?.error_text || '').toLowerCase();
+    const chromeProfileFailure = failureText.includes('launchpersistentcontext') || failureText.includes('existing browser session') || failureText.includes('profile is already in use');
+    if (chromeProfileFailure && Date.now() - lastFailedAt < autoRetryFailedCooldownMs) {
+      console.warn(`   ⏸️ Auto-loop paused for ${p.name}: Chrome profile is locked`);
+      continue;
+    }
     const { error: insertError } = await sb.from('link_check_jobs').insert({ product_id: p.id, cookie_id: null, concurrency: 5, delay_ms: 800, status: 'vps_queued' });
     if (insertError) throw insertError;
     console.log(`   🔁 Auto-loop queued for ${p.name}`);
