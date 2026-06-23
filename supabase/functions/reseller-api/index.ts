@@ -78,6 +78,49 @@ async function notifyAdminApiOrder(order: Record<string, unknown>, resellerName:
   }
 }
 
+function applyTemplate(tpl: string, vars: Record<string, string>) {
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? vars[k] : `{${k}}`));
+}
+
+async function notifySalesFeed(
+  supabase: any,
+  product: { name: string; custom_emoji_id?: string | null },
+  qty: number,
+) {
+  try {
+    const { data: settings } = await supabase
+      .from("bot_settings")
+      .select("key, value")
+      .in("key", ["recent_sales_group_id", "msg_recent_sale"]);
+    const map: Record<string, string> = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
+    const rawId = map.recent_sales_group_id;
+    const groupId = rawId && rawId !== "" ? Number(rawId) : null;
+    if (!groupId) return;
+
+    const botToken = Deno.env.get("BOT_TOKEN") || Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY");
+    if (!botToken) return;
+
+    const icon = product.custom_emoji_id
+      ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji>`
+      : "🛒";
+    const vars = {
+      product: `${icon} <b>${escapeHtml(product.name)}</b>`,
+      quantity: String(qty),
+    };
+    const tpl = map.msg_recent_sale || `🛒 Someone just bought <b>{quantity}× {product}</b>`;
+    const text = applyTemplate(tpl, vars);
+
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: groupId, text, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+    if (!res.ok) console.error("api_order_sales_feed_failed", await res.text());
+  } catch (e) {
+    console.error("api_order_sales_feed_error", e);
+  }
+}
+
 function getApiKey(req: Request) {
   const auth = req.headers.get("authorization") || "";
   if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
