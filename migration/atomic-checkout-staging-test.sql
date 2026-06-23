@@ -43,7 +43,7 @@ BEGIN
   SELECT v_tp,
          jsonb_build_object('email', 'test'||gs||'@x.io', 'pass', 'p'||gs),
          'available'
-  FROM generate_series(1,50) gs;
+  FROM generate_series(1,200) gs;
 
   -- Product 2 (race — only 5 stock)
   INSERT INTO bot_products (name, sheet_tab, price, is_active, is_manual_delivery, stock_source, description)
