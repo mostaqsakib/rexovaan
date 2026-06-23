@@ -42,7 +42,26 @@ const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   realtime: { transport: WebSocket },
 });
 
-const invalidPatterns = INVALID_TEXT_PATTERNS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+// Always-on invalid markers (matched regardless of .env config)
+const BUILTIN_INVALID_PATTERNS = [
+  'subscription already in use',
+  'already in use',
+  'already been redeemed',
+  'already redeemed',
+  'already claimed',
+  'no longer available',
+  'offer has expired',
+  'has expired',
+  'not eligible',
+  'invalid code',
+  'is not valid',
+  'cannot be used',
+  'this code has already',
+];
+const invalidPatterns = Array.from(new Set([
+  ...BUILTIN_INVALID_PATTERNS,
+  ...INVALID_TEXT_PATTERNS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+]));
 const validPatterns = VALID_TEXT_PATTERNS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const navTimeout = parseInt(NAV_TIMEOUT_MS, 10);
 const maxConc = parseInt(MAX_CONCURRENCY, 10);
