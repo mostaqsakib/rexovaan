@@ -2193,89 +2193,34 @@ function generateReferralCode(chatId) {
 
 async function processReferralCommission(buyerCustomerId, orderTotal, orderId) {
   try {
-    // Check if buyer was referred by someone
-    const { data: referral } = await supabase.from("bot_referrals").select("*, referrer:bot_customers!bot_referrals_referrer_id_fkey(id, chat_id, first_name, referral_balance, referral_total_earned)").eq("referred_id", buyerCustomerId).maybeSingle();
-    if (!referral || !referral.referrer) return;
-
     const refSettings = await getRefSettings();
-    const commission = parseFloat((orderTotal * refSettings.commission / 100).toFixed(4));
+    const { data, error } = await supabase.rpc("process_referral_commission_atomic", {
+      _buyer_customer_id: buyerCustomerId,
+      _order_total: Number(orderTotal) || 0,
+      _order_id: orderId || null,
+      _commission_percent: Number(refSettings.commission) || 0,
+      _first_bonus_amount: Number(refSettings.firstBonus) || 0,
+    });
+    if (error) { console.error("Referral RPC error:", error); return; }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || !row.referrer_id) return;
 
-    // Process first purchase bonus even if commission is 0
-    if (commission <= 0 && referral.first_bonus_paid) return;
+    const commission = Number(row.commission_credited) || 0;
+    const firstBonus = Number(row.first_bonus_credited) || 0;
+    const newBal = Number(row.new_referral_balance) || 0;
+    const chatId = row.referrer_chat_id;
 
-    if (commission > 0) {
-      // Add commission to referrer
-      const newBalance = Number(referral.referrer.referral_balance) + commission;
-      const newTotalEarned = Number(referral.referrer.referral_total_earned) + commission;
-
-      await Promise.all([
-        supabase.from("bot_referral_earnings").insert({
-          referrer_id: referral.referrer.id,
-          referred_id: buyerCustomerId,
-          amount: commission,
-          type: "commission",
-          source_order_id: orderId,
-        }),
-        supabase.from("bot_customers").update({
-          referral_balance: newBalance,
-          referral_total_earned: newTotalEarned,
-          updated_at: new Date().toISOString(),
-        }).eq("id", referral.referrer.id),
-      ]);
-
-      // Notify referrer
-      sendMessage(referral.referrer.chat_id, `💰 <b>Referral Commission!</b>\n\nYou earned <b>${commission.toFixed(2)} USDT</b> from a referral's purchase.\nAvailable Referral Balance: <b>${newBalance.toFixed(2)} USDT</b>`).catch(() => {});
-
-      // First purchase bonus (after commission)
-      if (!referral.first_bonus_paid) {
-        const bonusNewBal = newBalance + refSettings.firstBonus;
-        const bonusNewTotal = newTotalEarned + refSettings.firstBonus;
-        await Promise.all([
-          supabase.from("bot_referral_earnings").insert({
-            referrer_id: referral.referrer.id,
-            referred_id: buyerCustomerId,
-            amount: refSettings.firstBonus,
-            type: "first_bonus",
-          }),
-          supabase.from("bot_customers").update({
-            referral_balance: bonusNewBal,
-            referral_total_earned: bonusNewTotal,
-            updated_at: new Date().toISOString(),
-          }).eq("id", referral.referrer.id),
-          supabase.from("bot_referrals").update({ first_bonus_paid: true }).eq("id", referral.id),
-        ]);
-
-        sendMessage(referral.referrer.chat_id, `🎉 <b>First Purchase Bonus!</b>\n\nYou earned an extra <b>${refSettings.firstBonus.toFixed(2)} USDT</b> because your referral made their first purchase!\nAvailable Referral Balance: <b>${bonusNewBal.toFixed(2)} USDT</b>`).catch(() => {});
-      }
-    } else {
-      // Commission is 0 but first bonus not paid yet
-      if (!referral.first_bonus_paid) {
-        const newBalance = Number(referral.referrer.referral_balance) + refSettings.firstBonus;
-        const newTotalEarned = Number(referral.referrer.referral_total_earned) + refSettings.firstBonus;
-        await Promise.all([
-          supabase.from("bot_referral_earnings").insert({
-            referrer_id: referral.referrer.id,
-            referred_id: buyerCustomerId,
-            amount: refSettings.firstBonus,
-            type: "first_bonus",
-          }),
-          supabase.from("bot_customers").update({
-            referral_balance: newBalance,
-            referral_total_earned: newTotalEarned,
-            updated_at: new Date().toISOString(),
-          }).eq("id", referral.referrer.id),
-          supabase.from("bot_referrals").update({ first_bonus_paid: true }).eq("id", referral.id),
-        ]);
-
-        sendMessage(referral.referrer.chat_id, `🎉 <b>First Purchase Bonus!</b>\n\nYou earned an extra <b>${refSettings.firstBonus.toFixed(2)} USDT</b> because your referral made their first purchase!\nAvailable Referral Balance: <b>${newBalance.toFixed(2)} USDT</b>`).catch(() => {});
-      }
+    if (commission > 0 && chatId) {
+      sendMessage(chatId, `💰 <b>Referral Commission!</b>\n\nYou earned <b>${commission.toFixed(2)} USDT</b> from a referral's purchase.\nAvailable Referral Balance: <b>${newBal.toFixed(2)} USDT</b>`).catch(() => {});
     }
-
-    // Add commission to referrer
+    if (firstBonus > 0 && chatId) {
+      sendMessage(chatId, `🎉 <b>First Purchase Bonus!</b>\n\nYou earned an extra <b>${firstBonus.toFixed(2)} USDT</b> because your referral made their first purchase!\nAvailable Referral Balance: <b>${newBal.toFixed(2)} USDT</b>`).catch(() => {});
+    }
   } catch (err) {
     console.error("Referral commission error:", err);
   }
 }
+
 
 async function showReferralMenu(chatId, customer, emojiMap = {}, editMessageId = null) {
   const [{ data: fresh }, refSettings] = await Promise.all([
@@ -4889,33 +4834,22 @@ async function handleMessage(message, emojiMap) {
           if (!existingRef) {
             await supabase.from("bot_referrals").insert({ referrer_id: referrer.id, referred_id: customer.id });
             console.log(`Referral registered: ${customer.id} referred by ${referrer.id}`);
-
-            // ── Limited-time JOIN-BONUS campaign (independent of existing commission/first-purchase system) ──
+            // Campaign join bonus is credited automatically by DB trigger
+            // (handle_referral_campaign_credit) into referral_balance.
+            // Notify referrer if campaign is active.
             try {
               const campaign = await getCampaignSettings();
               if (campaign.active && campaign.reward > 0) {
-                const reward = Number(campaign.reward);
-                const newBalance = Number(referrer.balance || 0) + reward;
-                await supabase.from("bot_customers").update({
-                  balance: newBalance,
-                  updated_at: new Date().toISOString(),
-                }).eq("id", referrer.id);
-                await supabase.from("bot_referral_earnings").insert({
-                  referrer_id: referrer.id,
-                  referred_id: customer.id,
-                  amount: reward,
-                  type: "join_bonus",
-                });
                 sendMessage(
                   referrer.chat_id,
-                  `🎉 <b>Referral Join Bonus!</b>\n\nA new user joined via your referral link.\nYou earned <b>${reward.toFixed(2)} USDT</b>!\n\n💳 Wallet Balance: <b>${newBalance.toFixed(2)} USDT</b>`
+                  `🎉 <b>Referral Join Bonus!</b>\n\nA new user joined via your referral link.\nYou earned <b>${Number(campaign.reward).toFixed(2)} USDT</b> in your referral balance!`
                 ).catch(() => {});
-                console.log(`Join bonus paid: ${reward} USDT to ${referrer.id}`);
               }
             } catch (e) {
-              console.error("Join-bonus credit failed:", e?.message || e);
+              console.error("Join-bonus notify failed:", e?.message || e);
             }
           }
+
         }
       }
       // Continue to show welcome regardless
