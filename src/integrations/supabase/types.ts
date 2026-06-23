@@ -1874,6 +1874,22 @@ export type Database = {
               unit_cost: number
             }[]
           }
+      process_referral_commission_atomic: {
+        Args: {
+          _buyer_customer_id: string
+          _commission_percent: number
+          _first_bonus_amount: number
+          _order_id: string
+          _order_total: number
+        }
+        Returns: {
+          commission_credited: number
+          first_bonus_credited: number
+          new_referral_balance: number
+          referrer_chat_id: number
+          referrer_id: string
+        }[]
+      }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
         Returns: {
