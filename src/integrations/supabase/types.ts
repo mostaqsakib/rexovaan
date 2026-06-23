@@ -1183,6 +1183,51 @@ export type Database = {
           },
         ]
       }
+      checkout_audit_logs: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          idempotency_key: string
+          order_id: string | null
+          outcome: string
+          product_id: string
+          quantity: number
+          reserved_count: number
+          total_price: number
+          unit_price: number
+          was_idempotent_hit: boolean
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          idempotency_key: string
+          order_id?: string | null
+          outcome?: string
+          product_id: string
+          quantity: number
+          reserved_count: number
+          total_price: number
+          unit_price: number
+          was_idempotent_hit?: boolean
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          idempotency_key?: string
+          order_id?: string | null
+          outcome?: string
+          product_id?: string
+          quantity?: number
+          reserved_count?: number
+          total_price?: number
+          unit_price?: number
+          was_idempotent_hit?: boolean
+        }
+        Relationships: []
+      }
       customer_announcement_reads: {
         Row: {
           announcement_id: string
@@ -1597,6 +1642,51 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      wallet_ledger: {
+        Row: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string
+          customer_id: string
+          id: string
+          idempotency_key: string | null
+          note: string | null
+          reference_id: string | null
+          reference_order_id: string | null
+          reference_table: string | null
+          type: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at?: string
+          customer_id: string
+          id?: string
+          idempotency_key?: string | null
+          note?: string | null
+          reference_id?: string | null
+          reference_order_id?: string | null
+          reference_table?: string | null
+          type: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string
+          customer_id?: string
+          id?: string
+          idempotency_key?: string | null
+          note?: string | null
+          reference_id?: string | null
+          reference_order_id?: string | null
+          reference_table?: string | null
+          type?: string
         }
         Relationships: []
       }
