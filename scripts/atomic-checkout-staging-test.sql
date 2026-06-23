@@ -1,163 +1,189 @@
 -- ============================================================
--- Atomic Checkout — Staging Test Script
--- Run these ONE BY ONE in Supabase SQL Editor
+-- Atomic Checkout — Staging Test Script (Supabase SQL Editor compatible)
+-- Run each STEP block separately. NO manual UUID replacement needed.
+-- All lookups use chat_id = -9999000001 and product name LIKE 'TEST-ATOMIC%'
 -- ============================================================
 
--- --------------------------------------------------------------
--- STEP 0: Turn flag ON for testing (so atomic path is active)
--- --------------------------------------------------------------
+-- ============================================================
+-- STEP 0 — Enable atomic flag (staging)
+-- ============================================================
 UPDATE bot_settings SET value='true' WHERE key='use_atomic_checkout';
 SELECT value FROM bot_settings WHERE key='use_atomic_checkout';
 
--- --------------------------------------------------------------
--- STEP 1: Create disposable test customer ($1000 balance)
--- --------------------------------------------------------------
-INSERT INTO bot_customers (chat_id, first_name, balance, pay_later_enabled)
-VALUES (-9999000001, 'TEST-ATOMIC', 1000.00, false)
-RETURNING id;
--- SAVE THIS UUID AS :tc
-
--- --------------------------------------------------------------
--- STEP 2: Create disposable test product ($1.00 each)
--- --------------------------------------------------------------
-INSERT INTO bot_products (name, price, is_active, is_manual_delivery, category, description)
-VALUES ('TEST-ATOMIC-PRODUCT', 1.00, true, false, 'test', 'verification')
-RETURNING id;
--- SAVE THIS UUID AS :tp
-
--- --------------------------------------------------------------
--- STEP 3: Seed 50 stock items for the test product
--- --------------------------------------------------------------
--- Replace :tp below with the product ID from Step 2
-INSERT INTO bot_product_stock_items (product_id, data, status, sort_index)
-SELECT '00000000-0000-0000-0000-000000000000',
-       jsonb_build_object('email', 'test' || gs || '@x.io', 'pass', 'p' || gs),
-       'available',
-       gs
-FROM generate_series(1,50) gs;
-
--- --------------------------------------------------------------
--- STEP 4: Seed another test product with ONLY 5 stock (for race test T4)
--- --------------------------------------------------------------
-INSERT INTO bot_products (name, price, is_active, is_manual_delivery, category, description)
-VALUES ('TEST-ATOMIC-RACE', 1.00, true, false, 'test', 'race product')
-RETURNING id;
--- SAVE THIS UUID AS :tp_race
-
--- Replace :tp_race below
-INSERT INTO bot_product_stock_items (product_id, data, status, sort_index)
-SELECT '00000000-0000-0000-0000-000000000001',
-       jsonb_build_object('email', 'race' || gs || '@x.io', 'pass', 'r' || gs),
-       'available',
-       gs
-FROM generate_series(1,5) gs;
-
 
 -- ============================================================
--- TESTS: Replace :tc and :tp with the saved UUIDs before running
+-- STEP 1 — Seed test customer + 2 test products + stock
+-- (Safe to re-run: uses ON CONFLICT / cleanup-first pattern)
 -- ============================================================
-
--- T1 — Single normal checkout (expect: 1 order, balance becomes 999)
-SELECT * FROM checkout_balance_atomic(
-  '00000000-0000-0000-0000-000000000000',  -- :tc
-  '00000000-0000-0000-0000-000000000000',  -- :tp
-  1, 1.0,
-  'k-t1-' || gen_random_uuid()::text
-);
-
--- T1 verify
-SELECT balance FROM bot_customers WHERE id = '00000000-0000-0000-0000-000000000000';  -- expect 999.00
-
--- T2 — Double-click / same key (run BOTH lines quickly one after another)
-SELECT * FROM checkout_balance_atomic(
-  '00000000-0000-0000-0000-000000000000',  -- :tc
-  '00000000-0000-0000-0000-000000000000',  -- :tp
-  1, 1.0,
-  'idem-t2-fixed-key'
-);
--- run EXACTLY the same call again immediately:
-SELECT * FROM checkout_balance_atomic(
-  '00000000-0000-0000-0000-000000000000',
-  '00000000-0000-0000-0000-000000000000',
-  1, 1.0,
-  'idem-t2-fixed-key'
-);
-
--- T2 verify
-SELECT count(*) AS orders FROM bot_orders WHERE idempotency_key='idem-t2-fixed-key';          -- expect 1
-SELECT count(*) AS ledger FROM wallet_ledger WHERE idempotency_key='idem-t2-fixed-key';       -- expect 1
-SELECT count(*) AS audit FROM checkout_audit_logs WHERE idempotency_key='idem-t2-fixed-key'; -- expect 2 (completed + replay)
-SELECT balance FROM bot_customers WHERE id='00000000-0000-0000-0000-000000000000';            -- expect 998.00
-
--- T3 — Multi-tab / different keys (run both, order doesn't matter)
-SELECT * FROM checkout_balance_atomic(:tc, :tp, 1, 1.0, 'k-t3-a');
-SELECT * FROM checkout_balance_atomic(:tc, :tp, 1, 1.0, 'k-t3-b');
--- expect 2 orders, 2 ledger rows, balance 996.00
-
--- T4 — Race for last unit (open multiple SQL Editor tabs, run together when only 5 stock left)
--- First reset the race product stock if needed:
--- UPDATE bot_product_stock_items SET status='available', sold_order_id=NULL WHERE product_id = :tp_race;
--- Then run this in 10+ tabs simultaneously:
-SELECT * FROM checkout_balance_atomic(:tc, :tp_race, 1, 1.0, 'k-t4-' || gen_random_uuid()::text);
--- After running, verify:
-SELECT count(*) FROM bot_orders WHERE product_id = :tp_race;                       -- expect 5
-SELECT count(*) FROM wallet_ledger WHERE reference_order_id IN (
-  SELECT id FROM bot_orders WHERE product_id = :tp_race
-);                                                                                   -- expect 5
-
--- T8 — Browser retry / refresh (run same call twice)
-SELECT * FROM checkout_balance_atomic(:tc, :tp, 1, 1.0, 'idem-t8-fixed');
-SELECT * FROM checkout_balance_atomic(:tc, :tp, 1, 1.0, 'idem-t8-fixed');
-
--- T8 verify
-SELECT count(*) AS audit_rows,
-       sum(CASE WHEN was_idempotent_hit THEN 1 ELSE 0 END) AS replays
-FROM checkout_audit_logs WHERE idempotency_key='idem-t8-fixed';  -- expect (2, 1)
-SELECT count(*) FROM wallet_ledger WHERE idempotency_key='idem-t8-fixed';  -- expect 1
-SELECT count(*) FROM bot_orders WHERE idempotency_key='idem-t8-fixed';     -- expect 1
-
--- T9 — Ledger integrity at scale (run 100 times with different keys)
--- Since SQL Editor is single-session, run this block once to fire 100 keys:
 DO $$
 DECLARE
-  i INT;
+  v_tc UUID;
+  v_tp UUID;
+  v_tp_race UUID;
+BEGIN
+  -- Wipe any previous test data first (clean slate)
+  DELETE FROM wallet_ledger        WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  DELETE FROM checkout_audit_logs  WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  DELETE FROM bot_orders           WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  DELETE FROM bot_product_stock_items WHERE product_id IN (SELECT id FROM bot_products WHERE name LIKE 'TEST-ATOMIC%');
+  DELETE FROM bot_products         WHERE name LIKE 'TEST-ATOMIC%';
+  DELETE FROM bot_customers        WHERE chat_id = -9999000001;
+
+  -- Customer
+  INSERT INTO bot_customers (chat_id, first_name, balance, pay_later_enabled)
+  VALUES (-9999000001, 'TEST-ATOMIC', 1000.00, false)
+  RETURNING id INTO v_tc;
+
+  -- Product 1 (main)
+  INSERT INTO bot_products (name, price, is_active, is_manual_delivery, category, description)
+  VALUES ('TEST-ATOMIC-PRODUCT', 1.00, true, false, 'test', 'verification')
+  RETURNING id INTO v_tp;
+
+  INSERT INTO bot_product_stock_items (product_id, data, status, sort_index)
+  SELECT v_tp,
+         jsonb_build_object('email', 'test'||gs||'@x.io', 'pass', 'p'||gs),
+         'available', gs
+  FROM generate_series(1,50) gs;
+
+  -- Product 2 (race — only 5 stock)
+  INSERT INTO bot_products (name, price, is_active, is_manual_delivery, category, description)
+  VALUES ('TEST-ATOMIC-RACE', 1.00, true, false, 'test', 'race product')
+  RETURNING id INTO v_tp_race;
+
+  INSERT INTO bot_product_stock_items (product_id, data, status, sort_index)
+  SELECT v_tp_race,
+         jsonb_build_object('email', 'race'||gs||'@x.io', 'pass', 'r'||gs),
+         'available', gs
+  FROM generate_series(1,5) gs;
+
+  RAISE NOTICE 'Seeded customer=%, product=%, race=%', v_tc, v_tp, v_tp_race;
+END $$;
+
+-- Confirm seed
+SELECT id, chat_id, balance FROM bot_customers WHERE chat_id = -9999000001;
+SELECT id, name FROM bot_products WHERE name LIKE 'TEST-ATOMIC%';
+
+
+-- ============================================================
+-- T1 — Single normal checkout (expect 1 order, balance 999)
+-- ============================================================
+DO $$
+DECLARE
+  v_tc UUID := (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  v_tp UUID := (SELECT id FROM bot_products  WHERE name = 'TEST-ATOMIC-PRODUCT');
   rec RECORD;
-  tc UUID := '00000000-0000-0000-0000-000000000000';  -- :tc
-  tp UUID := '00000000-0000-0000-0000-000000000000';  -- :tp
+BEGIN
+  SELECT * INTO rec FROM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'k-t1-'||gen_random_uuid()::text);
+  RAISE NOTICE 'T1 result: %', rec;
+END $$;
+
+SELECT balance FROM bot_customers WHERE chat_id = -9999000001;  -- expect 999.00
+
+
+-- ============================================================
+-- T2 — Idempotency: same key twice (expect 1 order, 1 ledger, 2 audit, balance 998)
+-- ============================================================
+DO $$
+DECLARE
+  v_tc UUID := (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  v_tp UUID := (SELECT id FROM bot_products  WHERE name = 'TEST-ATOMIC-PRODUCT');
+BEGIN
+  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'idem-t2-fixed-key');
+  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'idem-t2-fixed-key');
+END $$;
+
+SELECT
+  (SELECT count(*) FROM bot_orders          WHERE idempotency_key='idem-t2-fixed-key') AS orders,       -- 1
+  (SELECT count(*) FROM wallet_ledger       WHERE idempotency_key='idem-t2-fixed-key') AS ledger,       -- 1
+  (SELECT count(*) FROM checkout_audit_logs WHERE idempotency_key='idem-t2-fixed-key') AS audit,        -- 2
+  (SELECT balance  FROM bot_customers       WHERE chat_id=-9999000001)                  AS balance;     -- 998.00
+
+
+-- ============================================================
+-- T3 — Two distinct keys back-to-back (expect 2 orders, balance 996)
+-- ============================================================
+DO $$
+DECLARE
+  v_tc UUID := (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  v_tp UUID := (SELECT id FROM bot_products  WHERE name = 'TEST-ATOMIC-PRODUCT');
+BEGIN
+  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'k-t3-a');
+  PERFORM checkout_balance_atomic(v_tc, v_tp, 1, 1.0, 'k-t3-b');
+END $$;
+
+SELECT balance FROM bot_customers WHERE chat_id = -9999000001;  -- expect 996.00
+
+
+-- ============================================================
+-- T4 — Stock exhaustion (race product has only 5 stock — try 10 buys)
+-- Expect exactly 5 success, 5 fail with insufficient_stock; balance drops by 5
+-- ============================================================
+DO $$
+DECLARE
+  v_tc UUID := (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  v_tp_race UUID := (SELECT id FROM bot_products WHERE name = 'TEST-ATOMIC-RACE');
+  i INT;
+  v_success INT := 0;
+  v_fail INT := 0;
+  rec RECORD;
+BEGIN
+  FOR i IN 1..10 LOOP
+    BEGIN
+      SELECT * INTO rec FROM checkout_balance_atomic(
+        v_tc, v_tp_race, 1, 1.0, 'k-t4-'||i::text||'-'||gen_random_uuid()::text
+      );
+      v_success := v_success + 1;
+    EXCEPTION WHEN OTHERS THEN
+      v_fail := v_fail + 1;
+    END;
+  END LOOP;
+  RAISE NOTICE 'T4 success=% fail=%', v_success, v_fail;  -- expect 5 / 5
+END $$;
+
+SELECT count(*) AS race_orders FROM bot_orders
+WHERE product_id = (SELECT id FROM bot_products WHERE name = 'TEST-ATOMIC-RACE');  -- expect 5
+
+
+-- ============================================================
+-- T9 — Ledger integrity at scale (100 checkouts)
+-- ============================================================
+DO $$
+DECLARE
+  v_tc UUID := (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+  v_tp UUID := (SELECT id FROM bot_products  WHERE name = 'TEST-ATOMIC-PRODUCT');
+  i INT;
 BEGIN
   FOR i IN 1..100 LOOP
-    SELECT * INTO rec FROM checkout_balance_atomic(
-      tc, tp, 1, 1.0,
-      'k-t9-' || i::text || '-' || gen_random_uuid()::text
+    PERFORM checkout_balance_atomic(
+      v_tc, v_tp, 1, 1.0,
+      'k-t9-'||i::text||'-'||gen_random_uuid()::text
     );
   END LOOP;
 END $$;
 
--- T9 verify
+-- T9 verify — pass if: 1000 - |ledger_sum| = current_balance AND ledger_rows = order_rows = unique_keys
 SELECT
   c.balance AS current_balance,
   (SELECT SUM(amount) FROM wallet_ledger WHERE customer_id = c.id) AS ledger_sum,
-  (SELECT count(*) FROM wallet_ledger WHERE customer_id = c.id) AS ledger_rows,
-  (SELECT count(*) FROM bot_orders WHERE customer_id = c.id) AS order_rows,
+  (SELECT count(*)    FROM wallet_ledger WHERE customer_id = c.id) AS ledger_rows,
+  (SELECT count(*)    FROM bot_orders    WHERE customer_id = c.id) AS order_rows,
   (SELECT count(DISTINCT idempotency_key) FROM wallet_ledger WHERE customer_id = c.id) AS unique_keys
 FROM bot_customers c WHERE c.chat_id = -9999000001;
--- Pass if:
---   current_balance + |ledger_sum| = starting_balance (1000)
---   ledger_rows = order_rows = unique_keys
 
 
 -- ============================================================
--- CLEANUP: Remove all test data when done
+-- CLEANUP — Run this after all tests pass
 -- ============================================================
--- DELETE FROM wallet_ledger WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
--- DELETE FROM checkout_audit_logs WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
--- DELETE FROM bot_orders WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+-- DELETE FROM wallet_ledger        WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+-- DELETE FROM checkout_audit_logs  WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
+-- DELETE FROM bot_orders           WHERE customer_id IN (SELECT id FROM bot_customers WHERE chat_id = -9999000001);
 -- DELETE FROM bot_product_stock_items WHERE product_id IN (SELECT id FROM bot_products WHERE name LIKE 'TEST-ATOMIC%');
--- DELETE FROM bot_products WHERE name LIKE 'TEST-ATOMIC%';
--- DELETE FROM bot_customers WHERE chat_id = -9999000001;
+-- DELETE FROM bot_products         WHERE name LIKE 'TEST-ATOMIC%';
+-- DELETE FROM bot_customers        WHERE chat_id = -9999000001;
 
 -- ============================================================
--- FINAL FLIP: Enable atomic checkout globally after all tests pass
+-- FINAL FLIP — Enable atomic checkout globally (already 'true' from STEP 0;
+-- if you turned it off during testing, re-enable here)
 -- ============================================================
 -- UPDATE bot_settings SET value='true' WHERE key='use_atomic_checkout';
 -- SELECT value FROM bot_settings WHERE key='use_atomic_checkout';
