@@ -40,8 +40,8 @@ async function validateLaunchToken(token: string): Promise<{ valid: boolean; use
   try {
     const [payloadBase64, signature] = token.split(".");
     if (!payloadBase64 || !signature) return { valid: false };
-    // Prefer dedicated secret; fall back to legacy service-role only if not yet rotated.
-    const signingSecret = Deno.env.get("ADMIN_LAUNCH_TOKEN_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    // Dedicated HMAC secret only — service-role fallback removed to limit blast radius.
+    const signingSecret = Deno.env.get("ADMIN_LAUNCH_TOKEN_SECRET");
     if (!signingSecret) return { valid: false };
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(signingSecret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadBase64));
