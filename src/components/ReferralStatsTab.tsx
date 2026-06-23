@@ -208,6 +208,46 @@ const ReferralStatsTab = () => {
   const totalCommissions = earnings.filter(e => e.type === 'commission').reduce((s, e) => s + Number(e.amount), 0);
   const totalBonuses = earnings.filter(e => e.type === 'first_bonus').reduce((s, e) => s + Number(e.amount), 0);
 
+  // Group referrals by referrer for the per-referrer expandable view
+  const referralsByReferrer = useMemo(() => {
+    const map = new Map<string, ReferralRow[]>();
+    for (const r of referrals) {
+      const arr = map.get(r.referrer_id) || [];
+      arr.push(r);
+      map.set(r.referrer_id, arr);
+    }
+    return map;
+  }, [referrals]);
+
+  // Earnings per (referrer, referred) pair
+  const earningsByPair = useMemo(() => {
+    const map = new Map<string, { commission: number; first_bonus: number; campaign_signup: number; total: number }>();
+    for (const e of earnings) {
+      const key = `${e.referrer_id}__${e.referred_id}`;
+      const v = map.get(key) || { commission: 0, first_bonus: 0, campaign_signup: 0, total: 0 };
+      const amt = Number(e.amount);
+      if (e.type === 'commission') v.commission += amt;
+      else if (e.type === 'first_bonus') v.first_bonus += amt;
+      else if (e.type === 'campaign_signup') v.campaign_signup += amt;
+      v.total += amt;
+      map.set(key, v);
+    }
+    return map;
+  }, [earnings]);
+
+  const filteredReferrals = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return referrals;
+    return referrals.filter(r => {
+      const fields = [
+        r.referrer?.username, r.referrer?.first_name, String(r.referrer?.chat_id ?? ''),
+        r.referred?.username, r.referred?.first_name, String(r.referred?.chat_id ?? ''),
+      ];
+      return fields.some(f => f && String(f).toLowerCase().includes(q));
+    });
+  }, [referrals, search]);
+
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
