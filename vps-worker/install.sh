@@ -259,9 +259,17 @@ async function autoEnqueueIfNeeded() {
   const { data: products, error } = await sb.from('bot_products').select('id, name').eq('link_check_auto', true).eq('is_active', true);
   if (error) throw error;
   for (const p of products || []) {
-    const { data: existing, error: existingError } = await sb.from('link_check_jobs').select('id').eq('product_id', p.id).in('status', [...QUEUED_STATUSES, 'running']).limit(1);
+    const { data: existing, error: existingError } = await sb.from('link_check_jobs').select('id, status, error_text, finished_at').eq('product_id', p.id).order('created_at', { ascending: false }).limit(1);
     if (existingError) throw existingError;
-    if (existing && existing.length > 0) continue;
+    const latestJob = existing?.[0];
+    if (latestJob && [...QUEUED_STATUSES, 'running'].includes(latestJob.status)) continue;
+    const lastFailedAt = latestJob?.status === 'failed' && latestJob.finished_at ? new Date(latestJob.finished_at).getTime() : 0;
+    const failureText = String(latestJob?.error_text || '').toLowerCase();
+    const chromeProfileFailure = failureText.includes('launchpersistentcontext') || failureText.includes('existing browser session') || failureText.includes('profile is already in use');
+    if (chromeProfileFailure && Date.now() - lastFailedAt < autoRetryFailedCooldownMs) {
+      console.warn(`   ⏸️ Auto-loop paused for ${p.name}: Chrome profile is locked`);
+      continue;
+    }
     const { error: insertError } = await sb.from('link_check_jobs').insert({ product_id: p.id, cookie_id: null, concurrency: 5, delay_ms: 800, status: 'vps_queued' });
     if (insertError) throw insertError;
     console.log(`   🔁 Auto-loop queued for ${p.name}`);
