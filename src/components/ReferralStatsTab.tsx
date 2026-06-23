@@ -351,10 +351,10 @@ const ReferralStatsTab = () => {
         </Card>
       </div>
 
-      {/* Top Referrers */}
+      {/* Top Referrers — Expandable */}
       <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="text-lg">🏆 Top Referrers</CardTitle>
+          <CardTitle className="text-lg">🏆 Top Referrers (click to expand)</CardTitle>
           <Button variant="outline" size="sm" onClick={fetchData} className="gap-2">
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
@@ -364,46 +364,147 @@ const ReferralStatsTab = () => {
             <p className="text-sm text-muted-foreground text-center py-4">No referrals yet</p>
           ) : (
             <div className="space-y-2">
-              {topReferrers.map((r, i) => (
-                <div key={r.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold w-6">{i + 1}.</span>
-                    <span className="text-sm font-medium">{r.name}</span>
+              {topReferrers.map((r, i) => {
+                const isOpen = expandedReferrer === r.id;
+                const refs = referralsByReferrer.get(r.id) || [];
+                return (
+                  <div key={r.id} className="rounded-lg border bg-muted/30">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedReferrer(isOpen ? null : r.id)}
+                      className="w-full flex items-center justify-between p-3 hover:bg-muted/60 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                        <span className="text-sm font-bold w-6 shrink-0">{i + 1}.</span>
+                        <div className="flex flex-col items-start min-w-0">
+                          <span className="text-sm font-medium truncate">{r.name}</span>
+                          {r.chat_id != null && (
+                            <span className="text-[10px] text-muted-foreground font-mono">ID: {r.chat_id}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="secondary">{r.count} refs</Badge>
+                        <Badge variant="default">${r.earned.toFixed(2)}</Badge>
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div className="border-t p-2 space-y-1 max-h-[400px] overflow-y-auto">
+                        {refs.length === 0 ? (
+                          <p className="text-xs text-muted-foreground p-2">No referred users loaded.</p>
+                        ) : (
+                          refs.map((rr, idx) => {
+                            const pairKey = `${rr.referrer_id}__${rr.referred_id}`;
+                            const pe = earningsByPair.get(pairKey);
+                            return (
+                              <div key={rr.id} className="flex items-center justify-between p-2 rounded bg-background text-xs gap-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="text-muted-foreground shrink-0 w-6">#{idx + 1}</span>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-medium truncate">
+                                      {rr.referred?.first_name || 'Unknown'}
+                                      {rr.referred?.username && (
+                                        <span className="text-muted-foreground"> · @{rr.referred.username}</span>
+                                      )}
+                                    </span>
+                                    <span className="font-mono text-[10px] text-muted-foreground flex items-center gap-1">
+                                      ID: {rr.referred?.chat_id ?? '—'}
+                                      {rr.referred?.chat_id != null && (
+                                        <button
+                                          type="button"
+                                          onClick={(ev) => { ev.stopPropagation(); copy(rr.referred!.chat_id); }}
+                                          className="hover:text-foreground"
+                                          title="Copy chat ID"
+                                        >
+                                          <Copy className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {new Date(rr.created_at).toLocaleString()}
+                                  </span>
+                                  <div className="flex items-center gap-1 flex-wrap justify-end">
+                                    {pe && pe.campaign_signup > 0 && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0">join +${pe.campaign_signup.toFixed(2)}</Badge>
+                                    )}
+                                    {pe && pe.first_bonus > 0 && (
+                                      <Badge variant="secondary" className="text-[9px] px-1 py-0">bonus +${pe.first_bonus.toFixed(2)}</Badge>
+                                    )}
+                                    {pe && pe.commission > 0 && (
+                                      <Badge variant="default" className="text-[9px] px-1 py-0">comm +${pe.commission.toFixed(2)}</Badge>
+                                    )}
+                                    {(!pe || pe.total === 0) && (
+                                      <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">no earnings</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{r.count} refs</Badge>
-                    <Badge variant="default">${r.earned.toFixed(2)}</Badge>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Recent Referrals */}
+      {/* All Referrals — Searchable Detailed Table */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">👥 Recent Referrals</CardTitle>
+        <CardHeader className="pb-3 space-y-2">
+          <CardTitle className="text-lg">👥 All Referrals ({filteredReferrals.length} of {referrals.length})</CardTitle>
+          <div className="relative">
+            <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by username, name, or chat ID…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8"
+            />
+          </div>
         </CardHeader>
         <CardContent>
-          {referrals.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No referrals yet</p>
+          {filteredReferrals.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No referrals match</p>
           ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {referrals.slice(0, 20).map(r => (
-                <div key={r.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
-                  <div>
-                    <span className="font-medium">{getLabel(r.referrer)}</span>
-                    <span className="text-muted-foreground"> → </span>
-                    <span>{getLabel(r.referred)}</span>
+            <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
+              {filteredReferrals.slice(0, 200).map(r => (
+                <div key={r.id} className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto] items-center gap-2 p-2 rounded-lg bg-muted/40 text-xs">
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-medium truncate">
+                      {r.referrer?.first_name || 'Unknown'}
+                      {r.referrer?.username && <span className="text-muted-foreground"> · @{r.referrer.username}</span>}
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground">ID: {r.referrer?.chat_id ?? '—'}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {r.first_bonus_paid && <Badge variant="outline" className="text-xs">Bonus ✓</Badge>}
-                    <span className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</span>
+                  <span className="text-muted-foreground hidden sm:inline">→</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-medium truncate">
+                      {r.referred?.first_name || 'Unknown'}
+                      {r.referred?.username && <span className="text-muted-foreground"> · @{r.referred.username}</span>}
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground">ID: {r.referred?.chat_id ?? '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-1 justify-end shrink-0">
+                    {r.first_bonus_paid && <Badge variant="outline" className="text-[9px] px-1 py-0">Bonus ✓</Badge>}
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </span>
                   </div>
                 </div>
               ))}
+              {filteredReferrals.length > 200 && (
+                <p className="text-[10px] text-muted-foreground text-center pt-2">
+                  Showing first 200 of {filteredReferrals.length} — refine search to see more.
+                </p>
+              )}
             </div>
           )}
         </CardContent>
@@ -419,7 +520,7 @@ const ReferralStatsTab = () => {
             <p className="text-sm text-muted-foreground text-center py-4">No earnings yet</p>
           ) : (
             <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {earnings.slice(0, 30).map(e => (
+              {earnings.slice(0, 50).map(e => (
                 <div key={e.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm">
                   <div>
                     <span className="font-medium">{getLabel(e.referrer)}</span>
@@ -427,8 +528,8 @@ const ReferralStatsTab = () => {
                     <span>{getLabel(e.referred)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={e.type === 'first_bonus' ? 'secondary' : 'default'}>
-                      {e.type === 'first_bonus' ? '🎁 Bonus' : '💵 Commission'}
+                    <Badge variant={e.type === 'first_bonus' ? 'secondary' : e.type === 'campaign_signup' ? 'outline' : 'default'}>
+                      {e.type === 'first_bonus' ? '🎁 Bonus' : e.type === 'campaign_signup' ? '🎯 Join' : '💵 Commission'}
                     </Badge>
                     <span className="font-medium text-primary">${Number(e.amount).toFixed(2)}</span>
                     <span className="text-xs text-muted-foreground">{new Date(e.created_at).toLocaleDateString()}</span>
@@ -442,5 +543,7 @@ const ReferralStatsTab = () => {
     </div>
   );
 };
+
+
 
 export default ReferralStatsTab;
