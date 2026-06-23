@@ -49,27 +49,41 @@ const maxConc = parseInt(MAX_CONCURRENCY, 10);
 const pollMs = parseInt(POLL_INTERVAL_MS, 10);
 
 let browserCtx = null;
+let browserLaunchPromise = null;
 let busy = false;
 const QUEUED_STATUSES = ['vps_queued', 'queued'];
 
 async function getBrowser() {
   if (browserCtx && browserCtx.pages) return browserCtx;
-  console.log('🚀 Launching Chrome with profile:', CHROME_PROFILE_DIR);
-  browserCtx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, {
-    headless: HEADFUL !== 'true',
-    viewport: { width: 1280, height: 800 },
-    args: [
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-blink-features=AutomationControlled',
-      '--lang=en-US',
-    ],
-    locale: 'en-US',
-  });
-  browserCtx.on('close', () => {
-    browserCtx = null;
-  });
-  return browserCtx;
+  if (browserLaunchPromise) return browserLaunchPromise;
+
+  browserLaunchPromise = (async () => {
+    console.log('🚀 Launching Chrome with profile:', CHROME_PROFILE_DIR);
+    const ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, {
+      headless: HEADFUL !== 'true',
+      viewport: { width: 1280, height: 800 },
+      args: [
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+        '--lang=en-US',
+      ],
+      locale: 'en-US',
+    });
+    browserCtx = ctx;
+    ctx.on('close', () => {
+      browserCtx = null;
+      browserLaunchPromise = null;
+    });
+    return ctx;
+  })();
+
+  try {
+    return await browserLaunchPromise;
+  } catch (error) {
+    browserLaunchPromise = null;
+    throw error;
+  }
 }
 
 function extractUrl(data) {
