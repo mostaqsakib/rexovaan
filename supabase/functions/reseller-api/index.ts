@@ -393,6 +393,7 @@ Deno.serve(async (req) => {
 
         const order = { ...apiOrder, balance_after: newBalance, accounts, account: accounts[0] };
         await notifyAdminApiOrder(order || {}, reseller.name);
+        await notifySalesFeed(supabase, product, parsed.data.quantity);
         return json({ ok: true, order, accounts, account: accounts[0] });
       }
 
