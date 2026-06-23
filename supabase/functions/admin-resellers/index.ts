@@ -37,8 +37,23 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceKey) return json({ error: "Server is not configured" }, 500);
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (!supabaseUrl || !serviceKey || !anonKey) return json({ error: "Server is not configured" }, 500);
+
+    // --- AUTH: caller must be an authenticated admin ---
+    const authHeader = req.headers.get("Authorization") || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    if (!token) return json({ error: "Unauthorized" }, 401);
+
+    const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
+    const { data: userData, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+
+    const { data: isAdmin, error: roleErr } = await userClient.rpc("is_admin");
+    if (roleErr || isAdmin !== true) return json({ error: "Forbidden: admin only" }, 403);
+
     const supabase = createClient(supabaseUrl, serviceKey);
+
 
     if (req.method === "GET") {
       const { data, error } = await supabase
