@@ -158,12 +158,12 @@ const ReferralStatsTab = () => {
           .from('bot_referrals')
           .select('*, referrer:bot_customers!bot_referrals_referrer_id_fkey(first_name, username, chat_id), referred:bot_customers!bot_referrals_referred_id_fkey(first_name, username, chat_id)')
           .order('created_at', { ascending: false })
-          .limit(100),
+          .limit(1000),
         supabase
           .from('bot_referral_earnings')
           .select('*, referrer:bot_customers!bot_referral_earnings_referrer_id_fkey(first_name, username), referred:bot_customers!bot_referral_earnings_referred_id_fkey(first_name, username)')
           .order('created_at', { ascending: false })
-          .limit(200),
+          .limit(1000),
       ]);
 
       const refs = (refRes.data || []) as unknown as ReferralRow[];
@@ -172,10 +172,16 @@ const ReferralStatsTab = () => {
       setEarnings(earns);
 
       // Calculate top referrers
-      const referrerMap = new Map<string, { name: string; count: number; earned: number }>();
+      const referrerMap = new Map<string, { name: string; chat_id: number | null; username: string | null; count: number; earned: number }>();
       for (const r of refs) {
         const key = r.referrer_id;
-        const existing = referrerMap.get(key) || { name: getLabel(r.referrer), count: 0, earned: 0 };
+        const existing = referrerMap.get(key) || {
+          name: getLabel(r.referrer),
+          chat_id: r.referrer?.chat_id ?? null,
+          username: r.referrer?.username ?? null,
+          count: 0,
+          earned: 0,
+        };
         existing.count++;
         referrerMap.set(key, existing);
       }
@@ -185,14 +191,15 @@ const ReferralStatsTab = () => {
       }
       const sorted = Array.from(referrerMap.entries())
         .map(([id, v]) => ({ id, ...v }))
-        .sort((a, b) => b.earned - a.earned)
-        .slice(0, 10);
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 25);
       setTopReferrers(sorted);
     } catch (err) {
       toast.error('Failed to load referral data');
     }
     setLoading(false);
   };
+
 
   useEffect(() => { fetchData(); loadCampaignSettings(); }, []);
 
