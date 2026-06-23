@@ -91,11 +91,24 @@ export default function Checkout() {
   const hasFlash = !!flash && Number(flash?.sale_price) === unitPrice && Number(flash?.sale_price) < Number(product?.price || 0);
   const total = useMemo(() => unitPrice * qty, [unitPrice, qty]);
 
+  const idempotencyKeyRef = useRef<string>(
+    (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `ck-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+
   const place = async () => {
+    if (placing) return; // hard guard against double-click
     setPlacing(true);
     try {
       const { data, error } = await supabase.functions.invoke('customer-checkout', {
-        body: { productId, quantity: qty, paymentMethod: 'balance' },
+        body: {
+          productId,
+          quantity: qty,
+          paymentMethod: 'balance',
+          idempotencyKey: idempotencyKeyRef.current,
+          expectedUnit: unitPrice,
+        },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'Checkout failed');
       setResult({ details: data.details, total: data.totalPrice, orderId: data.orderId });
