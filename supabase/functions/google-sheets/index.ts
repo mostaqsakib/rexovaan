@@ -379,7 +379,6 @@ async function getStocksForItems(
   };
 }
 
-import { requireAdmin } from "../_shared/require-admin.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
