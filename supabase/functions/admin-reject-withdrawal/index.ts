@@ -66,6 +66,16 @@ Deno.serve(async (req) => {
       ? Number(refundRows[0]?.new_balance ?? customer.balance)
       : Number((refundRows as any)?.new_balance ?? customer.balance);
 
+    await logAdminAction(supabase, req, {
+      action: "reject_withdrawal",
+      target_table: "bot_withdrawals",
+      target_id: withdrawal_id,
+      before: { status: "pending", amount: withdrawal.amount },
+      after: { status: "rejected", new_balance: newBalance },
+      note: note || null,
+    });
+
+
     const tgText = `❌ <b>Withdrawal Rejected</b>\n\n` +
       `Your withdrawal request of <b>${Number(withdrawal.amount).toFixed(2)} USDT</b> has been rejected.\n` +
       `The amount has been returned to your balance.\n\n` +
