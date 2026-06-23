@@ -1,12 +1,10 @@
-// Customer checkout: validates price, reserves stock, creates order
+// Customer checkout: atomic single-RPC checkout (order + stock + balance in one transaction)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-
 
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
@@ -52,7 +50,6 @@ async function notifyWebSale(admin: any, product: any, qty: number) {
   }
 }
 
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -70,123 +67,69 @@ Deno.serve(async (req) => {
     }
     const authUserId = userData.user.id;
 
-    const { productId, quantity, paymentMethod } = await req.json();
+    const { productId, quantity, paymentMethod, idempotencyKey, expectedUnit } = await req.json();
     if (!productId || !quantity || quantity < 1 || quantity > 500) {
       return new Response(JSON.stringify({ error: 'Invalid input' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-
-    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-
-    // Customer
-    const { data: customer } = await admin.from('bot_customers').select('*').eq('auth_user_id', authUserId).maybeSingle();
-    if (!customer) return new Response(JSON.stringify({ error: 'Customer not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    if (customer.is_banned) return new Response(JSON.stringify({ error: 'Account banned' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
-    // Product
-    const { data: product } = await admin.from('bot_products').select('*').eq('id', productId).maybeSingle();
-    if (!product || !product.is_active) return new Response(JSON.stringify({ error: 'Product not available' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    if (product.is_manual_delivery) return new Response(JSON.stringify({ error: 'Manual delivery — please use Telegram bot' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
-    // Resolve unit price: always the LOWEST of base, tier (for current qty), customer special, active flash.
-    let unitPrice = Number(product.price);
-    const { data: special } = await admin
-      .from('bot_customer_pricing')
-      .select('*')
-      .eq('customer_id', customer.id)
-      .eq('product_id', productId)
-      .eq('is_active', true)
-      .lte('min_quantity', quantity)
-      .order('min_quantity', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const { data: tier } = await admin
-      .from('bot_product_pricing')
-      .select('*')
-      .eq('product_id', productId)
-      .lte('min_quantity', quantity)
-      .order('min_quantity', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const { data: flash } = await admin
-      .from('bot_flash_sales')
-      .select('*')
-      .eq('product_id', productId)
-      .eq('is_active', true)
-      .gte('ends_at', new Date().toISOString())
-      .order('sale_price', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    const candidates: number[] = [unitPrice];
-    if (tier) candidates.push(Number(tier.price));
-    if (special) candidates.push(Number(special.price));
-    if (flash) candidates.push(Number(flash.sale_price));
-    unitPrice = Math.min(...candidates.filter((v) => Number.isFinite(v) && v > 0));
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-      return new Response(JSON.stringify({ error: 'Product is not purchasable' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!idempotencyKey || typeof idempotencyKey !== 'string' || idempotencyKey.length < 8) {
+      return new Response(JSON.stringify({ error: 'Missing idempotency key' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-
-    const totalPrice = +(unitPrice * quantity).toFixed(2);
-
-    // Only "balance" supported here. Other methods go through bot for now.
     if (paymentMethod !== 'balance') {
       return new Response(JSON.stringify({ error: 'Please use Telegram bot for non-balance payments' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    if (Number(customer.balance) < totalPrice) {
-      return new Response(JSON.stringify({ error: 'Insufficient balance' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-    // Create order shell
-    const { data: orderRow, error: orderErr } = await admin.from('bot_orders').insert({
-      customer_id: customer.id,
-      product_id: productId,
-      product_name: product.name,
-      quantity,
-      total_price: totalPrice,
-      payment_method: 'balance',
-      status: 'completed',
-      details: [],
-      row_numbers: [],
-      source: 'web',
-    }).select('*').single();
-    if (orderErr || !orderRow) throw orderErr || new Error('order insert failed');
+    // Look up customer (auth → customer mapping)
+    const { data: customer } = await admin
+      .from('bot_customers')
+      .select('id, is_banned')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+    if (!customer) return new Response(JSON.stringify({ error: 'Customer not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (customer.is_banned) return new Response(JSON.stringify({ error: 'Account banned' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-    // Reserve stock
-    const { data: items, error: stockErr } = await admin.rpc('reserve_internal_stock_items', {
+    // Single atomic RPC: order + stock + balance debit + idempotency, all in one transaction
+    const { data: rpcData, error: rpcErr } = await admin.rpc('checkout_balance_atomic', {
+      _customer_id: customer.id,
       _product_id: productId,
       _quantity: quantity,
-      _order_id: orderRow.id,
+      _expected_unit: Number(expectedUnit) || 0,
+      _idempotency_key: idempotencyKey,
     });
-    if (stockErr) {
-      await admin.from('bot_orders').delete().eq('id', orderRow.id);
-      return new Response(JSON.stringify({ error: 'Not enough stock' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (rpcErr) {
+      const msg = String(rpcErr.message || 'Checkout failed');
+      const status = /not.*available|banned|insufficient|not.*purchasable|price.*changed|not enough stock|invalid|missing/i.test(msg) ? 400 : 500;
+      return new Response(JSON.stringify({ error: msg }), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    const details = (items || []).map((i: any) => i.data);
-
-    // Deduct balance
-    const { data: ded, error: dedErr } = await admin.rpc('deduct_customer_balance', { _customer_id: customer.id, _amount: totalPrice });
-    if (dedErr || !ded?.[0]?.success) {
-      await admin.rpc('restore_internal_stock_items', { _order_id: orderRow.id });
-      await admin.from('bot_orders').delete().eq('id', orderRow.id);
-      return new Response(JSON.stringify({ error: 'Balance deduction failed' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    if (!row?.order_id) {
+      return new Response(JSON.stringify({ error: 'Checkout returned no order' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    await admin.from('bot_orders').update({ details, delivered_at: new Date().toISOString() }).eq('id', orderRow.id);
+    // Best-effort: fetch product for sales-feed notify (skip on duplicate idempotent replay? still ok)
+    const { data: product } = await admin.from('bot_products').select('name, custom_emoji_id').eq('id', productId).maybeSingle();
 
-    // Background task: notify Web Sales Feed group (anonymous).
-    // Must use EdgeRuntime.waitUntil — bare promises get killed when the isolate
-    // shuts down right after the response is sent (EarlyDrop).
-    const notifyPromise = notifyWebSale(admin, product, quantity)
-      .catch((e) => console.error('[WebSalesFeed]', e?.message || e));
-    // @ts-ignore - EdgeRuntime is provided by Supabase Edge Runtime
-    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
-      // @ts-ignore
-      EdgeRuntime.waitUntil(notifyPromise);
-    } else {
-      await notifyPromise;
+    if (product) {
+      const notifyPromise = notifyWebSale(admin, product, quantity)
+        .catch((e) => console.error('[WebSalesFeed]', e?.message || e));
+      // @ts-ignore EdgeRuntime is provided by Supabase Edge Runtime
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(notifyPromise);
+      }
     }
 
-    return new Response(JSON.stringify({ orderId: orderRow.id, details, totalPrice, unitPrice }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(
+      JSON.stringify({
+        orderId: row.order_id,
+        details: row.details,
+        totalPrice: Number(row.total_price),
+        unitPrice: Number(row.unit_price),
+        newBalance: Number(row.new_balance),
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
   } catch (e) {
     return new Response(JSON.stringify({ error: String((e as Error).message || e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
