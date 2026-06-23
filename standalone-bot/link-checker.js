@@ -27,6 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const POLL_INTERVAL_MS = 5000;
+const LEGACY_LINK_CHECKER_ENABLED = process.env.LEGACY_LINK_CHECKER_ENABLED === 'true';
 
 function resolveProfileDir() {
   if (process.env.PROFILE_DIR) return process.env.PROFILE_DIR;
@@ -590,6 +591,7 @@ async function runJob(job) {
 }
 
 async function autoEnqueueIfNeeded() {
+  if (!LEGACY_LINK_CHECKER_ENABLED) return;
   // For every product with link_check_auto=true, ensure a queued/running job exists.
   const { data: autoProducts } = await supabase
     .from('bot_products')
@@ -620,7 +622,7 @@ async function autoEnqueueIfNeeded() {
       .from('link_check_jobs')
       .select('id')
       .eq('product_id', p.id)
-      .in('status', ['queued', 'running'])
+      .in('status', ['queued', 'vps_queued', 'running'])
       .limit(1);
     if (existing && existing.length > 0) continue;
 
@@ -637,6 +639,11 @@ async function autoEnqueueIfNeeded() {
 
 async function poll() {
   try {
+    if (!LEGACY_LINK_CHECKER_ENABLED) {
+      setTimeout(poll, POLL_INTERVAL_MS);
+      return;
+    }
+
     await autoEnqueueIfNeeded();
 
     const { data, error } = await supabase

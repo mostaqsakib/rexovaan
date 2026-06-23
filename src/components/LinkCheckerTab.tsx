@@ -62,7 +62,7 @@ export default function LinkCheckerTab() {
       cookie_id: activeCookie?.id ?? null,
       concurrency: 5,
       delay_ms: 800,
-      status: 'queued',
+      status: 'vps_queued',
     });
     setStarting(false);
     if (error) { toast.error(error.message); return; }
@@ -181,7 +181,7 @@ export default function LinkCheckerTab() {
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={async () => {
                   if (!confirm('Delete all completed / cancelled / failed jobs?')) return;
-                  const toDelete = jobs.filter(j => j.status !== 'running' && j.status !== 'queued');
+                  const toDelete = jobs.filter(j => j.status !== 'running' && j.status !== 'queued' && j.status !== 'vps_queued');
                   for (const j of toDelete) {
                     await supabase.from('link_check_items').delete().eq('job_id', j.id);
                     await supabase.from('link_check_jobs').delete().eq('id', j.id);
@@ -202,7 +202,7 @@ export default function LinkCheckerTab() {
                       <div className="font-medium">{productName(j.product_id)}</div>
                       <div className="flex items-center gap-2">
                         <Badge variant={j.status === 'completed' ? 'default' : j.status === 'failed' ? 'destructive' : 'secondary'}>{j.status}</Badge>
-                        {j.status === 'queued' && <Button size="sm" variant="ghost" onClick={() => cancelJob(j.id)}>Cancel</Button>}
+                        {(j.status === 'queued' || j.status === 'vps_queued') && <Button size="sm" variant="ghost" onClick={() => cancelJob(j.id)}>Cancel</Button>}
                       </div>
                     </div>
                     <Progress value={pct} />

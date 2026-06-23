@@ -60,7 +60,8 @@ cat > package.json <<'EOF'
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.5",
-    "playwright": "^1.47.0"
+    "playwright": "^1.47.0",
+    "ws": "^8.18.0"
   }
 }
 EOF
@@ -101,6 +102,9 @@ cat > worker.js <<'JSEOF'
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
+import WebSocket from 'ws';
+
+if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
 
 const {
   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
@@ -115,6 +119,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 }
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { transport: WebSocket },
 });
 const invalidPatterns = INVALID_TEXT_PATTERNS.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 const validPatterns = VALID_TEXT_PATTERNS.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
@@ -122,6 +127,7 @@ const navTimeout = parseInt(NAV_TIMEOUT_MS,10);
 const maxConc = parseInt(MAX_CONCURRENCY,10);
 const pollMs = parseInt(POLL_INTERVAL_MS,10);
 let browserCtx = null, busy = false;
+const QUEUED_STATUSES = ['vps_queued', 'queued'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function getBrowser() {
@@ -234,11 +240,24 @@ async function processJob(job) {
     await sb.from('link_check_jobs').update({ status:'failed', error_text: String(e.message).slice(0,500), finished_at: new Date().toISOString() }).eq('id', job.id);
   }
 }
+async function autoEnqueueIfNeeded() {
+  const { data: products, error } = await sb.from('bot_products').select('id, name').eq('link_check_auto', true).eq('is_active', true);
+  if (error) throw error;
+  for (const p of products || []) {
+    const { data: existing, error: existingError } = await sb.from('link_check_jobs').select('id').eq('product_id', p.id).in('status', [...QUEUED_STATUSES, 'running']).limit(1);
+    if (existingError) throw existingError;
+    if (existing && existing.length > 0) continue;
+    const { error: insertError } = await sb.from('link_check_jobs').insert({ product_id: p.id, cookie_id: null, concurrency: 5, delay_ms: 800, status: 'vps_queued' });
+    if (insertError) throw insertError;
+    console.log(`   🔁 Auto-loop queued for ${p.name}`);
+  }
+}
 async function pollLoop() {
   while (true) {
     try {
       if (!busy) {
-        const { data: jobs } = await sb.from('link_check_jobs').select('*').eq('status', 'queued').order('created_at', { ascending: true }).limit(1);
+        await autoEnqueueIfNeeded();
+        const { data: jobs } = await sb.from('link_check_jobs').select('*').in('status', QUEUED_STATUSES).order('created_at', { ascending: true }).limit(1);
         if (jobs && jobs[0]) { busy = true; await processJob(jobs[0]); busy = false; }
       }
     } catch (e) { console.error('poll:', e.message); busy = false; }

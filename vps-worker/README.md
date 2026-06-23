@@ -17,3 +17,7 @@ pm2 start ecosystem.config.cjs && pm2 save
 ```
 
 Admin panel → Link Checker → Start Check → live progress. Done.
+
+## Important
+
+The admin panel now inserts VPS-only jobs with `status='vps_queued'` so the old bot-hosted checker cannot accidentally consume them. This worker still accepts old `queued` jobs as a fallback, but new manual and auto-loop jobs are created as `vps_queued`.
