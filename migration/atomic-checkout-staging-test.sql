@@ -30,30 +30,30 @@ BEGIN
   DELETE FROM bot_customers        WHERE chat_id = -9999000001;
 
   -- Customer
-  INSERT INTO bot_customers (chat_id, first_name, balance, pay_later_enabled)
-  VALUES (-9999000001, 'TEST-ATOMIC', 1000.00, false)
+  INSERT INTO bot_customers (chat_id, balance, pay_later_enabled)
+  VALUES (-9999000001, 1000.00, false)
   RETURNING id INTO v_tc;
 
   -- Product 1 (main)
-  INSERT INTO bot_products (name, price, is_active, is_manual_delivery, category, description)
-  VALUES ('TEST-ATOMIC-PRODUCT', 1.00, true, false, 'test', 'verification')
+  INSERT INTO bot_products (name, sheet_tab, price, is_active, is_manual_delivery, stock_source, description)
+  VALUES ('TEST-ATOMIC-PRODUCT', 'test-atomic', 1.00, true, false, 'manual', 'verification')
   RETURNING id INTO v_tp;
 
-  INSERT INTO bot_product_stock_items (product_id, data, status, sort_index)
+  INSERT INTO bot_product_stock_items (product_id, data, status)
   SELECT v_tp,
          jsonb_build_object('email', 'test'||gs||'@x.io', 'pass', 'p'||gs),
-         'available', gs
+         'available'
   FROM generate_series(1,50) gs;
 
   -- Product 2 (race — only 5 stock)
-  INSERT INTO bot_products (name, price, is_active, is_manual_delivery, category, description)
-  VALUES ('TEST-ATOMIC-RACE', 1.00, true, false, 'test', 'race product')
+  INSERT INTO bot_products (name, sheet_tab, price, is_active, is_manual_delivery, stock_source, description)
+  VALUES ('TEST-ATOMIC-RACE', 'test-atomic-race', 1.00, true, false, 'manual', 'race product')
   RETURNING id INTO v_tp_race;
 
-  INSERT INTO bot_product_stock_items (product_id, data, status, sort_index)
+  INSERT INTO bot_product_stock_items (product_id, data, status)
   SELECT v_tp_race,
          jsonb_build_object('email', 'race'||gs||'@x.io', 'pass', 'r'||gs),
-         'available', gs
+         'available'
   FROM generate_series(1,5) gs;
 
   RAISE NOTICE 'Seeded customer=%, product=%, race=%', v_tc, v_tp, v_tp_race;
