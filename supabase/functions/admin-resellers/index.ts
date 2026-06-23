@@ -43,10 +43,28 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const { data, error } = await supabase
         .from("bot_resellers")
-        .select("id,name,balance,api_key_prefix,is_active,created_at,updated_at")
+        .select("id,name,balance,api_key_prefix,is_active,created_at,updated_at,customer_id,bot_customers(id,balance,username,first_name,chat_id)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return json({ resellers: data || [] });
+      const resellers = (data || []).map((r: any) => {
+        const linked = r.bot_customers || null;
+        const effective_balance = linked ? Number(linked.balance) : Number(r.balance);
+        return {
+          id: r.id,
+          name: r.name,
+          balance: effective_balance,
+          reseller_internal_balance: Number(r.balance),
+          api_key_prefix: r.api_key_prefix,
+          is_active: r.is_active,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          customer_id: r.customer_id,
+          linked_customer: linked
+            ? { id: linked.id, balance: Number(linked.balance), username: linked.username, first_name: linked.first_name, chat_id: linked.chat_id }
+            : null,
+        };
+      });
+      return json({ resellers });
     }
 
     const parsed = BodySchema.safeParse(await req.json());
@@ -72,12 +90,61 @@ Deno.serve(async (req) => {
     }
 
     if (parsed.data.action === "adjust_balance") {
-      const { data: reseller, error: getError } = await supabase.from("bot_resellers").select("id,balance").eq("id", parsed.data.reseller_id).single();
+      const { data: reseller, error: getError } = await supabase
+        .from("bot_resellers")
+        .select("id,balance,customer_id,name")
+        .eq("id", parsed.data.reseller_id)
+        .single();
       if (getError || !reseller) return json({ error: "Reseller not found" }, 404);
+
+      // If linked to a customer, the customer balance is the source of truth.
+      if (reseller.customer_id) {
+        const { data: cust, error: cErr } = await supabase
+          .from("bot_customers")
+          .select("id,balance")
+          .eq("id", reseller.customer_id)
+          .single();
+        if (cErr || !cust) return json({ error: "Linked customer not found" }, 404);
+
+        const oldBalance = Number(cust.balance);
+        const newBalance = oldBalance + parsed.data.amount;
+        if (newBalance < 0) return json({ error: "Balance cannot be negative" }, 400);
+
+        const { error: updErr } = await supabase
+          .from("bot_customers")
+          .update({ balance: newBalance, updated_at: new Date().toISOString() })
+          .eq("id", cust.id);
+        if (updErr) throw updErr;
+
+        // Mirror to reseller table so admin UI stays in sync
+        await supabase.from("bot_resellers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", reseller.id);
+
+        // Customer-side audit
+        await supabase.from("bot_balance_adjustments").insert({
+          customer_id: cust.id,
+          old_balance: oldBalance,
+          new_balance: newBalance,
+          diff: parsed.data.amount,
+          note: `[reseller:${reseller.name}] ${parsed.data.note}`,
+          source: "admin_reseller_adjust",
+        });
+
+        // Reseller-side audit
+        await supabase.from("bot_reseller_balance_transactions").insert({
+          reseller_id: reseller.id,
+          type: parsed.data.amount > 0 ? "admin_credit" : "admin_debit",
+          amount: parsed.data.amount,
+          balance_after: newBalance,
+          note: parsed.data.note,
+        });
+
+        return json({ success: true, balance: newBalance });
+      }
+
+      // Unlinked reseller: legacy path (rare)
       const newBalance = Number(reseller.balance) + parsed.data.amount;
       if (newBalance < 0) return json({ error: "Balance cannot be negative" }, 400);
-
-      const { error: updateError } = await supabase.from("bot_resellers").update({ balance: newBalance }).eq("id", parsed.data.reseller_id);
+      const { error: updateError } = await supabase.from("bot_resellers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", parsed.data.reseller_id);
       if (updateError) throw updateError;
       await supabase.from("bot_reseller_balance_transactions").insert({ reseller_id: parsed.data.reseller_id, type: parsed.data.amount > 0 ? "admin_credit" : "admin_debit", amount: parsed.data.amount, balance_after: newBalance, note: parsed.data.note });
       return json({ success: true, balance: newBalance });

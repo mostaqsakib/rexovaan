@@ -16,7 +16,10 @@ interface Reseller {
   api_key_prefix: string;
   is_active: boolean;
   created_at: string;
+  customer_id?: string | null;
+  linked_customer?: { id: string; balance: number; username: string | null; first_name: string | null; chat_id: number | null } | null;
 }
+
 
 const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reseller-api`;
 
@@ -141,7 +144,13 @@ const ResellersTab = () => {
                 <span className="font-semibold text-foreground">{r.name}</span>
                 <Badge variant={r.is_active ? 'default' : 'secondary'}>{r.is_active ? 'Active' : 'Paused'}</Badge>
                 <Badge variant="outline" className="font-mono">{Number(r.balance).toFixed(2)} USDT</Badge>
+                {r.linked_customer ? (
+                  <span className="text-xs text-muted-foreground">↳ {r.linked_customer.username ? `@${r.linked_customer.username}` : r.linked_customer.first_name || 'customer'}</span>
+                ) : (
+                  <Badge variant="destructive" className="text-xs">Unlinked</Badge>
+                )}
                 <span className="text-xs text-muted-foreground font-mono">{r.api_key_prefix}</span>
+
                 <div className="ml-auto flex items-center gap-2 flex-wrap">
                   <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => { setBalanceTarget(r); setAmount(''); setNote(''); }}><Wallet className="h-3 w-3" />Balance</Button>
                   <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => rotateKey(r)}><RefreshCw className="h-3 w-3" />Rotate</Button>
