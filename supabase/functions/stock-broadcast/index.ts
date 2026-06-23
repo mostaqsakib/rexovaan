@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/require-admin.ts";
 
 const tgUrl = (botToken: string, method: string) => `https://api.telegram.org/bot${botToken}/${method}`;
 
@@ -259,6 +260,8 @@ async function broadcastStock(productId: string, addedCount: number, stockItemId
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  const _adminGuard = await requireAdmin(req, corsHeaders);
+  if (_adminGuard) return _adminGuard;
 
   try {
     const body = await req.json().catch(() => ({}));

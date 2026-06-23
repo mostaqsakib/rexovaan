@@ -1,5 +1,6 @@
 // Admin helper: returns emails for given auth_user_ids, and/or searches auth users by email substring.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { requireAdmin } from "../_shared/require-admin.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,6 +9,8 @@ const corsHeaders = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  const _adminGuard = await requireAdmin(req, corsHeaders);
+  if (_adminGuard) return _adminGuard;
   const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   try {
     const body = await req.json().catch(() => ({}));

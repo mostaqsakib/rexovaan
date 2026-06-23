@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/require-admin.ts";
 
 const tgUrl = (botToken: string, method: string) => `https://api.telegram.org/bot${botToken}/${method}`;
 
@@ -52,6 +53,8 @@ async function sendToChat(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const _adminGuard = await requireAdmin(req, corsHeaders);
+  if (_adminGuard) return _adminGuard;
 
   const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
   if (!BOT_TOKEN) {
