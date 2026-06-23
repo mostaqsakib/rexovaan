@@ -1186,6 +1186,7 @@ export type Database = {
       checkout_audit_logs: {
         Row: {
           created_at: string
+          created_by: string | null
           customer_id: string
           id: string
           idempotency_key: string
@@ -1200,6 +1201,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           customer_id: string
           id?: string
           idempotency_key: string
@@ -1214,6 +1216,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           customer_id?: string
           id?: string
           idempotency_key?: string
@@ -1651,6 +1654,7 @@ export type Database = {
           balance_after: number
           balance_before: number
           created_at: string
+          created_by: string | null
           customer_id: string
           id: string
           idempotency_key: string | null
@@ -1665,6 +1669,7 @@ export type Database = {
           balance_after: number
           balance_before: number
           created_at?: string
+          created_by?: string | null
           customer_id: string
           id?: string
           idempotency_key?: string | null
@@ -1679,6 +1684,7 @@ export type Database = {
           balance_after?: number
           balance_before?: number
           created_at?: string
+          created_by?: string | null
           customer_id?: string
           id?: string
           idempotency_key?: string | null
