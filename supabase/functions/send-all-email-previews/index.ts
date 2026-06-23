@@ -33,7 +33,12 @@ Deno.serve(async (req) => {
   if (guard) return guard
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-  const to = Deno.env.get('EMAIL_PREVIEW_RECIPIENT') || 'mostaqahmmeds@gmail.com'
+  const to = Deno.env.get('EMAIL_PREVIEW_RECIPIENT')
+  if (!to) {
+    return new Response(JSON.stringify({ error: 'EMAIL_PREVIEW_RECIPIENT env var not set' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
   const results: any[] = []
 
   // Ensure an unsubscribe token exists for this recipient

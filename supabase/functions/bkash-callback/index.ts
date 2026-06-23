@@ -155,14 +155,34 @@ Deno.serve(async (req) => {
   const bdtAmount = parseFloat(execData.amount);
   const trxID = execData.trxID;
 
-  // Get dollar rate
+  // Sanity: bKash must return a positive amount and a trxID. Refuse otherwise.
+  if (!Number.isFinite(bdtAmount) || bdtAmount <= 0 || !trxID) {
+    console.error("[bKash] invalid execute response", { bdtAmount, trxID });
+    await supabase.from("bot_deposits").update({ status: "rejected" }).eq("id", deposit.id).neq("status", "verified");
+    return htmlResp("failed", "Invalid payment response from bKash.");
+  }
+
+  // Get dollar rate — clamp to safe band so a misconfigured/poisoned setting
+  // cannot over-credit the customer.
   const { data: rateSetting } = await supabase
     .from("bot_settings")
     .select("value")
     .eq("key", "dollar_rate_bdt")
     .maybeSingle();
-  const rate = rateSetting ? parseFloat(rateSetting.value) : 125;
+  const rawRate = rateSetting ? parseFloat(rateSetting.value) : 125;
+  const RATE_MIN = 80;   // BDT per 1 USDT — well below realistic floor
+  const RATE_MAX = 200;  // and well above realistic ceiling
+  if (!Number.isFinite(rawRate) || rawRate < RATE_MIN || rawRate > RATE_MAX) {
+    console.error("[bKash] dollar_rate_bdt out of safe band", { rawRate });
+    await supabase.from("bot_deposits").update({ status: "rejected" }).eq("id", deposit.id).neq("status", "verified");
+    return htmlResp("failed", "Server rate misconfigured. Contact support.");
+  }
+  const rate = rawRate;
   const usdtAmount = parseFloat((bdtAmount / rate).toFixed(2));
+  if (!Number.isFinite(usdtAmount) || usdtAmount <= 0) {
+    await supabase.from("bot_deposits").update({ status: "rejected" }).eq("id", deposit.id).neq("status", "verified");
+    return htmlResp("failed", "Computed amount invalid.");
+  }
 
   const hasPendingProduct = deposit.pending_product_id && deposit.pending_quantity;
 
