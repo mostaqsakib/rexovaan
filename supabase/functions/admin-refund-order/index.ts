@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
+import { logAdminAction } from "../_shared/audit-log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -68,6 +69,15 @@ Deno.serve(async (req) => {
       console.error("refund_customer_balance failed", refundErr);
       return new Response(JSON.stringify({ error: `Refund failed: ${refundErr.message}` }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    await logAdminAction(supabase, req, {
+      action: "refund_order",
+      target_table: "bot_orders",
+      target_id: order.id,
+      before: { status: order.status, total_price: order.total_price },
+      after: { status: "refunded" },
+      note: `Refunded ${order.quantity}x ${order.product_name}`,
+    });
 
     // 3. Delete Telegram delivery messages from customer's chat
     const { data: customer } = await supabase.from("bot_customers").select("*").eq("id", order.customer_id).maybeSingle();
