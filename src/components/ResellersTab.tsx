@@ -16,7 +16,10 @@ interface Reseller {
   api_key_prefix: string;
   is_active: boolean;
   created_at: string;
+  customer_id?: string | null;
+  linked_customer?: { id: string; balance: number; username: string | null; first_name: string | null; chat_id: number | null } | null;
 }
+
 
 const apiBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reseller-api`;
 
