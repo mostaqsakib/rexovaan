@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
+import { logAdminAction } from "../_shared/audit-log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +48,15 @@ Deno.serve(async (req) => {
       diff,
       note: noteText,
       source: "admin",
+    });
+
+    await logAdminAction(supabase, req, {
+      action: "edit_balance",
+      target_table: "bot_customers",
+      target_id: customer_id,
+      before: { balance: oldBalance },
+      after: { balance: newBal },
+      note: noteText,
     });
 
     if (!silent) {

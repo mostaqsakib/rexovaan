@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
+import { logAdminAction } from "../_shared/audit-log.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +54,15 @@ Deno.serve(async (req) => {
     if (!customer) {
       return new Response(JSON.stringify({ error: "Customer not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    await logAdminAction(supabase, req, {
+      action: "confirm_withdrawal",
+      target_table: "bot_withdrawals",
+      target_id: withdrawal_id,
+      before: { status: "pending" },
+      after: { status: "completed", amount: withdrawal.amount, proof_url: proof_url || null },
+      note: admin_note || null,
+    });
 
     const caption = `✅ <b>Withdrawal Completed!</b>\n\n` +
       `Amount: <b>${Number(withdrawal.amount).toFixed(2)} USDT</b>\n` +
