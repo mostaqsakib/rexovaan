@@ -425,6 +425,7 @@ Deno.serve(async (req) => {
       if (!accounts.length) return json({ ok: false, error: "Not enough stock available" }, 409);
 
       await notifyAdminApiOrder(order || {}, reseller.name);
+      await notifySalesFeed(supabase, product, parsed.data.quantity);
       return json({ ok: true, order: { ...order, accounts, account: accounts[0] }, accounts, account: accounts[0] });
     }
 
