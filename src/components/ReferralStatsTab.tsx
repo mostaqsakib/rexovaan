@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,8 +6,14 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, RefreshCw, Users, DollarSign, TrendingUp, Gift, Megaphone } from 'lucide-react';
+import { Loader2, RefreshCw, Users, DollarSign, TrendingUp, Gift, Megaphone, ChevronDown, ChevronRight, Copy, Search } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface CustomerLite {
+  first_name: string | null;
+  username: string | null;
+  chat_id: number;
+}
 
 interface ReferralRow {
   id: string;
@@ -15,8 +21,8 @@ interface ReferralRow {
   referred_id: string;
   first_bonus_paid: boolean;
   created_at: string;
-  referrer: { first_name: string | null; username: string | null; chat_id: number } | null;
-  referred: { first_name: string | null; username: string | null; chat_id: number } | null;
+  referrer: CustomerLite | null;
+  referred: CustomerLite | null;
 }
 
 interface EarningRow {
@@ -35,11 +41,18 @@ const getLabel = (u: { first_name: string | null; username: string | null } | nu
   return u.username ? `@${u.username}` : u.first_name || 'Unknown';
 };
 
+const copy = (v: string | number) => {
+  navigator.clipboard?.writeText(String(v));
+  toast.success('Copied');
+};
+
 const ReferralStatsTab = () => {
   const [loading, setLoading] = useState(true);
   const [referrals, setReferrals] = useState<ReferralRow[]>([]);
   const [earnings, setEarnings] = useState<EarningRow[]>([]);
-  const [topReferrers, setTopReferrers] = useState<{ id: string; name: string; count: number; earned: number }[]>([]);
+  const [topReferrers, setTopReferrers] = useState<{ id: string; name: string; chat_id: number | null; username: string | null; count: number; earned: number }[]>([]);
+  const [expandedReferrer, setExpandedReferrer] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   // Campaign settings (limited-time join bonus — independent of permanent commission/first-purchase system)
   const [campaignActive, setCampaignActive] = useState(false);
