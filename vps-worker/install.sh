@@ -75,7 +75,7 @@ HEADFUL=false
 MAX_CONCURRENCY=10
 POLL_INTERVAL_MS=5000
 NAV_TIMEOUT_MS=30000
-INVALID_TEXT_PATTERNS=already been redeemed,already redeemed,no longer available,offer has expired,not eligible,invalid code,cannot be used,is not valid,already claimed,this code has already
+INVALID_TEXT_PATTERNS=subscription already in use,already in use,already been redeemed,already redeemed,no longer available,offer has expired,not eligible,invalid code,cannot be used,is not valid,already claimed,this code has already
 VALID_TEXT_PATTERNS=subscribe,continue,confirm subscription,start your,activate,get started
 EOF
 chmod 600 .env
