@@ -168,19 +168,27 @@ function channelApiId(u) {
   return `@${s}`;
 }
 
+// In-memory set of chatIds known to be verified for the channel join.
+// Once a user verifies, they remain verified — so we never need to re-query
+// the DB for that user again within this process.
+const _verifiedChannelUsers = new Set();
+
 async function isUserVerifiedForChannel(chatId) {
+  if (_verifiedChannelUsers.has(chatId)) return true;
   try {
     const { data } = await supabase
       .from("user_channel_verification")
       .select("user_id")
       .eq("user_id", chatId)
       .maybeSingle();
+    if (data) _verifiedChannelUsers.add(chatId);
     return !!data;
   } catch (e) { console.error("isUserVerifiedForChannel:", e); return false; }
 }
 
 async function markUserVerifiedForChannel(chatId) {
   try {
+    _verifiedChannelUsers.add(chatId);
     await supabase
       .from("user_channel_verification")
       .upsert({ user_id: chatId, verified_at: new Date().toISOString() }, { onConflict: "user_id" });
