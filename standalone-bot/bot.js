@@ -3766,15 +3766,17 @@ async function handleBuyProduct(chatId, customer, productId, emojiMap, editMessa
 }
 
 async function showQuantitySelection(chatId, productId, emojiMap, editMessageId) {
-  const [{ data: product }, { data: tiers }, { data: custRow }] = await Promise.all([
+  // Fire flash sale lookup in parallel with the initial product/tier/customer batch.
+  const [{ data: product }, { data: tiers }, { data: custRow }, flash] = await Promise.all([
     supabase.from("bot_products").select("name, price, currency, custom_emoji_id, is_manual_delivery, source_id, source_product_id, last_known_stock").eq("id", productId).single(),
     supabase.from("bot_product_pricing").select("price").eq("product_id", productId).order("min_quantity").limit(1),
     supabase.from("bot_customers").select("id").eq("chat_id", chatId).maybeSingle(),
+    getActiveFlashSale(productId),
   ]);
   if (!product) return;
   // Only use special as base price if MOQ is 1 (always-applicable). Otherwise show tier/regular.
+  // (Needs custRow.id, so it runs after the batch.)
   const special = await getCustomerSpecialPrice(custRow?.id, productId, 1);
-  const flash = await getActiveFlashSale(productId);
   const tierOrRegular = tiers && tiers.length > 0 ? Number(tiers[0].price) : Number(product.price);
   const candidates = [tierOrRegular];
   if (special !== null) candidates.push(Number(special));
