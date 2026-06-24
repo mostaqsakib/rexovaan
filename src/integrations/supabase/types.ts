@@ -1038,7 +1038,7 @@ export type Database = {
         Row: {
           api_key_encrypted: string | null
           api_key_hash: string | null
-          api_key_prefix: string
+          api_key_prefix: string | null
           balance: number
           created_at: string
           customer_id: string | null
@@ -1050,7 +1050,7 @@ export type Database = {
         Insert: {
           api_key_encrypted?: string | null
           api_key_hash?: string | null
-          api_key_prefix: string
+          api_key_prefix?: string | null
           balance?: number
           created_at?: string
           customer_id?: string | null
@@ -1062,7 +1062,7 @@ export type Database = {
         Update: {
           api_key_encrypted?: string | null
           api_key_hash?: string | null
-          api_key_prefix?: string
+          api_key_prefix?: string | null
           balance?: number
           created_at?: string
           customer_id?: string | null
