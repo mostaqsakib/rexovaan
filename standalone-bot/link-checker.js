@@ -309,22 +309,29 @@ async function runJob(job) {
     console.log('[checker] using persistent Chromium profile at', PROFILE_DIR);
   }
 
-  // Load ALL available stock items for the product (paginated — Supabase caps each request at 1000)
+  // Load ALL available stock items for the product (keyset pagination by id — robust against PostgREST max-rows caps)
   const stockItems = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data: page, error: stockErr } = await supabase
-      .from('bot_product_stock_items')
-      .select('id, data')
-      .eq('product_id', job.product_id)
-      .eq('status', 'available')
-      .order('id', { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (stockErr) throw stockErr;
-    if (!page || page.length === 0) break;
-    stockItems.push(...page);
-    if (page.length < PAGE) break;
+  {
+    const PAGE = 1000;
+    let lastId = '00000000-0000-0000-0000-000000000000';
+    while (true) {
+      const { data: page, error: stockErr } = await supabase
+        .from('bot_product_stock_items')
+        .select('id, data')
+        .eq('product_id', job.product_id)
+        .eq('status', 'available')
+        .gt('id', lastId)
+        .order('id', { ascending: true })
+        .limit(PAGE);
+      if (stockErr) throw stockErr;
+      if (!page || page.length === 0) break;
+      stockItems.push(...page);
+      lastId = page[page.length - 1].id;
+      if (page.length < PAGE) break;
+    }
   }
+  console.log(`[checker] loaded ${stockItems.length} available stock items for product ${job.product_id}`);
+
 
   const items = (stockItems || [])
     .map(s => ({ stock_item_id: s.id, url: extractUrl(s.data) }))
