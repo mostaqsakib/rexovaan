@@ -529,9 +529,10 @@ Deno.serve(async (req) => {
     }
 
     // Not verified → fall back to pending (admin verifies manually)
+    // SECURITY: do NOT store user-supplied claimed amount — admin must verify the real on-chain amount
     const { data: deposit, error: insertError } = await supabase
       .from("bot_deposits")
-      .insert({ customer_id: customer.id, amount: claimedAmount, txn_hash: normalizedTxn, status: "pending", payment_method: paymentMethod || null, source: "web" })
+      .insert({ customer_id: customer.id, amount: null, txn_hash: normalizedTxn, status: "pending", payment_method: paymentMethod || null, source: "web" })
       .select("id,created_at")
       .single();
     if (insertError) throw insertError;
@@ -541,7 +542,7 @@ Deno.serve(async (req) => {
         `🔔 <b>New Deposit (Auto-Verify Failed)</b>\n\n` +
         `👤 ${escapeHtml(label)}\n` +
         `💳 Method: <b>${escapeHtml(paymentMethod || "Unknown")}</b>\n` +
-        `💰 Claimed: <b>${claimedAmount.toFixed(2)} USDT</b>\n` +
+        `💰 Amount: <b>⚠️ Unverified — check txn manually</b>\n` +
         `🧾 TxID: <code>${escapeHtml(normalizedTxn)}</code>\n\n` +
         `Open Admin → Bot Logs → Deposits to verify or reject manually.`);
     }

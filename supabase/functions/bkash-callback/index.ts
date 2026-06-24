@@ -58,6 +58,17 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
+
+  // SECURITY: verify callback secret to prevent unauthorized invocation
+  const BKASH_CALLBACK_SECRET = Deno.env.get("BKASH_CALLBACK_SECRET");
+  if (BKASH_CALLBACK_SECRET) {
+    const providedSecret = url.searchParams.get("callback_secret");
+    if (!providedSecret || providedSecret !== BKASH_CALLBACK_SECRET) {
+      console.warn("[bKash] Invalid or missing callback_secret");
+      return new Response("Forbidden", { status: 403 });
+    }
+  }
+
   const paymentID = url.searchParams.get("paymentID");
   const status = url.searchParams.get("status");
 
