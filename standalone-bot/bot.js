@@ -1622,10 +1622,35 @@ function removeReplyKeyboard() {
 
 // ── Customer ──
 
+// In-memory customer cache (chatId → row, 60s TTL). Eliminates a DB round-trip
+// on every single message/callback. Cache busts whenever balance/profile is
+// mutated elsewhere (use invalidateCustomerCache(chatId)).
+const _customerCache = new Map();
+const CUSTOMER_CACHE_TTL = 60 * 1000;
+
+function invalidateCustomerCache(chatId) {
+  if (chatId != null) _customerCache.delete(chatId);
+}
+
 async function getOrCreateCustomer(chatId, firstName, username) {
+  const now = Date.now();
+  const cached = _customerCache.get(chatId);
+  if (cached && now - cached.t < CUSTOMER_CACHE_TTL) {
+    const row = cached.row;
+    // Only persist a profile diff if Telegram sent a new name/username.
+    const diff = {};
+    if (firstName && firstName !== row.first_name) diff.first_name = firstName;
+    if (username && username !== row.username) diff.username = username;
+    if (Object.keys(diff).length > 0) {
+      diff.updated_at = new Date().toISOString();
+      Object.assign(row, diff);
+      supabase.from("bot_customers").update(diff).eq("id", row.id).then(() => {}, () => {});
+    }
+    return row;
+  }
+
   const { data: existing } = await supabase.from("bot_customers").select("*").eq("chat_id", chatId).single();
   if (existing) {
-    // Update profile if changed
     const updates = {};
     if (firstName && firstName !== existing.first_name) updates.first_name = firstName;
     if (username && username !== existing.username) updates.username = username;
@@ -1634,6 +1659,7 @@ async function getOrCreateCustomer(chatId, firstName, username) {
       await supabase.from("bot_customers").update(updates).eq("id", existing.id);
       Object.assign(existing, updates);
     }
+    _customerCache.set(chatId, { row: existing, t: now });
     return existing;
   }
   const { data: created, error } = await supabase.from("bot_customers")
