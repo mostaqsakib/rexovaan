@@ -2040,24 +2040,34 @@ Use your API key as Bearer token.
 // ── My Stats ──
 
 async function showMyStats(chatId, customer, emojiMap = {}, editMessageId = null) {
-  const { data: orders } = await supabase.from("bot_orders").select("quantity, total_price, created_at").eq("customer_id", customer.id).eq("status", "completed");
+  // Fan out all 5 independent queries in parallel — was previously sequential (~5x RTT).
+  const [
+    { data: orders },
+    { data: deposits },
+    { data: withdrawals },
+    { data: referrals },
+    { data: custData },
+  ] = await Promise.all([
+    supabase.from("bot_orders").select("quantity, total_price, created_at").eq("customer_id", customer.id).eq("status", "completed"),
+    supabase.from("bot_deposits").select("amount").eq("customer_id", customer.id).eq("status", "verified"),
+    supabase.from("bot_withdrawals").select("amount, status").eq("customer_id", customer.id),
+    supabase.from("bot_referrals").select("id").eq("referrer_id", customer.id),
+    supabase.from("bot_customers").select("referral_total_earned, referral_balance").eq("id", customer.id).single(),
+  ]);
+
   const totalOrders = orders ? orders.length : 0;
   const totalItems = orders ? orders.reduce((s, o) => s + o.quantity, 0) : 0;
   const totalSpent = orders ? orders.reduce((s, o) => s + Number(o.total_price), 0) : 0;
 
-  const { data: deposits } = await supabase.from("bot_deposits").select("amount").eq("customer_id", customer.id).eq("status", "verified");
   const totalDeposits = deposits ? deposits.length : 0;
   const totalDeposited = deposits ? deposits.reduce((s, d) => s + Number(d.amount), 0) : 0;
 
-  const { data: withdrawals } = await supabase.from("bot_withdrawals").select("amount, status").eq("customer_id", customer.id);
   const completedWithdrawals = withdrawals ? withdrawals.filter(w => w.status === "completed") : [];
   const totalWithdrawn = completedWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
   const pendingWithdrawals = withdrawals ? withdrawals.filter(w => w.status === "pending").length : 0;
 
-  const { data: referrals } = await supabase.from("bot_referrals").select("id").eq("referrer_id", customer.id);
   const totalReferrals = referrals ? referrals.length : 0;
 
-  const { data: custData } = await supabase.from("bot_customers").select("referral_total_earned, referral_balance").eq("id", customer.id).single();
   const refEarned = custData ? Number(custData.referral_total_earned).toFixed(2) : "0.00";
   const refBalance = custData ? Number(custData.referral_balance).toFixed(2) : "0.00";
 
