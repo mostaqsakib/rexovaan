@@ -7652,6 +7652,11 @@ async function handleCallback(callbackQuery, emojiMap) {
     const productId = parts[0];
     const qty = parseInt(parts[1] || "1");
     const messageId = callbackQuery.message?.message_id;
+    const { data: prodCheck } = await supabase.from("bot_products").select("is_active, name").eq("id", productId).single();
+    if (!prodCheck || prodCheck.is_active === false) {
+      await tgFetch("answerCallbackQuery", { callback_query_id: callbackQuery.id, text: "This product is currently unavailable.", show_alert: true });
+      return;
+    }
     await showPaymentMethodSelection(chatId, customer, productId, qty, emojiMap, messageId);
     return;
   }
