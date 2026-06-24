@@ -4865,32 +4865,25 @@ async function handleMessage(message, emojiMap) {
       const refCode = startParam.replace("ref_", "").toLowerCase();
       const referrer = await findReferrerByCode(refCode, customer.id);
       if (referrer) {
-      // Find referrer by matching code
-      const { data: allCustomers } = await supabase.from("bot_customers").select("id, chat_id, balance").neq("id", customer.id);
-      if (allCustomers) {
-        const referrer = allCustomers.find(c => generateReferralCode(c.chat_id) === refCode);
-        if (referrer) {
-          // Check if already referred (one-time per referred user)
-          const { data: existingRef } = await supabase.from("bot_referrals").select("id").eq("referred_id", customer.id).maybeSingle();
-          if (!existingRef) {
-            await supabase.from("bot_referrals").insert({ referrer_id: referrer.id, referred_id: customer.id });
-            console.log(`Referral registered: ${customer.id} referred by ${referrer.id}`);
-            // Campaign join bonus is credited automatically by DB trigger
-            // (handle_referral_campaign_credit) into referral_balance.
-            // Notify referrer if campaign is active.
-            try {
-              const campaign = await getCampaignSettings();
-              if (campaign.active && campaign.reward > 0) {
-                sendMessage(
-                  referrer.chat_id,
-                  `🎉 <b>Referral Join Bonus!</b>\n\nA new user joined via your referral link.\nYou earned <b>${Number(campaign.reward).toFixed(2)} USDT</b> in your referral balance!`
-                ).catch(() => {});
-              }
-            } catch (e) {
-              console.error("Join-bonus notify failed:", e?.message || e);
+        // Check if already referred (one-time per referred user)
+        const { data: existingRef } = await supabase.from("bot_referrals").select("id").eq("referred_id", customer.id).maybeSingle();
+        if (!existingRef) {
+          await supabase.from("bot_referrals").insert({ referrer_id: referrer.id, referred_id: customer.id });
+          console.log(`Referral registered: ${customer.id} referred by ${referrer.id}`);
+          // Campaign join bonus is credited automatically by DB trigger
+          // (handle_referral_campaign_credit) into referral_balance.
+          // Notify referrer if campaign is active.
+          try {
+            const campaign = await getCampaignSettings();
+            if (campaign.active && campaign.reward > 0) {
+              sendMessage(
+                referrer.chat_id,
+                `🎉 <b>Referral Join Bonus!</b>\n\nA new user joined via your referral link.\nYou earned <b>${Number(campaign.reward).toFixed(2)} USDT</b> in your referral balance!`
+              ).catch(() => {});
             }
+          } catch (e) {
+            console.error("Join-bonus notify failed:", e?.message || e);
           }
-
         }
       }
       // Continue to show welcome regardless
