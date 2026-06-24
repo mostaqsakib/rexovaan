@@ -4863,6 +4863,8 @@ async function handleMessage(message, emojiMap) {
     // Referral deep link: /start ref_<code>
     if (startParam && startParam.startsWith("ref_")) {
       const refCode = startParam.replace("ref_", "").toLowerCase();
+      const referrer = await findReferrerByCode(refCode, customer.id);
+      if (referrer) {
       // Find referrer by matching code
       const { data: allCustomers } = await supabase.from("bot_customers").select("id, chat_id, balance").neq("id", customer.id);
       if (allCustomers) {
