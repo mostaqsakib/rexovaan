@@ -2220,6 +2220,27 @@ function generateReferralCode(chatId) {
   return hash.slice(0, 8).toLowerCase();
 }
 
+// ── Referral code → customer cache (5 min TTL) ──
+// Avoids re-downloading the entire bot_customers table on every /start ref_<code>.
+let _refCodeCache = null;
+let _refCodeCacheTime = 0;
+const REF_CODE_CACHE_TTL = 5 * 60 * 1000;
+
+async function findReferrerByCode(refCode, excludeCustomerId = null) {
+  const now = Date.now();
+  if (!_refCodeCache || now - _refCodeCacheTime > REF_CODE_CACHE_TTL) {
+    const { data } = await supabase.from("bot_customers").select("id, chat_id");
+    const map = new Map();
+    if (data) for (const c of data) map.set(generateReferralCode(c.chat_id), { id: c.id, chat_id: c.chat_id });
+    _refCodeCache = map;
+    _refCodeCacheTime = now;
+  }
+  const hit = _refCodeCache.get(String(refCode).toLowerCase());
+  if (!hit) return null;
+  if (excludeCustomerId && hit.id === excludeCustomerId) return null;
+  return hit;
+}
+
 async function processReferralCommission(buyerCustomerId, orderTotal, orderId) {
   try {
     const refSettings = await getRefSettings();
