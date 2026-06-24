@@ -1666,6 +1666,7 @@ async function getOrCreateCustomer(chatId, firstName, username) {
     .insert({ chat_id: chatId, first_name: firstName || null, username: username || null })
     .select().single();
   if (error) throw error;
+  _customerCache.set(chatId, { row: created, t: Date.now() });
   return created;
 }
 
