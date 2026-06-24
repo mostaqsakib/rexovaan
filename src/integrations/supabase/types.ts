@@ -1704,6 +1704,38 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_search_orders: {
+        Args: { lim?: number; q: string }
+        Returns: {
+          created_at: string
+          customer_id: string
+          customer_inputs: Json | null
+          delivered_at: string | null
+          delivered_items: Json
+          delivery_message_ids: number[]
+          delivery_notes: Json
+          details: Json | null
+          id: string
+          idempotency_key: string | null
+          payment_method: string | null
+          product_id: string
+          product_name: string
+          quantity: number
+          refund_note: string | null
+          refunded_at: string | null
+          row_numbers: number[] | null
+          source: string
+          status: string
+          total_price: number
+          txn_hash: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "bot_orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       bind_telegram_to_customer: {
         Args: {
           _auth_user_id: string
