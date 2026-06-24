@@ -8498,6 +8498,16 @@ async function backgroundStockAlertChecker() {
   flashSaleTickerLoop().catch(err => console.error("[FlashSale] Fatal error:", err));
   console.log("🔥 Flash sale countdown ticker started (every 5s)");
 
+  // Proactive cache warmers — keep hot caches fresh so user requests never wait
+  // for a cold-cache Supabase round trip on the response path.
+  setInterval(() => { fetchPageMsgs(true).catch(() => {}); }, 4 * 60 * 1000);
+  setInterval(() => {
+    _emojiCacheTime = 0;
+    loadButtonEmojis().catch(() => {});
+  }, 55 * 1000);
+  setInterval(() => { fetchChannelJoinSettings(true).catch(() => {}); }, 55 * 1000);
+  console.log("🔥 Cache warmers started (page msgs, emojis, channel settings)");
+
   while (true) {
     try {
       await pollUpdates();
