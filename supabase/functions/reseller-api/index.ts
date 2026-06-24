@@ -360,39 +360,85 @@ Deno.serve(async (req) => {
       if (product.source_id && product.source_product_id) {
         if (product.is_manual_delivery) return json({ ok: false, error: "Manual delivery products are not available via reseller API" }, 400);
 
-        // Resolve unit price: always the LOWEST of base, tier, customer special, active flash.
-        const unitPrice = await resolveLowestUnitPrice(supabase, product, parsed.data.quantity, reseller.customer_id || null);
+        // Reserve balance + create order atomically BEFORE buying from the external source.
+        // The RPC also enforces the 10-orders/minute reseller rate limit and locks the reseller row,
+        // so concurrent requests with the same API key cannot share a balance read (TOCTOU fix).
+        const { data: reserveData, error: reserveError } = await supabase.rpc("reserve_reseller_source_api_order", {
+          _api_key_hash: apiKeyHash,
+          _product_id: product.id,
+          _quantity: parsed.data.quantity,
+          _external_order_id: parsed.data.external_order_id || null,
+        });
+        if (reserveError) {
+          const msg = String(reserveError.message || "Reservation failed");
+          const status = /rate limit/i.test(msg) ? 429
+            : /insufficient/i.test(msg) ? 400
+            : /duplicate/i.test(msg) ? 409
+            : /not active|banned|inactive|manual/i.test(msg) ? 400
+            : 500;
+          return json({ ok: false, error: msg }, status);
+        }
+        const reservation = Array.isArray(reserveData) ? reserveData[0] : reserveData;
+        if (!reservation?.order_id) return json({ ok: false, error: "Reservation failed" }, 500);
 
-        const totalCost = +(unitPrice * parsed.data.quantity).toFixed(2);
-        if (apiBalance < totalCost) return json({ ok: false, error: "Insufficient reseller balance" }, 400);
+        const reservedOrderId = String(reservation.order_id);
+        const unitPrice = Number(reservation.unit_cost);
+        const totalCost = Number(reservation.total_cost);
+        let newBalance = Number(reservation.balance_after);
 
-        const accounts = await purchaseFromSource(product, parsed.data.quantity);
-        if (!accounts.length || accounts.length < parsed.data.quantity) return json({ ok: false, error: "Not enough stock available" }, 409);
+        // Now fulfill from the external source. Any failure refunds the reservation.
+        let accounts: string[] = [];
+        try {
+          accounts = await purchaseFromSource(product, parsed.data.quantity);
+        } catch (sourceErr) {
+          await supabase.rpc("refund_reseller_source_api_order", {
+            _order_id: reservedOrderId,
+            _reason: `Source purchase failed: ${String(sourceErr).slice(0, 200)}`,
+          });
+          return json({ ok: false, error: `Source purchase failed: ${String(sourceErr)}` }, 502);
+        }
+        if (!accounts.length || accounts.length < parsed.data.quantity) {
+          await supabase.rpc("refund_reseller_source_api_order", {
+            _order_id: reservedOrderId,
+            _reason: "Source returned insufficient stock",
+          });
+          return json({ ok: false, error: "Not enough stock available" }, 409);
+        }
 
         const details = accounts.map((account: unknown) => ({ "Delivery Info": String(account) }));
-        const newBalance = apiBalance - totalCost;
-        const { data: apiOrder, error: orderError } = await supabase.from("bot_reseller_orders").insert({
-          reseller_id: reseller.id,
-          product_id: product.id,
-          product_name: product.name,
-          quantity: parsed.data.quantity,
-          unit_cost: unitPrice,
-          total_cost: totalCost,
-          external_order_id: parsed.data.external_order_id || null,
-          details,
-          status: "completed",
-        }).select("*").single();
-        if (orderError) throw orderError;
+        const { data: apiOrder, error: completeError } = await supabase
+          .from("bot_reseller_orders")
+          .update({ details, status: "completed" })
+          .eq("id", reservedOrderId)
+          .select("*")
+          .single();
+        if (completeError) throw completeError;
 
         if (reseller.customer_id) {
-          await supabase.from("bot_customers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", reseller.customer_id);
-          await supabase.from("bot_orders").insert({ customer_id: reseller.customer_id, product_id: product.id, product_name: product.name, quantity: parsed.data.quantity, total_price: totalCost, details, row_numbers: [], status: "completed" });
+          await supabase.from("bot_orders").insert({
+            customer_id: reseller.customer_id,
+            product_id: product.id,
+            product_name: product.name,
+            quantity: parsed.data.quantity,
+            total_price: totalCost,
+            details,
+            row_numbers: [],
+            status: "completed",
+          });
         }
-        await supabase.from("bot_resellers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", reseller.id);
-        await supabase.from("bot_reseller_balance_transactions").insert({ reseller_id: reseller.id, order_id: apiOrder.id, type: "order_debit", amount: -totalCost, balance_after: newBalance, note: "Reseller API order" });
 
-        const order = { ...apiOrder, balance_after: newBalance, accounts, account: accounts[0] };
-        await notifyAdminApiOrder(order || {}, reseller.name);
+        apiBalance = newBalance;
+        const order = {
+          ...apiOrder,
+          balance_after: newBalance,
+          accounts,
+          account: accounts[0],
+          customer_id: reservation.customer_id,
+          customer_chat_id: reservation.customer_chat_id,
+          customer_username: reservation.customer_username,
+          customer_first_name: reservation.customer_first_name,
+        };
+        await notifyAdminApiOrder(order, reseller.name);
         await notifySalesFeed(supabase, product, parsed.data.quantity);
         return json({ ok: true, order, accounts, account: accounts[0] });
       }
@@ -416,7 +462,15 @@ Deno.serve(async (req) => {
         _unit_price: prepaidUnit,
       });
 
-      if (error) return json({ ok: false, error: error.message }, 400);
+      if (error) {
+        const msg = String(error.message || "Order failed");
+        const status = /rate limit/i.test(msg) ? 429
+          : /insufficient|not purchasable|manual delivery|not active|banned|inactive/i.test(msg) ? 400
+          : /duplicate/i.test(msg) ? 409
+          : /not enough/i.test(msg) ? 409
+          : 400;
+        return json({ ok: false, error: msg }, status);
+      }
       const order = Array.isArray(data) ? data[0] : data;
       if (order?.balance_after !== undefined) {
         apiBalance = Number(order.balance_after || 0);
