@@ -303,7 +303,7 @@ function prepareTelegramHtml(html) {
 }
 
 async function fetchPageMsgs(force = false) {
-  if (force || Date.now() - pageMsgsLastFetch > 60000) {
+  if (force || Date.now() - pageMsgsLastFetch > 300000) {
     try {
       const { data } = await supabase.from("bot_settings").select("key, value").in("key", Object.keys(PAGE_MSG_KEYS));
       if (data) {
