@@ -717,18 +717,41 @@ async function showBroadcastProductPicker(chatId, msgId, selectedIds) {
 
 
 // ── Flash Sales helpers ──
-async function getActiveFlashSale(productId) {
+// Cache ALL currently-active flash sales together (30s TTL). Flash sales are a
+// tiny set globally, so one query covers every product instead of one query
+// per product per interaction.
+let _flashSaleCache = null;
+let _flashSaleCacheTime = 0;
+const FLASH_SALE_CACHE_TTL = 30 * 1000;
+
+async function _refreshFlashSaleCache() {
+  const now = new Date().toISOString();
   const { data } = await supabase
     .from("bot_flash_sales")
     .select("*")
-    .eq("product_id", productId)
     .eq("is_active", true)
-    .gt("ends_at", new Date().toISOString())
-    .lte("starts_at", new Date().toISOString())
-    .order("ends_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return data || null;
+    .gt("ends_at", now)
+    .lte("starts_at", now)
+    .order("ends_at", { ascending: true });
+  const map = new Map();
+  if (data) for (const sale of data) {
+    if (!map.has(sale.product_id)) map.set(sale.product_id, sale); // earliest-ending wins
+  }
+  _flashSaleCache = map;
+  _flashSaleCacheTime = Date.now();
+  return map;
+}
+
+async function getActiveFlashSale(productId) {
+  const now = Date.now();
+  if (!_flashSaleCache || now - _flashSaleCacheTime > FLASH_SALE_CACHE_TTL) {
+    try { await _refreshFlashSaleCache(); }
+    catch (e) { console.error("flash sale cache refresh failed:", e?.message || e); return null; }
+  }
+  const hit = _flashSaleCache?.get(productId) || null;
+  // Guard: ensure not expired between cache builds
+  if (hit && new Date(hit.ends_at).getTime() <= Date.now()) return null;
+  return hit;
 }
 
 function formatCountdown(endsAt) {
