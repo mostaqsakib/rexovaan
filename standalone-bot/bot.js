@@ -1,9 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 import WebSocket from "ws";
 import crypto from "crypto";
+import { Agent, setGlobalDispatcher } from "undici";
 
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
+}
+
+// HTTP keep-alive pool — eliminates TLS handshake cost on every Telegram/Supabase
+// fetch. Big win for response latency on Railway.
+try {
+  setGlobalDispatcher(new Agent({
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: 64,
+    pipelining: 1,
+  }));
+} catch (e) {
+  console.warn("undici keep-alive setup failed:", e?.message || e);
 }
 
 // ── Config ──
