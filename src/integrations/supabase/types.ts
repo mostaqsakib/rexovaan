@@ -319,7 +319,7 @@ export type Database = {
       }
       bot_deposits: {
         Row: {
-          amount: number
+          amount: number | null
           created_at: string
           customer_id: string
           id: string
@@ -333,7 +333,7 @@ export type Database = {
           via: string | null
         }
         Insert: {
-          amount: number
+          amount?: number | null
           created_at?: string
           customer_id: string
           id?: string
@@ -347,7 +347,7 @@ export type Database = {
           via?: string | null
         }
         Update: {
-          amount?: number
+          amount?: number | null
           created_at?: string
           customer_id?: string
           id?: string
