@@ -4830,7 +4830,8 @@ async function handleMessage(message, emojiMap) {
   const chatId = message.chat.id;
   const rawText = typeof message.text === "string" ? message.text : "";
   const text = rawText.trim();
-  await fetchPageMsgs();
+  // Page-msg cache is kept fresh by background warmer; fire and forget.
+  fetchPageMsgs().catch(() => {});
 
   // Maintenance mode guard — allow admin through
   if (maintenanceMode && !isAdmin(chatId)) {
