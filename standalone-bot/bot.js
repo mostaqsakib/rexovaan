@@ -1528,11 +1528,13 @@ async function getCustomerSpecialPriceInfo(customerId, productId) {
 async function getTieredPrice(productId, qty, fallbackPrice, customerId = null) {
   // Always charge the LOWEST applicable price among:
   //   base price, bulk/tier price (for current qty), customer special price, active flash sale.
-  const flash = await getActiveFlashSale(productId);
-  const special = await getCustomerSpecialPrice(customerId, productId, qty);
-
-  const { data: tiers } = await supabase
-    .from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity");
+  // Parallelize all three lookups — they're independent.
+  const [flash, special, tiersRes] = await Promise.all([
+    getActiveFlashSale(productId),
+    getCustomerSpecialPrice(customerId, productId, qty),
+    supabase.from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity"),
+  ]);
+  const tiers = tiersRes?.data;
   let tierPrice = null;
   if (tiers && tiers.length > 0) {
     for (const tier of tiers) {
