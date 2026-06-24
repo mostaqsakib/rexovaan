@@ -64,21 +64,29 @@ const WebOrdersTab = () => {
   const PAGE_SIZE = 500;
 
   const fetchPage = async (from: number, to: number, search?: string): Promise<WebOrder[]> => {
-    let req = supabase
-      .from('bot_orders')
-      .select('id, customer_id, product_name, quantity, total_price, status, payment_method, txn_hash, source, details, delivered_items, created_at, delivered_at')
-      .order('created_at', { ascending: false });
+    let data: any[] | null = null;
     if (search && search.trim()) {
-      // Fetch a wider recent window so client-side filter can match across
-      // product name, customer info, order/txn ids and delivered_items/details.
-      req = req.range(0, 1999);
+      // Server-side full search across product, ids, txn, delivered_items, details, customer
+      const { data: rpcData, error } = await supabase.rpc('admin_search_orders', {
+        q: search.trim(),
+        lim: 100000,
+      });
+      if (error) {
+        toast.error('Orders could not be loaded');
+        return [];
+      }
+      data = rpcData as any[];
     } else {
-      req = req.range(from, to);
-    }
-    const { data, error } = await req;
-    if (error) {
-      toast.error('Orders could not be loaded');
-      return [];
+      const { data: pageData, error } = await supabase
+        .from('bot_orders')
+        .select('id, customer_id, product_name, quantity, total_price, status, payment_method, txn_hash, source, details, delivered_items, created_at, delivered_at')
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      if (error) {
+        toast.error('Orders could not be loaded');
+        return [];
+      }
+      data = pageData as any[];
     }
     const customerIds = Array.from(new Set((data || []).map((r: any) => r.customer_id).filter(Boolean)));
     let customersById: Record<string, WebOrder['customer']> = {};
