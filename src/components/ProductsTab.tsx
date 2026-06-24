@@ -976,7 +976,14 @@ const SortableRow = ({ product, onRemove, onStockChanged }: { product: Product; 
         </button>
       </TableCell>
       <TableCell>
-        <NameCell product={product} />
+        <div className="flex flex-col gap-0.5">
+          <NameCell product={product} />
+          <span className={`ml-2 text-[10px] font-medium tabular-nums ${
+            product.stock === 0 ? 'text-destructive' : product.stock <= 3 ? 'text-warning' : 'text-muted-foreground'
+          }`}>
+            Stock: {product.stock}
+          </span>
+        </div>
       </TableCell>
       <TableCell>
         <ActiveCell product={product} />
