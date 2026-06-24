@@ -1,9 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 import WebSocket from "ws";
 import crypto from "crypto";
+import { Agent, setGlobalDispatcher } from "undici";
 
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket;
+}
+
+// HTTP keep-alive pool — eliminates TLS handshake cost on every Telegram/Supabase
+// fetch. Big win for response latency on Railway.
+try {
+  setGlobalDispatcher(new Agent({
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: 64,
+    pipelining: 1,
+  }));
+} catch (e) {
+  console.warn("undici keep-alive setup failed:", e?.message || e);
 }
 
 // ── Config ──
@@ -221,8 +235,8 @@ function buildJoinPromptKeyboard(settings) {
 
 // Returns true if user is allowed to continue, false if blocked by join prompt.
 async function ensureChannelVerified(chatId) {
-  // Always read fresh from DB so admin emoji edits show up immediately.
-  const s = await fetchChannelJoinSettings(true);
+  // Use cached settings (60s TTL) — avoids a Supabase round-trip on every interaction.
+  const s = await fetchChannelJoinSettings();
   if (!s.enabled || !s.username) return true;
   if (isAdmin(chatId)) return true;
   if (await isUserVerifiedForChannel(chatId)) return true;
@@ -303,7 +317,7 @@ function prepareTelegramHtml(html) {
 }
 
 async function fetchPageMsgs(force = false) {
-  if (force || Date.now() - pageMsgsLastFetch > 60000) {
+  if (force || Date.now() - pageMsgsLastFetch > 300000) {
     try {
       const { data } = await supabase.from("bot_settings").select("key, value").in("key", Object.keys(PAGE_MSG_KEYS));
       if (data) {
@@ -386,16 +400,12 @@ async function formatBulkPricingBlock(productId) {
         : `${t.min_quantity}+`;
       return `• <b>${range}</b> pcs — <b>${Number(t.price).toFixed(2)} USDT</b> each`;
     });
+    // Use cached emoji map instead of a per-call Supabase query.
     let headerEmoji = "🤑";
     try {
-      const { data: emojiRow } = await supabase
-        .from("bot_button_emojis")
-        .select("custom_emoji_id")
-        .eq("button_key", "bulk_pricing")
-        .maybeSingle();
-      if (emojiRow?.custom_emoji_id) {
-        headerEmoji = `<tg-emoji emoji-id="${emojiRow.custom_emoji_id}">🤑</tg-emoji>`;
-      }
+      const emojiMap = await loadButtonEmojis();
+      const emojiId = emojiMap?.bulk_pricing?.emoji;
+      if (emojiId) headerEmoji = `<tg-emoji emoji-id="${emojiId}">🤑</tg-emoji>`;
     } catch {}
     return `\n\n${headerEmoji} <b>Bulk Pricing:</b>\n${lines.join("\n")}`;
   } catch {
@@ -1460,19 +1470,26 @@ async function getAllProductStocks(products, { force = false } = {}) {
   }
 
   const stockProducts = products.filter((p) => !p.is_manual_delivery && !p.source_id);
-  const countEntries = await Promise.all(stockProducts.map(async (product) => {
-    const { count, error } = await supabase
+  const stockById = new Map();
+  if (stockProducts.length > 0) {
+    const ids = stockProducts.map((p) => p.id);
+    // Single round-trip: fetch all available stock rows (just product_id),
+    // then count per product client-side. Replaces N COUNT queries.
+    const { data: rows, error } = await supabase
       .from("bot_product_stock_items")
-      .select("id", { count: "exact", head: true })
-      .eq("product_id", product.id)
+      .select("product_id")
+      .in("product_id", ids)
       .eq("status", "available");
     if (error) {
-      console.error(`Stock count failed for ${product.name}:`, error.message);
-      return [product.id, product.last_known_stock || 0];
+      console.error("Bulk stock query failed:", error.message);
+      for (const p of stockProducts) stockById.set(p.id, p.last_known_stock || 0);
+    } else {
+      for (const id of ids) stockById.set(id, 0);
+      for (const row of rows || []) {
+        stockById.set(row.product_id, (stockById.get(row.product_id) || 0) + 1);
+      }
     }
-    return [product.id, count || 0];
-  }));
-  const stockById = new Map(countEntries);
+  }
 
   const stocks = products.map((p) => {
     if (p.is_manual_delivery) return p.last_known_stock || 0;
@@ -1518,11 +1535,13 @@ async function getCustomerSpecialPriceInfo(customerId, productId) {
 async function getTieredPrice(productId, qty, fallbackPrice, customerId = null) {
   // Always charge the LOWEST applicable price among:
   //   base price, bulk/tier price (for current qty), customer special price, active flash sale.
-  const flash = await getActiveFlashSale(productId);
-  const special = await getCustomerSpecialPrice(customerId, productId, qty);
-
-  const { data: tiers } = await supabase
-    .from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity");
+  // Parallelize all three lookups — they're independent.
+  const [flash, special, tiersRes] = await Promise.all([
+    getActiveFlashSale(productId),
+    getCustomerSpecialPrice(customerId, productId, qty),
+    supabase.from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity"),
+  ]);
+  const tiers = tiersRes?.data;
   let tierPrice = null;
   if (tiers && tiers.length > 0) {
     for (const tier of tiers) {
@@ -2028,24 +2047,34 @@ Use your API key as Bearer token.
 // ── My Stats ──
 
 async function showMyStats(chatId, customer, emojiMap = {}, editMessageId = null) {
-  const { data: orders } = await supabase.from("bot_orders").select("quantity, total_price, created_at").eq("customer_id", customer.id).eq("status", "completed");
+  // Fan out all 5 independent queries in parallel — was previously sequential (~5x RTT).
+  const [
+    { data: orders },
+    { data: deposits },
+    { data: withdrawals },
+    { data: referrals },
+    { data: custData },
+  ] = await Promise.all([
+    supabase.from("bot_orders").select("quantity, total_price, created_at").eq("customer_id", customer.id).eq("status", "completed"),
+    supabase.from("bot_deposits").select("amount").eq("customer_id", customer.id).eq("status", "verified"),
+    supabase.from("bot_withdrawals").select("amount, status").eq("customer_id", customer.id),
+    supabase.from("bot_referrals").select("id").eq("referrer_id", customer.id),
+    supabase.from("bot_customers").select("referral_total_earned, referral_balance").eq("id", customer.id).single(),
+  ]);
+
   const totalOrders = orders ? orders.length : 0;
   const totalItems = orders ? orders.reduce((s, o) => s + o.quantity, 0) : 0;
   const totalSpent = orders ? orders.reduce((s, o) => s + Number(o.total_price), 0) : 0;
 
-  const { data: deposits } = await supabase.from("bot_deposits").select("amount").eq("customer_id", customer.id).eq("status", "verified");
   const totalDeposits = deposits ? deposits.length : 0;
   const totalDeposited = deposits ? deposits.reduce((s, d) => s + Number(d.amount), 0) : 0;
 
-  const { data: withdrawals } = await supabase.from("bot_withdrawals").select("amount, status").eq("customer_id", customer.id);
   const completedWithdrawals = withdrawals ? withdrawals.filter(w => w.status === "completed") : [];
   const totalWithdrawn = completedWithdrawals.reduce((s, w) => s + Number(w.amount), 0);
   const pendingWithdrawals = withdrawals ? withdrawals.filter(w => w.status === "pending").length : 0;
 
-  const { data: referrals } = await supabase.from("bot_referrals").select("id").eq("referrer_id", customer.id);
   const totalReferrals = referrals ? referrals.length : 0;
 
-  const { data: custData } = await supabase.from("bot_customers").select("referral_total_earned, referral_balance").eq("id", customer.id).single();
   const refEarned = custData ? Number(custData.referral_total_earned).toFixed(2) : "0.00";
   const refBalance = custData ? Number(custData.referral_balance).toFixed(2) : "0.00";
 
@@ -2189,6 +2218,27 @@ function generateReferralCode(chatId) {
   // Create a short alphanumeric code from chat_id
   const hash = crypto.createHash("md5").update(String(chatId)).digest("hex");
   return hash.slice(0, 8).toLowerCase();
+}
+
+// ── Referral code → customer cache (5 min TTL) ──
+// Avoids re-downloading the entire bot_customers table on every /start ref_<code>.
+let _refCodeCache = null;
+let _refCodeCacheTime = 0;
+const REF_CODE_CACHE_TTL = 5 * 60 * 1000;
+
+async function findReferrerByCode(refCode, excludeCustomerId = null) {
+  const now = Date.now();
+  if (!_refCodeCache || now - _refCodeCacheTime > REF_CODE_CACHE_TTL) {
+    const { data } = await supabase.from("bot_customers").select("id, chat_id");
+    const map = new Map();
+    if (data) for (const c of data) map.set(generateReferralCode(c.chat_id), { id: c.id, chat_id: c.chat_id });
+    _refCodeCache = map;
+    _refCodeCacheTime = now;
+  }
+  const hit = _refCodeCache.get(String(refCode).toLowerCase());
+  if (!hit) return null;
+  if (excludeCustomerId && hit.id === excludeCustomerId) return null;
+  return hit;
 }
 
 async function processReferralCommission(buyerCustomerId, orderTotal, orderId) {
@@ -3754,15 +3804,17 @@ async function handleBuyProduct(chatId, customer, productId, emojiMap, editMessa
 }
 
 async function showQuantitySelection(chatId, productId, emojiMap, editMessageId) {
-  const [{ data: product }, { data: tiers }, { data: custRow }] = await Promise.all([
+  // Fire flash sale lookup in parallel with the initial product/tier/customer batch.
+  const [{ data: product }, { data: tiers }, { data: custRow }, flash] = await Promise.all([
     supabase.from("bot_products").select("name, price, currency, custom_emoji_id, is_manual_delivery, source_id, source_product_id, last_known_stock").eq("id", productId).single(),
     supabase.from("bot_product_pricing").select("price").eq("product_id", productId).order("min_quantity").limit(1),
     supabase.from("bot_customers").select("id").eq("chat_id", chatId).maybeSingle(),
+    getActiveFlashSale(productId),
   ]);
   if (!product) return;
   // Only use special as base price if MOQ is 1 (always-applicable). Otherwise show tier/regular.
+  // (Needs custRow.id, so it runs after the batch.)
   const special = await getCustomerSpecialPrice(custRow?.id, productId, 1);
-  const flash = await getActiveFlashSale(productId);
   const tierOrRegular = tiers && tiers.length > 0 ? Number(tiers[0].price) : Number(product.price);
   const candidates = [tierOrRegular];
   if (special !== null) candidates.push(Number(special));
@@ -4832,32 +4884,27 @@ async function handleMessage(message, emojiMap) {
     // Referral deep link: /start ref_<code>
     if (startParam && startParam.startsWith("ref_")) {
       const refCode = startParam.replace("ref_", "").toLowerCase();
-      // Find referrer by matching code
-      const { data: allCustomers } = await supabase.from("bot_customers").select("id, chat_id, balance").neq("id", customer.id);
-      if (allCustomers) {
-        const referrer = allCustomers.find(c => generateReferralCode(c.chat_id) === refCode);
-        if (referrer) {
-          // Check if already referred (one-time per referred user)
-          const { data: existingRef } = await supabase.from("bot_referrals").select("id").eq("referred_id", customer.id).maybeSingle();
-          if (!existingRef) {
-            await supabase.from("bot_referrals").insert({ referrer_id: referrer.id, referred_id: customer.id });
-            console.log(`Referral registered: ${customer.id} referred by ${referrer.id}`);
-            // Campaign join bonus is credited automatically by DB trigger
-            // (handle_referral_campaign_credit) into referral_balance.
-            // Notify referrer if campaign is active.
-            try {
-              const campaign = await getCampaignSettings();
-              if (campaign.active && campaign.reward > 0) {
-                sendMessage(
-                  referrer.chat_id,
-                  `🎉 <b>Referral Join Bonus!</b>\n\nA new user joined via your referral link.\nYou earned <b>${Number(campaign.reward).toFixed(2)} USDT</b> in your referral balance!`
-                ).catch(() => {});
-              }
-            } catch (e) {
-              console.error("Join-bonus notify failed:", e?.message || e);
+      const referrer = await findReferrerByCode(refCode, customer.id);
+      if (referrer) {
+        // Check if already referred (one-time per referred user)
+        const { data: existingRef } = await supabase.from("bot_referrals").select("id").eq("referred_id", customer.id).maybeSingle();
+        if (!existingRef) {
+          await supabase.from("bot_referrals").insert({ referrer_id: referrer.id, referred_id: customer.id });
+          console.log(`Referral registered: ${customer.id} referred by ${referrer.id}`);
+          // Campaign join bonus is credited automatically by DB trigger
+          // (handle_referral_campaign_credit) into referral_balance.
+          // Notify referrer if campaign is active.
+          try {
+            const campaign = await getCampaignSettings();
+            if (campaign.active && campaign.reward > 0) {
+              sendMessage(
+                referrer.chat_id,
+                `🎉 <b>Referral Join Bonus!</b>\n\nA new user joined via your referral link.\nYou earned <b>${Number(campaign.reward).toFixed(2)} USDT</b> in your referral balance!`
+              ).catch(() => {});
             }
+          } catch (e) {
+            console.error("Join-bonus notify failed:", e?.message || e);
           }
-
         }
       }
       // Continue to show welcome regardless
@@ -8450,6 +8497,16 @@ async function backgroundStockAlertChecker() {
 
   flashSaleTickerLoop().catch(err => console.error("[FlashSale] Fatal error:", err));
   console.log("🔥 Flash sale countdown ticker started (every 5s)");
+
+  // Proactive cache warmers — keep hot caches fresh so user requests never wait
+  // for a cold-cache Supabase round trip on the response path.
+  setInterval(() => { fetchPageMsgs(true).catch(() => {}); }, 4 * 60 * 1000);
+  setInterval(() => {
+    _emojiCacheTime = 0;
+    loadButtonEmojis().catch(() => {});
+  }, 55 * 1000);
+  setInterval(() => { fetchChannelJoinSettings(true).catch(() => {}); }, 55 * 1000);
+  console.log("🔥 Cache warmers started (page msgs, emojis, channel settings)");
 
   while (true) {
     try {
