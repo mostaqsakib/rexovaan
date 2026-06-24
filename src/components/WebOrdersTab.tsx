@@ -69,7 +69,9 @@ const WebOrdersTab = () => {
       .select('id, customer_id, product_name, quantity, total_price, status, payment_method, txn_hash, source, details, delivered_items, created_at, delivered_at')
       .order('created_at', { ascending: false });
     if (search && search.trim()) {
-      req = req.ilike('product_name', `%${search.trim()}%`).range(0, 1999);
+      // Fetch a wider recent window so client-side filter can match across
+      // product name, customer info, order/txn ids and delivered_items/details.
+      req = req.range(0, 1999);
     } else {
       req = req.range(from, to);
     }
