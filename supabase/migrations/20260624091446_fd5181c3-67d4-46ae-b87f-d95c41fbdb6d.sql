@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_resellers ALTER COLUMN api_key_hash DROP NOT NULL;
