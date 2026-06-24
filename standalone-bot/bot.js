@@ -3376,11 +3376,15 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
       const { productId, qty } = parseDirectPayAction(customer.pending_action);
       await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
       const { data: product } = await supabase.from("bot_products").select("*").eq("id", productId).single();
-      if (product) {
+      if (product && product.is_active !== false) {
         const unitPrice = await getTieredPrice(productId, qty, Number(product.price), customer.id);
         const expectedTotal = Math.round(unitPrice * qty * 10000) / 10000;
         await processDirectPayPurchase({ chatId, customer, product, qty, expectedTotal, amount, verifiedVia, ltcRawAmount, normalizedTxn, emojiMap });
         return;
+      }
+      if (product && product.is_active === false) {
+        await sendMessage(chatId, `⚠️ <b>Product Unavailable</b>\n\nThe product <b>${product.name}</b> is currently disabled and cannot be delivered.\n\nYour payment of <b>${amount.toFixed(2)} USDT</b> has been credited to your balance instead. You can use it for any other product or withdraw it.`);
+        notifyAdmin(`⚠️ <b>Direct Pay on Disabled Product</b>\n\n👤 ${getCustomerLabel(customer)}\n📦 ${product.name} x${qty}\n💵 ${amount.toFixed(2)} USDT credited to balance (product is disabled).\n🔗 TxID: <code>${normalizedTxn}</code>`);
       }
     }
 
