@@ -1470,19 +1470,26 @@ async function getAllProductStocks(products, { force = false } = {}) {
   }
 
   const stockProducts = products.filter((p) => !p.is_manual_delivery && !p.source_id);
-  const countEntries = await Promise.all(stockProducts.map(async (product) => {
-    const { count, error } = await supabase
+  const stockById = new Map();
+  if (stockProducts.length > 0) {
+    const ids = stockProducts.map((p) => p.id);
+    // Single round-trip: fetch all available stock rows (just product_id),
+    // then count per product client-side. Replaces N COUNT queries.
+    const { data: rows, error } = await supabase
       .from("bot_product_stock_items")
-      .select("id", { count: "exact", head: true })
-      .eq("product_id", product.id)
+      .select("product_id")
+      .in("product_id", ids)
       .eq("status", "available");
     if (error) {
-      console.error(`Stock count failed for ${product.name}:`, error.message);
-      return [product.id, product.last_known_stock || 0];
+      console.error("Bulk stock query failed:", error.message);
+      for (const p of stockProducts) stockById.set(p.id, p.last_known_stock || 0);
+    } else {
+      for (const id of ids) stockById.set(id, 0);
+      for (const row of rows || []) {
+        stockById.set(row.product_id, (stockById.get(row.product_id) || 0) + 1);
+      }
     }
-    return [product.id, count || 0];
-  }));
-  const stockById = new Map(countEntries);
+  }
 
   const stocks = products.map((p) => {
     if (p.is_manual_delivery) return p.last_known_stock || 0;
