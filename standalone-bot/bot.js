@@ -168,19 +168,27 @@ function channelApiId(u) {
   return `@${s}`;
 }
 
+// In-memory set of chatIds known to be verified for the channel join.
+// Once a user verifies, they remain verified — so we never need to re-query
+// the DB for that user again within this process.
+const _verifiedChannelUsers = new Set();
+
 async function isUserVerifiedForChannel(chatId) {
+  if (_verifiedChannelUsers.has(chatId)) return true;
   try {
     const { data } = await supabase
       .from("user_channel_verification")
       .select("user_id")
       .eq("user_id", chatId)
       .maybeSingle();
+    if (data) _verifiedChannelUsers.add(chatId);
     return !!data;
   } catch (e) { console.error("isUserVerifiedForChannel:", e); return false; }
 }
 
 async function markUserVerifiedForChannel(chatId) {
   try {
+    _verifiedChannelUsers.add(chatId);
     await supabase
       .from("user_channel_verification")
       .upsert({ user_id: chatId, verified_at: new Date().toISOString() }, { onConflict: "user_id" });
@@ -709,18 +717,41 @@ async function showBroadcastProductPicker(chatId, msgId, selectedIds) {
 
 
 // ── Flash Sales helpers ──
-async function getActiveFlashSale(productId) {
+// Cache ALL currently-active flash sales together (30s TTL). Flash sales are a
+// tiny set globally, so one query covers every product instead of one query
+// per product per interaction.
+let _flashSaleCache = null;
+let _flashSaleCacheTime = 0;
+const FLASH_SALE_CACHE_TTL = 30 * 1000;
+
+async function _refreshFlashSaleCache() {
+  const now = new Date().toISOString();
   const { data } = await supabase
     .from("bot_flash_sales")
     .select("*")
-    .eq("product_id", productId)
     .eq("is_active", true)
-    .gt("ends_at", new Date().toISOString())
-    .lte("starts_at", new Date().toISOString())
-    .order("ends_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return data || null;
+    .gt("ends_at", now)
+    .lte("starts_at", now)
+    .order("ends_at", { ascending: true });
+  const map = new Map();
+  if (data) for (const sale of data) {
+    if (!map.has(sale.product_id)) map.set(sale.product_id, sale); // earliest-ending wins
+  }
+  _flashSaleCache = map;
+  _flashSaleCacheTime = Date.now();
+  return map;
+}
+
+async function getActiveFlashSale(productId) {
+  const now = Date.now();
+  if (!_flashSaleCache || now - _flashSaleCacheTime > FLASH_SALE_CACHE_TTL) {
+    try { await _refreshFlashSaleCache(); }
+    catch (e) { console.error("flash sale cache refresh failed:", e?.message || e); return null; }
+  }
+  const hit = _flashSaleCache?.get(productId) || null;
+  // Guard: ensure not expired between cache builds
+  if (hit && new Date(hit.ends_at).getTime() <= Date.now()) return null;
+  return hit;
 }
 
 function formatCountdown(endsAt) {
@@ -1591,10 +1622,35 @@ function removeReplyKeyboard() {
 
 // ── Customer ──
 
+// In-memory customer cache (chatId → row, 60s TTL). Eliminates a DB round-trip
+// on every single message/callback. Cache busts whenever balance/profile is
+// mutated elsewhere (use invalidateCustomerCache(chatId)).
+const _customerCache = new Map();
+const CUSTOMER_CACHE_TTL = 30 * 1000;
+
+function invalidateCustomerCache(chatId) {
+  if (chatId != null) _customerCache.delete(chatId);
+}
+
 async function getOrCreateCustomer(chatId, firstName, username) {
+  const now = Date.now();
+  const cached = _customerCache.get(chatId);
+  if (cached && now - cached.t < CUSTOMER_CACHE_TTL) {
+    const row = cached.row;
+    // Only persist a profile diff if Telegram sent a new name/username.
+    const diff = {};
+    if (firstName && firstName !== row.first_name) diff.first_name = firstName;
+    if (username && username !== row.username) diff.username = username;
+    if (Object.keys(diff).length > 0) {
+      diff.updated_at = new Date().toISOString();
+      Object.assign(row, diff);
+      supabase.from("bot_customers").update(diff).eq("id", row.id).then(() => {}, () => {});
+    }
+    return row;
+  }
+
   const { data: existing } = await supabase.from("bot_customers").select("*").eq("chat_id", chatId).single();
   if (existing) {
-    // Update profile if changed
     const updates = {};
     if (firstName && firstName !== existing.first_name) updates.first_name = firstName;
     if (username && username !== existing.username) updates.username = username;
@@ -1603,12 +1659,14 @@ async function getOrCreateCustomer(chatId, firstName, username) {
       await supabase.from("bot_customers").update(updates).eq("id", existing.id);
       Object.assign(existing, updates);
     }
+    _customerCache.set(chatId, { row: existing, t: now });
     return existing;
   }
   const { data: created, error } = await supabase.from("bot_customers")
     .insert({ chat_id: chatId, first_name: firstName || null, username: username || null })
     .select().single();
   if (error) throw error;
+  _customerCache.set(chatId, { row: created, t: Date.now() });
   return created;
 }
 
@@ -4772,7 +4830,8 @@ async function handleMessage(message, emojiMap) {
   const chatId = message.chat.id;
   const rawText = typeof message.text === "string" ? message.text : "";
   const text = rawText.trim();
-  await fetchPageMsgs();
+  // Page-msg cache is kept fresh by background warmer; fire and forget.
+  fetchPageMsgs().catch(() => {});
 
   // Maintenance mode guard — allow admin through
   if (maintenanceMode && !isAdmin(chatId)) {
@@ -5897,9 +5956,11 @@ async function handleMessage(message, emojiMap) {
 async function handleCallback(callbackQuery, emojiMap) {
   const chatId = callbackQuery.message.chat.id;
   const data = callbackQuery.data;
-  await fetchPageMsgs();
-
+  // ACK the click IMMEDIATELY — must be first, otherwise Telegram shows
+  // the loading spinner on the button until we reply.
   answerCallbackQuery(callbackQuery.id);
+  // Warmers keep this cache fresh; don't block the response on it.
+  fetchPageMsgs().catch(() => {});
 
   // Maintenance mode guard
   if (maintenanceMode && !isAdmin(chatId)) {
