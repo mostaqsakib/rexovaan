@@ -1,0 +1,1 @@
+ALTER TABLE public.bot_deposits ALTER COLUMN amount DROP NOT NULL;
