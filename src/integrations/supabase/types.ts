@@ -1037,7 +1037,7 @@ export type Database = {
       bot_resellers: {
         Row: {
           api_key_encrypted: string | null
-          api_key_hash: string
+          api_key_hash: string | null
           api_key_prefix: string
           balance: number
           created_at: string
@@ -1049,7 +1049,7 @@ export type Database = {
         }
         Insert: {
           api_key_encrypted?: string | null
-          api_key_hash: string
+          api_key_hash?: string | null
           api_key_prefix: string
           balance?: number
           created_at?: string
@@ -1061,7 +1061,7 @@ export type Database = {
         }
         Update: {
           api_key_encrypted?: string | null
-          api_key_hash?: string
+          api_key_hash?: string | null
           api_key_prefix?: string
           balance?: number
           created_at?: string
