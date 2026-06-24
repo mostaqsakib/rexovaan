@@ -5956,9 +5956,11 @@ async function handleMessage(message, emojiMap) {
 async function handleCallback(callbackQuery, emojiMap) {
   const chatId = callbackQuery.message.chat.id;
   const data = callbackQuery.data;
-  await fetchPageMsgs();
-
+  // ACK the click IMMEDIATELY — must be first, otherwise Telegram shows
+  // the loading spinner on the button until we reply.
   answerCallbackQuery(callbackQuery.id);
+  // Warmers keep this cache fresh; don't block the response on it.
+  fetchPageMsgs().catch(() => {});
 
   // Maintenance mode guard
   if (maintenanceMode && !isAdmin(chatId)) {
