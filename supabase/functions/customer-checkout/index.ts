@@ -82,7 +82,8 @@ Deno.serve(async (req) => {
 
     // Feature flag from bot_settings (DB-driven; admin can toggle without redeploy)
     const { data: flagRow } = await admin.from('bot_settings').select('value').eq('key', 'use_atomic_checkout').maybeSingle();
-    const useAtomic = String(flagRow?.value ?? 'false').toLowerCase() === 'true';
+    // Atomic checkout is the default; legacy multi-step path only runs if explicitly disabled.
+    const useAtomic = String(flagRow?.value ?? 'true').toLowerCase() !== 'false';
 
     // -------------------- NEW ATOMIC PATH --------------------
     if (useAtomic) {

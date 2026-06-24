@@ -51,13 +51,17 @@ Deno.serve(async (req) => {
 
     const { data: codeRow, error: codeErr } = await supabase
       .from('bot_telegram_bind_codes')
-      .select('auth_user_id, expires_at, used_at')
+      .select('auth_user_id, expires_at, used_at, failed_attempts')
       .eq('code', code)
       .maybeSingle();
     if (codeErr) return json({ error: codeErr.message }, 500);
     if (!codeRow) { await recordFail(); return json({ error: 'Code not found' }, 404); }
     if (codeRow.used_at) { await recordFail(); return json({ error: 'Code already used' }, 410); }
     if (new Date(codeRow.expires_at).getTime() < Date.now()) { await recordFail(); return json({ error: 'Code expired' }, 410); }
+    if ((codeRow.failed_attempts ?? 0) >= 5) {
+      await recordFail();
+      return json({ error: 'Too many failed attempts on this code. Please request a new one.' }, 429);
+    }
 
     const { data: result, error: rpcErr } = await supabase.rpc('bind_telegram_to_customer', {
       _auth_user_id: codeRow.auth_user_id,

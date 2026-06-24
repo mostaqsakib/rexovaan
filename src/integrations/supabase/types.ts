@@ -1103,6 +1103,7 @@ export type Database = {
           code: string
           created_at: string
           expires_at: string
+          failed_attempts: number
           used_at: string | null
         }
         Insert: {
@@ -1110,6 +1111,7 @@ export type Database = {
           code: string
           created_at?: string
           expires_at?: string
+          failed_attempts?: number
           used_at?: string | null
         }
         Update: {
@@ -1117,6 +1119,7 @@ export type Database = {
           code?: string
           created_at?: string
           expires_at?: string
+          failed_attempts?: number
           used_at?: string | null
         }
         Relationships: []
@@ -1913,11 +1916,39 @@ export type Database = {
           success: boolean
         }[]
       }
+      refund_reseller_source_api_order: {
+        Args: { _order_id: string; _reason?: string }
+        Returns: {
+          balance_after: number
+          success: boolean
+        }[]
+      }
       reserve_internal_stock_items: {
         Args: { _order_id?: string; _product_id: string; _quantity: number }
         Returns: {
           data: Json
           id: string
+        }[]
+      }
+      reserve_reseller_source_api_order: {
+        Args: {
+          _api_key_hash: string
+          _external_order_id?: string
+          _product_id: string
+          _quantity: number
+        }
+        Returns: {
+          balance_after: number
+          customer_chat_id: number
+          customer_first_name: string
+          customer_id: string
+          customer_username: string
+          order_id: string
+          product_id: string
+          product_name: string
+          quantity: number
+          total_cost: number
+          unit_cost: number
         }[]
       }
       restore_internal_stock_items: {
