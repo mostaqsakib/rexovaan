@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Copy, Globe, Loader2, RefreshCw, RotateCcw, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,7 @@ const fmtDate = (s: string) => {
 const WebOrdersTab = () => {
   const [orders, setOrders] = useState<WebOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -103,12 +104,14 @@ const WebOrdersTab = () => {
     return (data || []).map((r: any) => ({ ...r, customer: customersById[r.customer_id] || null }));
   };
 
-  const load = async (search?: string) => {
-    setLoading(true);
+  const load = async (search?: string, isInitial = false) => {
+    if (isInitial) setLoading(true);
+    else setSearching(true);
     const rows = await fetchPage(0, PAGE_SIZE - 1, search);
     setOrders(rows);
     setHasMore(!search?.trim() && rows.length === PAGE_SIZE);
-    setLoading(false);
+    if (isInitial) setLoading(false);
+    else setSearching(false);
   };
 
   const loadMore = async () => {
@@ -120,7 +123,13 @@ const WebOrdersTab = () => {
     setLoadingMore(false);
   };
 
+  const didInit = useRef(false);
   useEffect(() => {
+    if (!didInit.current) {
+      didInit.current = true;
+      void load(q, true);
+      return;
+    }
     const handle = setTimeout(() => { void load(q); }, q ? 300 : 0);
     return () => clearTimeout(handle);
   }, [q]);
@@ -170,8 +179,11 @@ const WebOrdersTab = () => {
             placeholder="Search by product, customer, chat ID, order ID…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="pl-9"
+            className="pl-9 pr-9"
           />
+          {searching && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
         <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
           {(['all', 'web', 'bot'] as const).map((s) => (
