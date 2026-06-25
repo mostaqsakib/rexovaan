@@ -103,12 +103,14 @@ const WebOrdersTab = () => {
     return (data || []).map((r: any) => ({ ...r, customer: customersById[r.customer_id] || null }));
   };
 
-  const load = async (search?: string) => {
-    setLoading(true);
+  const load = async (search?: string, isInitial = false) => {
+    if (isInitial) setLoading(true);
+    else setSearching(true);
     const rows = await fetchPage(0, PAGE_SIZE - 1, search);
     setOrders(rows);
     setHasMore(!search?.trim() && rows.length === PAGE_SIZE);
-    setLoading(false);
+    if (isInitial) setLoading(false);
+    else setSearching(false);
   };
 
   const loadMore = async () => {
