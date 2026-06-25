@@ -171,7 +171,92 @@ async function saveRefreshedCookies(cookieRow, context, reason = 'refresh') {
   }
 }
 
+// ============================================================================
+// FAST MODE — extension-style HTTP fetch with saved Google cookies.
+// Only 2 markers (matching the Chrome extension that the operator validated):
+//   - "already been used"   → invalid (used)
+//   - "new activation link" → invalid (needs new link)
+// Any other 200 OK page  → valid.
+// Redirect to accounts.google.com/signin → cookies_expired.
+// ============================================================================
+const INVALID_MARKERS_FAST = [
+  { needle: 'already been used', reason: 'Already used' },
+  { needle: 'new activation link', reason: 'Needs new link' },
+];
+
+const FAST_MODE = process.env.LINK_CHECKER_FAST_MODE !== 'false'; // default ON
+const FAST_TIMEOUT_MS = Number(process.env.FAST_TIMEOUT_MS || 15000);
+const FAST_RETRIES = Number(process.env.FAST_RETRIES || 2);
+
+function buildCookieHeader(cookiesJson) {
+  const arr = normalizeCookies(cookiesJson);
+  // Use only google.com cookies (one.google.com / serviceactivation.google.com share base)
+  const filtered = arr.filter(c => /(^|\.)google\.com$/i.test(c.domain));
+  const seen = new Set();
+  const parts = [];
+  for (const c of filtered) {
+    if (seen.has(c.name)) continue;
+    seen.add(c.name);
+    parts.push(`${c.name}=${c.value}`);
+  }
+  return parts.join('; ');
+}
+
+async function checkUrlFast(cookieHeader, url) {
+  for (let attempt = 1; attempt <= FAST_RETRIES + 1; attempt++) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), FAST_TIMEOUT_MS);
+    try {
+      const resp = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+      });
+      clearTimeout(t);
+
+      const finalUrl = resp.url || url;
+      if (/accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(finalUrl)) {
+        return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
+      }
+
+      if (resp.status === 429 && attempt <= FAST_RETRIES) {
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      if (!resp.ok) {
+        return { result: 'error', reason: `HTTP ${resp.status}` };
+      }
+
+      const body = (await resp.text()).toLowerCase();
+      for (const m of INVALID_MARKERS_FAST) {
+        if (body.includes(m.needle)) return { result: 'invalid', reason: m.reason };
+      }
+      return { result: 'valid', reason: '' };
+    } catch (err) {
+      clearTimeout(t);
+      if (attempt <= FAST_RETRIES) {
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      if (err.name === 'AbortError') return { result: 'error', reason: 'Timeout' };
+      return { result: 'error', reason: (err.message || 'Network Error').slice(0, 120) };
+    }
+  }
+  return { result: 'error', reason: 'Retry exhausted' };
+}
+
+// ============================================================================
+// LEGACY PLAYWRIGHT MODE (only used when FAST_MODE=false OR persistent profile)
+// ============================================================================
 const INVALID_MARKERS = [
+  'already been used',
+  'new activation link',
   'already in use',
   'already been redeemed',
   'already redeemed',
@@ -186,49 +271,28 @@ const INVALID_MARKERS = [
 ];
 
 const VALID_MARKERS = [
-  'activate plan',
-  'get started',
-  'accept and continue',
-  'redeem',
-  'start your',
-  'try google',
-  'claim offer',
-  'claim your',
-  'one ai premium',
-  'google ai pro',
+  'activate plan', 'get started', 'accept and continue', 'redeem',
+  'start your', 'try google', 'claim offer', 'claim your',
+  'one ai premium', 'google ai pro',
 ];
 
-// Check a single URL. Returns { result: 'valid'|'invalid'|'error'|'cookies_expired', reason }
-// IMPORTANT: invalid pages on Google often ALSO contain valid-looking text like "Activate plan"
-// in the header. So we must:
-//   1. Always check invalid markers first (they win over valid markers).
-//   2. Never return 'valid' early — wait for the page to fully settle so any late-loading
-//      "already in use" text has a chance to appear before we declare valid.
 async function checkUrl(context, url) {
   const page = await context.newPage();
   try {
     await page.route('**/*', (route) => {
       const t = route.request().resourceType();
-      if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') {
-        return route.abort();
-      }
+      if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') return route.abort();
       return route.continue();
     });
-
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-
     const isSignIn = (u) => /accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(u);
-    if (isSignIn(page.url())) {
-      return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
-    }
+    if (isSignIn(page.url())) return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
 
     const scan = async () => {
       const t = (await page.evaluate(() => document.body?.innerText || '').catch(() => '')).toLowerCase();
       for (const m of INVALID_MARKERS) if (t.includes(m)) return { text: t, hit: { result: 'invalid', reason: m } };
       return { text: t, hit: null };
     };
-
-    // Phase 1 (up to 3.5s): return immediately if ANY invalid marker shows up.
     const invalidDeadline = Date.now() + 3500;
     let lastText = '';
     while (Date.now() < invalidDeadline) {
@@ -238,23 +302,10 @@ async function checkUrl(context, url) {
       if (hit) return hit;
       await new Promise(r => setTimeout(r, 250));
     }
-
-    // Phase 2: short settle so any lazy "already in use" text loads.
     try { await page.waitForLoadState('networkidle', { timeout: 3000 }); } catch {}
-    await new Promise(r => setTimeout(r, 600)); // extra settle
-
-    // Final invalid re-check after settle.
-    {
-      const { text, hit } = await scan();
-      lastText = text;
-      if (hit) return hit;
-    }
-
-    // Only NOW consider valid markers.
-    for (const m of VALID_MARKERS) {
-      if (lastText.includes(m)) return { result: 'valid', reason: m };
-    }
-
+    await new Promise(r => setTimeout(r, 600));
+    { const { text, hit } = await scan(); lastText = text; if (hit) return hit; }
+    for (const m of VALID_MARKERS) if (lastText.includes(m)) return { result: 'valid', reason: m };
     return { result: 'error', reason: `unknown page (status ${resp?.status() || '?'}, len ${lastText.length})` };
   } catch (e) {
     return { result: 'error', reason: e.message.slice(0, 200) };
@@ -262,6 +313,7 @@ async function checkUrl(context, url) {
     await page.close().catch(() => {});
   }
 }
+
 
 
 async function runJob(job) {
@@ -357,7 +409,12 @@ async function runJob(job) {
     status: 'running', total: items.length, started_at: new Date().toISOString(),
   }).eq('id', job.id);
 
-  // Launch browser — persistent profile (preferred) or ephemeral + cookies (fallback)
+  // Choose runtime mode:
+  //   - fastMode (default): plain HTTPS fetch with saved Google cookies (extension-style, 10x faster).
+  //   - Playwright mode: only used when FAST_MODE=false OR when only a persistent profile (no exported cookies) is available.
+  const fastMode = FAST_MODE && !!cookieRow && !useProfile;
+  console.log(`[checker] mode = ${fastMode ? 'FAST (http fetch + cookies)' : useProfile ? 'PLAYWRIGHT (persistent profile)' : 'PLAYWRIGHT (cookies)'}`);
+
   const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
   const contextOpts = {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -366,7 +423,8 @@ async function runJob(job) {
   };
 
   let browser = null;
-  let context;
+  let context = null;
+  let cookieHeader = '';
 
   async function buildContextForCookie(row) {
     const b = await chromium.launch({ headless: true, args: launchArgs });
@@ -375,26 +433,37 @@ async function runJob(job) {
     return { browser: b, context: ctx };
   }
 
-  if (useProfile) {
-    context = await chromium.launchPersistentContext(PROFILE_DIR, {
-      headless: true,
-      args: launchArgs,
-      ...contextOpts,
-    });
-  } else {
-    const built = await buildContextForCookie(cookieRow);
-    browser = built.browser;
-    context = built.context;
+  if (fastMode) {
+    cookieHeader = buildCookieHeader(cookieRow.cookies_json);
+    if (!cookieHeader) {
+      console.warn('[checker] fast mode: built empty cookie header — falling back to Playwright');
+    }
+  }
+
+  if (!fastMode) {
+    if (useProfile) {
+      context = await chromium.launchPersistentContext(PROFILE_DIR, {
+        headless: true,
+        args: launchArgs,
+        ...contextOpts,
+      });
+    } else {
+      const built = await buildContextForCookie(cookieRow);
+      browser = built.browser;
+      context = built.context;
+    }
   }
 
   let aborted = false;
   let abortReason = '';
-  const concurrency = Math.max(1, Math.min(10, job.concurrency || 5));
-  const delay = Math.max(0, job.delay_ms || 800);
+  // In fast mode allow much higher parallelism (extension uses 10). Playwright stays at 5 for stability.
+  const concurrency = fastMode
+    ? Math.max(1, Math.min(20, job.concurrency_fast || 10))
+    : Math.max(1, Math.min(10, job.concurrency || 5));
+  const delay = fastMode ? Math.max(0, job.delay_ms ?? 200) : Math.max(0, job.delay_ms || 800);
   let lastCookieRefreshSaveAt = 0;
 
   // Rotate to the next active cookie when the current one is detected as expired.
-  // Returns true if a new cookie was loaded successfully, false if none remain.
   let rotatingPromise = null;
   async function rotateCookie(reason) {
     if (rotatingPromise) return rotatingPromise;
@@ -403,21 +472,25 @@ async function runJob(job) {
       const oldId = cookieRow?.id;
       console.log(`[checker] rotating cookie "${oldLabel}" — ${reason}`);
       if (oldId) await markCookiesExpired(oldId);
-      try { await context.close(); } catch {}
+      if (context) { try { await context.close(); } catch {} context = null; }
       if (browser) { try { await browser.close(); } catch {} browser = null; }
 
-      // Refresh queue from DB (in case admin added a fresh cookie during the job)
       const fresh = await loadActiveCookies().catch(() => []);
       const next = fresh.find(r => r.id !== oldId) || cookieQueue.shift();
       if (!next) {
         cookieRow = null;
+        cookieHeader = '';
         await notifyAdmin(`⚠️ Link checker: cookie "${oldLabel}" expired and no fallback cookies available. Add a fresh cookie in admin → Link Checker.`);
         return false;
       }
       cookieRow = next;
-      const built = await buildContextForCookie(next);
-      browser = built.browser;
-      context = built.context;
+      if (fastMode) {
+        cookieHeader = buildCookieHeader(next.cookies_json);
+      } else {
+        const built = await buildContextForCookie(next);
+        browser = built.browser;
+        context = built.context;
+      }
       lastCookieRefreshSaveAt = 0;
       await notifyAdmin(`🔄 Link checker: cookie "${oldLabel}" expired — switched to "${next.label}".`);
       console.log(`[checker] switched to cookie "${next.label}"`);
@@ -425,6 +498,7 @@ async function runJob(job) {
     })().finally(() => { rotatingPromise = null; });
     return rotatingPromise;
   }
+
 
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
@@ -524,17 +598,16 @@ async function runJob(job) {
 
       const ctxSnapshot = context;
       const cookieSnapshot = cookieRow;
-      const res = await checkUrl(ctxSnapshot, item.url);
+      const res = fastMode
+        ? await checkUrlFast(cookieHeader, item.url)
+        : await checkUrl(ctxSnapshot, item.url);
       if (res.result === 'cookies_expired') {
-        // Requeue this item so the next cookie retries it
         await supabase.from('link_check_items').update({ status: 'pending', reason: null, checked_at: null }).eq('id', item.id);
         if (useProfile) {
           aborted = true;
           abortReason = 'cookies_expired';
           break;
         }
-        // If another worker already rotated past this cookie, don't mark the
-        // newly-loaded cookie as expired — just retry on the current one.
         if (!cookieSnapshot || !cookieRow || cookieSnapshot.id !== cookieRow.id) {
           console.log('[checker] stale cookies_expired from previous cookie — ignoring, retrying with current cookie');
           continue;
@@ -552,7 +625,9 @@ async function runJob(job) {
         _item_id: item.id, _result: res.result, _reason: res.reason,
       });
 
-      if (cookieRow && res.result !== 'cookies_expired' && Date.now() - lastCookieRefreshSaveAt > COOKIE_REFRESH_SAVE_INTERVAL_MS) {
+      // Playwright mode periodically saves refreshed cookies back to DB.
+      // Fast mode (raw fetch) can't observe Set-Cookie refreshes reliably, so we skip it.
+      if (!fastMode && cookieRow && res.result !== 'cookies_expired' && Date.now() - lastCookieRefreshSaveAt > COOKIE_REFRESH_SAVE_INTERVAL_MS) {
         lastCookieRefreshSaveAt = Date.now();
         await saveRefreshedCookies(cookieRow, context, res.result);
       }
@@ -564,9 +639,10 @@ async function runJob(job) {
 
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  if (!abortReason && cookieRow) await saveRefreshedCookies(cookieRow, context, 'job complete');
-  await context.close().catch(() => {});
+  if (!fastMode && !abortReason && cookieRow && context) await saveRefreshedCookies(cookieRow, context, 'job complete');
+  if (context) await context.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
+
 
   if (abortReason === 'cookies_expired') {
     if (cookieRow) await markCookiesExpired(cookieRow.id);
