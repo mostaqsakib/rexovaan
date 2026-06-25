@@ -8270,15 +8270,36 @@ async function pollUpdates() {
       await Promise.allSettled(updates.map(async (update) => {
         try {
           if (update.my_chat_member) await handleMyChatMember(update.my_chat_member);
-          else if (update.callback_query) await handleCallback(update.callback_query, emojiMap);
+          else if (update.callback_query) {
+            const cbChatId = update.callback_query.message?.chat?.id;
+            try { await handleCallback(update.callback_query, emojiMap); }
+            finally {
+              // Callbacks frequently mutate pending_action in DB; the cached
+              // customer row would otherwise serve stale pending_action to the
+              // very next text message, breaking flows like Custom Amount,
+              // Withdraw amount, admin inputs, etc.
+              if (cbChatId != null) invalidateCustomerCache(cbChatId);
+            }
+          }
           else if (update.edited_message?.chat?.type === "group" || update.edited_message?.chat?.type === "supergroup") {
             await handleGroupMessage(update.edited_message, emojiMap, true);
           }
           else if (update.message?.chat?.type === "group" || update.message?.chat?.type === "supergroup") {
             await handleGroupMessage(update.message, emojiMap);
           }
-          else if (update.message?.photo || update.message?.video) await handleMediaMessage(update.message, emojiMap);
-          else if (update.message?.text) await handleMessage(update.message, emojiMap);
+          else if (update.message?.photo || update.message?.video) {
+            const mChatId = update.message?.chat?.id;
+            try { await handleMediaMessage(update.message, emojiMap); }
+            finally { if (mChatId != null) invalidateCustomerCache(mChatId); }
+          }
+          else if (update.message?.text) {
+            const mChatId = update.message?.chat?.id;
+            try { await handleMessage(update.message, emojiMap); }
+            finally {
+              // Text handler also clears/sets pending_action in many branches.
+              if (mChatId != null) invalidateCustomerCache(mChatId);
+            }
+          }
         } catch (err) {
           console.error("Error processing update", update.update_id, err);
         }
