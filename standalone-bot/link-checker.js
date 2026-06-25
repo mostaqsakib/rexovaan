@@ -409,7 +409,12 @@ async function runJob(job) {
     status: 'running', total: items.length, started_at: new Date().toISOString(),
   }).eq('id', job.id);
 
-  // Launch browser — persistent profile (preferred) or ephemeral + cookies (fallback)
+  // Choose runtime mode:
+  //   - fastMode (default): plain HTTPS fetch with saved Google cookies (extension-style, 10x faster).
+  //   - Playwright mode: only used when FAST_MODE=false OR when only a persistent profile (no exported cookies) is available.
+  const fastMode = FAST_MODE && !!cookieRow && !useProfile;
+  console.log(`[checker] mode = ${fastMode ? 'FAST (http fetch + cookies)' : useProfile ? 'PLAYWRIGHT (persistent profile)' : 'PLAYWRIGHT (cookies)'}`);
+
   const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
   const contextOpts = {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -418,7 +423,8 @@ async function runJob(job) {
   };
 
   let browser = null;
-  let context;
+  let context = null;
+  let cookieHeader = '';
 
   async function buildContextForCookie(row) {
     const b = await chromium.launch({ headless: true, args: launchArgs });
@@ -427,26 +433,37 @@ async function runJob(job) {
     return { browser: b, context: ctx };
   }
 
-  if (useProfile) {
-    context = await chromium.launchPersistentContext(PROFILE_DIR, {
-      headless: true,
-      args: launchArgs,
-      ...contextOpts,
-    });
-  } else {
-    const built = await buildContextForCookie(cookieRow);
-    browser = built.browser;
-    context = built.context;
+  if (fastMode) {
+    cookieHeader = buildCookieHeader(cookieRow.cookies_json);
+    if (!cookieHeader) {
+      console.warn('[checker] fast mode: built empty cookie header — falling back to Playwright');
+    }
+  }
+
+  if (!fastMode) {
+    if (useProfile) {
+      context = await chromium.launchPersistentContext(PROFILE_DIR, {
+        headless: true,
+        args: launchArgs,
+        ...contextOpts,
+      });
+    } else {
+      const built = await buildContextForCookie(cookieRow);
+      browser = built.browser;
+      context = built.context;
+    }
   }
 
   let aborted = false;
   let abortReason = '';
-  const concurrency = Math.max(1, Math.min(10, job.concurrency || 5));
-  const delay = Math.max(0, job.delay_ms || 800);
+  // In fast mode allow much higher parallelism (extension uses 10). Playwright stays at 5 for stability.
+  const concurrency = fastMode
+    ? Math.max(1, Math.min(20, job.concurrency_fast || 10))
+    : Math.max(1, Math.min(10, job.concurrency || 5));
+  const delay = fastMode ? Math.max(0, job.delay_ms ?? 200) : Math.max(0, job.delay_ms || 800);
   let lastCookieRefreshSaveAt = 0;
 
   // Rotate to the next active cookie when the current one is detected as expired.
-  // Returns true if a new cookie was loaded successfully, false if none remain.
   let rotatingPromise = null;
   async function rotateCookie(reason) {
     if (rotatingPromise) return rotatingPromise;
@@ -455,21 +472,25 @@ async function runJob(job) {
       const oldId = cookieRow?.id;
       console.log(`[checker] rotating cookie "${oldLabel}" — ${reason}`);
       if (oldId) await markCookiesExpired(oldId);
-      try { await context.close(); } catch {}
+      if (context) { try { await context.close(); } catch {} context = null; }
       if (browser) { try { await browser.close(); } catch {} browser = null; }
 
-      // Refresh queue from DB (in case admin added a fresh cookie during the job)
       const fresh = await loadActiveCookies().catch(() => []);
       const next = fresh.find(r => r.id !== oldId) || cookieQueue.shift();
       if (!next) {
         cookieRow = null;
+        cookieHeader = '';
         await notifyAdmin(`⚠️ Link checker: cookie "${oldLabel}" expired and no fallback cookies available. Add a fresh cookie in admin → Link Checker.`);
         return false;
       }
       cookieRow = next;
-      const built = await buildContextForCookie(next);
-      browser = built.browser;
-      context = built.context;
+      if (fastMode) {
+        cookieHeader = buildCookieHeader(next.cookies_json);
+      } else {
+        const built = await buildContextForCookie(next);
+        browser = built.browser;
+        context = built.context;
+      }
       lastCookieRefreshSaveAt = 0;
       await notifyAdmin(`🔄 Link checker: cookie "${oldLabel}" expired — switched to "${next.label}".`);
       console.log(`[checker] switched to cookie "${next.label}"`);
@@ -477,6 +498,7 @@ async function runJob(job) {
     })().finally(() => { rotatingPromise = null; });
     return rotatingPromise;
   }
+
 
 
   // Top-up: enqueue any newly-added available stock items that aren't already in this job.
