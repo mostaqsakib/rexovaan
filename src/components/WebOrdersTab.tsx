@@ -123,7 +123,13 @@ const WebOrdersTab = () => {
     setLoadingMore(false);
   };
 
+  const didInit = useRef(false);
   useEffect(() => {
+    if (!didInit.current) {
+      didInit.current = true;
+      void load(q, true);
+      return;
+    }
     const handle = setTimeout(() => { void load(q); }, q ? 300 : 0);
     return () => clearTimeout(handle);
   }, [q]);
