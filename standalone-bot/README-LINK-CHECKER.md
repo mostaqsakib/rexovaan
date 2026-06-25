@@ -45,3 +45,34 @@ Note: `GOOGLE_COOKIES_JSON` cannot be auto-refreshed because Railway variables a
 - The Invalid Archive tab lists every removed link grouped by product.
 - **Download** exports a `.txt` (one URL per line) so you can re-check them manually.
 - **Clear** permanently deletes those rows so you can re-add fresh stock for the same slots.
+
+---
+
+## ⚡ FAST MODE (v2 — extension-style, default ON)
+
+The link checker now defaults to a **fast HTTP-fetch mode** that replaces Playwright with plain `fetch()` plus the saved Google cookies from `google_account_cookies`. It mirrors the validated Chrome extension logic:
+
+- Markers (only these two count as INVALID):
+  - `already been used`  → "Already used"
+  - `new activation link` → "Needs new link"
+- Anything else (HTTP 200) → **valid**
+- Redirect to `accounts.google.com/signin` → **cookies_expired** (auto-rotate to next cookie row)
+
+### Speed
+- Default concurrency: **10 workers** (was 5)
+- Default delay between jobs: **200 ms** (was 800 ms)
+- ~10× faster than Playwright; no Chromium boot, no "unknown page" errors.
+
+### Env flags
+| Var | Default | Purpose |
+|---|---|---|
+| `LINK_CHECKER_FAST_MODE` | `true` | Set to `false` to force the legacy Playwright path. |
+| `FAST_TIMEOUT_MS` | `15000` | Per-request timeout. |
+| `FAST_RETRIES` | `2` | Retries on network error / 429. |
+
+### When Playwright is still used
+- `LINK_CHECKER_FAST_MODE=false`, OR
+- No exported cookies exist in `google_account_cookies` and only the persistent Chrome profile is available.
+
+### Cookies
+Use the same admin → Link Checker → Google Cookies flow (Cookie-Editor JSON export). Fast mode reads the same rows; nothing to change.
