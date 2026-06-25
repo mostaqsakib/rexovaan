@@ -179,8 +179,11 @@ const WebOrdersTab = () => {
             placeholder="Search by product, customer, chat ID, order ID…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="pl-9"
+            className="pl-9 pr-9"
           />
+          {searching && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
         <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
           {(['all', 'web', 'bot'] as const).map((s) => (
