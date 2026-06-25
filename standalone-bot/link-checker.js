@@ -598,17 +598,16 @@ async function runJob(job) {
 
       const ctxSnapshot = context;
       const cookieSnapshot = cookieRow;
-      const res = await checkUrl(ctxSnapshot, item.url);
+      const res = fastMode
+        ? await checkUrlFast(cookieHeader, item.url)
+        : await checkUrl(ctxSnapshot, item.url);
       if (res.result === 'cookies_expired') {
-        // Requeue this item so the next cookie retries it
         await supabase.from('link_check_items').update({ status: 'pending', reason: null, checked_at: null }).eq('id', item.id);
         if (useProfile) {
           aborted = true;
           abortReason = 'cookies_expired';
           break;
         }
-        // If another worker already rotated past this cookie, don't mark the
-        // newly-loaded cookie as expired — just retry on the current one.
         if (!cookieSnapshot || !cookieRow || cookieSnapshot.id !== cookieRow.id) {
           console.log('[checker] stale cookies_expired from previous cookie — ignoring, retrying with current cookie');
           continue;
@@ -626,7 +625,9 @@ async function runJob(job) {
         _item_id: item.id, _result: res.result, _reason: res.reason,
       });
 
-      if (cookieRow && res.result !== 'cookies_expired' && Date.now() - lastCookieRefreshSaveAt > COOKIE_REFRESH_SAVE_INTERVAL_MS) {
+      // Playwright mode periodically saves refreshed cookies back to DB.
+      // Fast mode (raw fetch) can't observe Set-Cookie refreshes reliably, so we skip it.
+      if (!fastMode && cookieRow && res.result !== 'cookies_expired' && Date.now() - lastCookieRefreshSaveAt > COOKIE_REFRESH_SAVE_INTERVAL_MS) {
         lastCookieRefreshSaveAt = Date.now();
         await saveRefreshedCookies(cookieRow, context, res.result);
       }
@@ -638,9 +639,10 @@ async function runJob(job) {
 
 
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
-  if (!abortReason && cookieRow) await saveRefreshedCookies(cookieRow, context, 'job complete');
-  await context.close().catch(() => {});
+  if (!fastMode && !abortReason && cookieRow && context) await saveRefreshedCookies(cookieRow, context, 'job complete');
+  if (context) await context.close().catch(() => {});
   if (browser) await browser.close().catch(() => {});
+
 
   if (abortReason === 'cookies_expired') {
     if (cookieRow) await markCookiesExpired(cookieRow.id);
