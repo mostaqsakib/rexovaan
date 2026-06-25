@@ -52,6 +52,7 @@ const fmtDate = (s: string) => {
 const WebOrdersTab = () => {
   const [orders, setOrders] = useState<WebOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
