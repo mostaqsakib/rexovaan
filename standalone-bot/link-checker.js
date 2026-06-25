@@ -171,7 +171,92 @@ async function saveRefreshedCookies(cookieRow, context, reason = 'refresh') {
   }
 }
 
+// ============================================================================
+// FAST MODE — extension-style HTTP fetch with saved Google cookies.
+// Only 2 markers (matching the Chrome extension that the operator validated):
+//   - "already been used"   → invalid (used)
+//   - "new activation link" → invalid (needs new link)
+// Any other 200 OK page  → valid.
+// Redirect to accounts.google.com/signin → cookies_expired.
+// ============================================================================
+const INVALID_MARKERS_FAST = [
+  { needle: 'already been used', reason: 'Already used' },
+  { needle: 'new activation link', reason: 'Needs new link' },
+];
+
+const FAST_MODE = process.env.LINK_CHECKER_FAST_MODE !== 'false'; // default ON
+const FAST_TIMEOUT_MS = Number(process.env.FAST_TIMEOUT_MS || 15000);
+const FAST_RETRIES = Number(process.env.FAST_RETRIES || 2);
+
+function buildCookieHeader(cookiesJson) {
+  const arr = normalizeCookies(cookiesJson);
+  // Use only google.com cookies (one.google.com / serviceactivation.google.com share base)
+  const filtered = arr.filter(c => /(^|\.)google\.com$/i.test(c.domain));
+  const seen = new Set();
+  const parts = [];
+  for (const c of filtered) {
+    if (seen.has(c.name)) continue;
+    seen.add(c.name);
+    parts.push(`${c.name}=${c.value}`);
+  }
+  return parts.join('; ');
+}
+
+async function checkUrlFast(cookieHeader, url) {
+  for (let attempt = 1; attempt <= FAST_RETRIES + 1; attempt++) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), FAST_TIMEOUT_MS);
+    try {
+      const resp = await fetch(url, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+      });
+      clearTimeout(t);
+
+      const finalUrl = resp.url || url;
+      if (/accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(finalUrl)) {
+        return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
+      }
+
+      if (resp.status === 429 && attempt <= FAST_RETRIES) {
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      if (!resp.ok) {
+        return { result: 'error', reason: `HTTP ${resp.status}` };
+      }
+
+      const body = (await resp.text()).toLowerCase();
+      for (const m of INVALID_MARKERS_FAST) {
+        if (body.includes(m.needle)) return { result: 'invalid', reason: m.reason };
+      }
+      return { result: 'valid', reason: '' };
+    } catch (err) {
+      clearTimeout(t);
+      if (attempt <= FAST_RETRIES) {
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
+      }
+      if (err.name === 'AbortError') return { result: 'error', reason: 'Timeout' };
+      return { result: 'error', reason: (err.message || 'Network Error').slice(0, 120) };
+    }
+  }
+  return { result: 'error', reason: 'Retry exhausted' };
+}
+
+// ============================================================================
+// LEGACY PLAYWRIGHT MODE (only used when FAST_MODE=false OR persistent profile)
+// ============================================================================
 const INVALID_MARKERS = [
+  'already been used',
+  'new activation link',
   'already in use',
   'already been redeemed',
   'already redeemed',
@@ -186,49 +271,28 @@ const INVALID_MARKERS = [
 ];
 
 const VALID_MARKERS = [
-  'activate plan',
-  'get started',
-  'accept and continue',
-  'redeem',
-  'start your',
-  'try google',
-  'claim offer',
-  'claim your',
-  'one ai premium',
-  'google ai pro',
+  'activate plan', 'get started', 'accept and continue', 'redeem',
+  'start your', 'try google', 'claim offer', 'claim your',
+  'one ai premium', 'google ai pro',
 ];
 
-// Check a single URL. Returns { result: 'valid'|'invalid'|'error'|'cookies_expired', reason }
-// IMPORTANT: invalid pages on Google often ALSO contain valid-looking text like "Activate plan"
-// in the header. So we must:
-//   1. Always check invalid markers first (they win over valid markers).
-//   2. Never return 'valid' early — wait for the page to fully settle so any late-loading
-//      "already in use" text has a chance to appear before we declare valid.
 async function checkUrl(context, url) {
   const page = await context.newPage();
   try {
     await page.route('**/*', (route) => {
       const t = route.request().resourceType();
-      if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') {
-        return route.abort();
-      }
+      if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') return route.abort();
       return route.continue();
     });
-
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-
     const isSignIn = (u) => /accounts\.google\.com\/(signin|ServiceLogin|v3\/signin)/i.test(u);
-    if (isSignIn(page.url())) {
-      return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
-    }
+    if (isSignIn(page.url())) return { result: 'cookies_expired', reason: 'redirected to Google sign-in' };
 
     const scan = async () => {
       const t = (await page.evaluate(() => document.body?.innerText || '').catch(() => '')).toLowerCase();
       for (const m of INVALID_MARKERS) if (t.includes(m)) return { text: t, hit: { result: 'invalid', reason: m } };
       return { text: t, hit: null };
     };
-
-    // Phase 1 (up to 3.5s): return immediately if ANY invalid marker shows up.
     const invalidDeadline = Date.now() + 3500;
     let lastText = '';
     while (Date.now() < invalidDeadline) {
@@ -238,23 +302,10 @@ async function checkUrl(context, url) {
       if (hit) return hit;
       await new Promise(r => setTimeout(r, 250));
     }
-
-    // Phase 2: short settle so any lazy "already in use" text loads.
     try { await page.waitForLoadState('networkidle', { timeout: 3000 }); } catch {}
-    await new Promise(r => setTimeout(r, 600)); // extra settle
-
-    // Final invalid re-check after settle.
-    {
-      const { text, hit } = await scan();
-      lastText = text;
-      if (hit) return hit;
-    }
-
-    // Only NOW consider valid markers.
-    for (const m of VALID_MARKERS) {
-      if (lastText.includes(m)) return { result: 'valid', reason: m };
-    }
-
+    await new Promise(r => setTimeout(r, 600));
+    { const { text, hit } = await scan(); lastText = text; if (hit) return hit; }
+    for (const m of VALID_MARKERS) if (lastText.includes(m)) return { result: 'valid', reason: m };
     return { result: 'error', reason: `unknown page (status ${resp?.status() || '?'}, len ${lastText.length})` };
   } catch (e) {
     return { result: 'error', reason: e.message.slice(0, 200) };
@@ -262,6 +313,7 @@ async function checkUrl(context, url) {
     await page.close().catch(() => {});
   }
 }
+
 
 
 async function runJob(job) {
