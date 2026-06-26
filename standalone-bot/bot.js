@@ -1337,6 +1337,7 @@ async function signStockFileUrl(filePath, fileName) {
     console.error("signStockFileUrl error:", e?.message);
     return null;
   }
+}
 
 function answerCallbackQuery(callbackQueryId, text) {
   tgFetch("answerCallbackQuery", { callback_query_id: callbackQueryId, text }).catch(() => {});
