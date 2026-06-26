@@ -9,4 +9,6 @@ project_id = "eygkdpfjrjwwbiackfpr"
     verify_jwt = false
   [functions.bot-reseller-api-manage]
     verify_jwt = false
+  [functions.stock-broadcast]
+    verify_jwt = false
 
