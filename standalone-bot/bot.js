@@ -1700,7 +1700,19 @@ const BULK_DOWNLOAD_THRESHOLD = 20;
 
 async function deliverOrderItems(chatId, product, orderDetails, orderId, headerInfo, emojiMap) {
   const qty = orderDetails.length;
-  const detailKeys = Object.keys(orderDetails[0] || {});
+
+  // Split file items from text items
+  const fileItems = [];
+  const textItems = [];
+  for (const item of orderDetails) {
+    if (item && typeof item === 'object' && typeof item._file_path === 'string') {
+      fileItems.push(item);
+    } else {
+      textItems.push(item);
+    }
+  }
+
+  const detailKeys = Object.keys(textItems[0] || {});
   const isMultiCol = detailKeys.length > 1;
   // Check if product has only link-type data (single meaningful column)
   const isSingleValue = !isMultiCol || detailKeys.length === 1;
