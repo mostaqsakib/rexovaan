@@ -1315,6 +1315,29 @@ async function sendDocumentBuffer(chatId, fileBuffer, filename, caption, replyMa
   if (!res.ok) console.error("sendDocument failed:", await res.text());
 }
 
+async function sendDocumentByUrl(chatId, url, caption, replyMarkup) {
+  const body = { chat_id: chatId, document: url, parse_mode: "HTML" };
+  if (caption) body.caption = caption;
+  if (replyMarkup) body.reply_markup = replyMarkup;
+  return tgFetch("sendDocument", body);
+}
+
+// Resolve a signed download URL for a stock file item (uses Supabase service role).
+async function signStockFileUrl(filePath, fileName) {
+  try {
+    const { data, error } = await supabase.storage
+      .from("product-files")
+      .createSignedUrl(filePath, 600, { download: fileName || true });
+    if (error || !data?.signedUrl) {
+      console.error("signStockFileUrl failed:", error?.message);
+      return null;
+    }
+    return data.signedUrl;
+  } catch (e) {
+    console.error("signStockFileUrl error:", e?.message);
+    return null;
+  }
+
 function answerCallbackQuery(callbackQueryId, text) {
   tgFetch("answerCallbackQuery", { callback_query_id: callbackQueryId, text }).catch(() => {});
 }
