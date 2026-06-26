@@ -1,12 +1,17 @@
 project_id = "eygkdpfjrjwwbiackfpr"
 
-[functions]
-  [functions.auth-email-hook]
-    verify_jwt = false
-  [functions.bootstrap-email-cron]
-    verify_jwt = false
-  [functions.bot-bind-telegram-confirm]
-    verify_jwt = false
-  [functions.bot-reseller-api-manage]
-    verify_jwt = false
+[functions.auth-email-hook]
+verify_jwt = false
+
+[functions.bootstrap-email-cron]
+verify_jwt = false
+
+[functions.bot-bind-telegram-confirm]
+verify_jwt = false
+
+[functions.bot-reseller-api-manage]
+verify_jwt = false
+
+[functions.stock-broadcast]
+verify_jwt = false
 
