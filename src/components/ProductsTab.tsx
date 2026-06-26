@@ -554,7 +554,18 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         .select('id', { count: 'exact', head: true })
         .eq('product_id', product.id)
         .eq('status', 'available');
-      await supabase.from('bot_products').update({ stock_source: 'internal' }).eq('id', product.id);
+      const { data: productRow } = await supabase
+        .from('bot_products')
+        .select('last_known_stock')
+        .eq('id', product.id)
+        .maybeSingle();
+      const previousKnownStock = Math.max(0, Number(productRow?.last_known_stock || 0));
+      const availableTotal = Math.max(0, Number(newTotalStock || 0));
+      const fallbackKnownStock = Math.max(0, availableTotal - success);
+      await supabase
+        .from('bot_products')
+        .update({ stock_source: 'internal', last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+        .eq('id', product.id);
       const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
         body: { productId: product.id, addedCount: success },
       });
@@ -732,7 +743,18 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         .select('id', { count: 'exact', head: true })
         .eq('product_id', product.id)
         .eq('status', 'available');
-      await supabase.from('bot_products').update({ stock_source: 'internal' }).eq('id', product.id);
+      const { data: productRow } = await supabase
+        .from('bot_products')
+        .select('last_known_stock')
+        .eq('id', product.id)
+        .maybeSingle();
+      const previousKnownStock = Math.max(0, Number(productRow?.last_known_stock || 0));
+      const availableTotal = Math.max(0, Number(newTotalStock || 0));
+      const fallbackKnownStock = Math.max(0, availableTotal - insertedCount);
+      await supabase
+        .from('bot_products')
+        .update({ stock_source: 'internal', last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+        .eq('id', product.id);
       const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
         body: { productId: product.id, addedCount: insertedCount, stockItemIds: (insertedRows || []).map((row) => row.id) },
       });
