@@ -848,7 +848,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   id={`stock-file-${product.id}`}
                   type="file"
@@ -861,20 +861,48 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     e.target.value = '';
                   }}
                 />
+                <input
+                  id={`stock-upload-${product.id}`}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) await handleUploadFiles(files);
+                    e.target.value = '';
+                  }}
+                />
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 min-w-[120px]"
                   onClick={() => document.getElementById(`stock-file-${product.id}`)?.click()}
-                  disabled={saving}
+                  disabled={saving || uploadingFiles}
                 >
-                  📄 Upload .txt
+                  📄 Load .txt
                 </Button>
-                <Button className="flex-1" onClick={handleAdd} disabled={saving || !value.trim()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 min-w-[140px] gap-1"
+                  onClick={() => document.getElementById(`stock-upload-${product.id}`)?.click()}
+                  disabled={saving || uploadingFiles}
+                  title="Upload files as stock (each file = 1 stock unit, max 20MB)"
+                >
+                  <Upload className="h-4 w-4" />
+                  {uploadingFiles && uploadProgress
+                    ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
+                    : 'Upload files as stock'}
+                </Button>
+                <Button className="flex-1 min-w-[120px]" onClick={handleAdd} disabled={saving || uploadingFiles || !value.trim()}>
                   {saving ? 'Adding...' : 'Add Stock'}
                 </Button>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Tip: "Upload files as stock" — each file (max 20MB, e.g. .md, .pdf, .zip) becomes 1 stock unit. Customers get the file as download.
+              </p>
             </div>
+
 
             <div className="flex min-h-[260px] flex-col rounded-md border border-border overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
