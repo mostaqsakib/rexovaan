@@ -375,6 +375,13 @@ export type Database = {
             referencedRelation: "bot_products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "bot_deposits_pending_product_id_fkey"
+            columns: ["pending_product_id"]
+            isOneToOne: false
+            referencedRelation: "bot_products_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       bot_flash_sales: {
@@ -450,6 +457,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "bot_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_keyword_triggers_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "bot_products_public"
             referencedColumns: ["id"]
           },
         ]
@@ -577,6 +591,13 @@ export type Database = {
             referencedRelation: "bot_products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "bot_orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "bot_products_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       bot_payment_methods: {
@@ -652,10 +673,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "bot_product_pricing_product_fk"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "bot_products_public"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bot_product_pricing_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "bot_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_product_pricing_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "bot_products_public"
             referencedColumns: ["id"]
           },
         ]
@@ -1493,6 +1528,13 @@ export type Database = {
             referencedRelation: "bot_products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "link_check_jobs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "bot_products_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       site_announcements: {
@@ -1701,7 +1743,93 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      bot_flash_sales_public: {
+        Row: {
+          created_at: string | null
+          ends_at: string | null
+          id: string | null
+          is_active: boolean | null
+          product_id: string | null
+          sale_price: number | null
+          starts_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          ends_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          product_id?: string | null
+          sale_price?: number | null
+          starts_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          ends_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          product_id?: string | null
+          sale_price?: number | null
+          starts_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      bot_products_public: {
+        Row: {
+          created_at: string | null
+          currency: string | null
+          custom_emoji_id: string | null
+          customer_input_fields: Json | null
+          delivery_instruction: string | null
+          delivery_media: Json | null
+          description: string | null
+          id: string | null
+          is_active: boolean | null
+          is_manual_delivery: boolean | null
+          last_known_stock: number | null
+          name: string | null
+          price: number | null
+          short_code: string | null
+          sort_order: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          currency?: string | null
+          custom_emoji_id?: string | null
+          customer_input_fields?: Json | null
+          delivery_instruction?: string | null
+          delivery_media?: Json | null
+          description?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_manual_delivery?: boolean | null
+          last_known_stock?: number | null
+          name?: string | null
+          price?: number | null
+          short_code?: string | null
+          sort_order?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          currency?: string | null
+          custom_emoji_id?: string | null
+          customer_input_fields?: Json | null
+          delivery_instruction?: string | null
+          delivery_media?: Json | null
+          description?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          is_manual_delivery?: boolean | null
+          last_known_stock?: number | null
+          name?: string | null
+          price?: number | null
+          short_code?: string | null
+          sort_order?: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       admin_search_orders: {
