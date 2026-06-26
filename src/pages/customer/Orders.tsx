@@ -245,6 +245,27 @@ export default function Orders() {
                     </Button>
                   </div>
                 </div>
+                {details.some(isFileItem) && (
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-medium text-muted-foreground">Files</div>
+                    <div className="flex flex-col gap-1.5">
+                      {details.map((d, i) => isFileItem(d) ? (
+                        <button
+                          key={i}
+                          onClick={() => downloadOrderFile(o.id, i, d._file_name)}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-left text-xs hover:border-primary hover:bg-primary/5 transition"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-4 w-4 shrink-0 text-primary" />
+                            <span className="truncate font-medium">{d._file_name}</span>
+                            {d._size ? <span className="text-muted-foreground shrink-0">({(Number(d._size) / 1024).toFixed(1)} KB)</span> : null}
+                          </span>
+                          <Download className="h-3.5 w-3.5 text-primary shrink-0" />
+                        </button>
+                      ) : null)}
+                    </div>
+                  </div>
+                )}
                 <pre className="bg-background/60 rounded-lg p-3 text-xs font-mono whitespace-pre-wrap break-all max-h-64 overflow-auto">{txt || '(no details)'}</pre>
                 {products[o.product_id] && (
                   <DeliveryInstructions
