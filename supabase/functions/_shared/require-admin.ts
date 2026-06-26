@@ -20,6 +20,10 @@ export async function requireAdmin(
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (!token) return json({ error: "Unauthorized" }, 401);
 
+  // Internal trusted calls (bot, edge-to-edge) use service_role — allow bypass.
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (serviceRoleKey && token === serviceRoleKey) return null;
+
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
