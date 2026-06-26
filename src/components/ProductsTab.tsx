@@ -740,8 +740,20 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     setSaving(false);
   };
 
+  const cleanupStorageFiles = async (itemIds: string[]) => {
+    const targets = items.filter((it) => itemIds.includes(it.id));
+    const paths = targets
+      .map((it) => (it.data as Record<string, any> | null)?._file_path)
+      .filter((p): p is string => typeof p === 'string' && p.length > 0);
+    if (paths.length > 0) {
+      try { await supabase.storage.from('product-files').remove(paths); }
+      catch (e) { console.warn('Storage cleanup failed:', e); }
+    }
+  };
+
   const handleRemove = async (itemId: string) => {
     setRemovingId(itemId);
+    await cleanupStorageFiles([itemId]);
     const { error } = await supabase.from('bot_product_stock_items').delete().eq('id', itemId);
     if (error) {
       toast.error('Failed to remove stock');
@@ -761,6 +773,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     let removed = 0;
     for (let i = 0; i < selectedIds.length; i += CHUNK) {
       const chunk = selectedIds.slice(i, i + CHUNK);
+      await cleanupStorageFiles(chunk);
       const { error } = await supabase
         .from('bot_product_stock_items')
         .delete()
@@ -782,6 +795,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     onStockChanged?.(product.id);
     setBulkRemoving(false);
   };
+
 
   const availableCount = availableStockCount;
   const filteredItems = useMemo(
