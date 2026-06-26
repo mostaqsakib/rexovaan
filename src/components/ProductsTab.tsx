@@ -1011,7 +1011,11 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                 ) : filteredItems.length === 0 ? (
                   <div className="p-4 text-sm text-muted-foreground">No {statusFilter} stock found.</div>
                 ) : filteredItems.map((item) => {
-                  const text = Object.values(item.data || {}).join(' | ');
+                  const data = (item.data || {}) as Record<string, any>;
+                  const isFile = !!data._file_path;
+                  const text = isFile
+                    ? `${data._file_name || 'file'}`
+                    : Object.values(data).join(' | ');
                   const isAvailable = item.status === 'available';
                   return (
                     <div key={item.id} className="grid grid-cols-[28px_1fr_86px_68px] gap-2 border-b border-border/60 px-3 py-2 text-xs last:border-b-0">
@@ -1023,7 +1027,15 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                         }}
                         aria-label={`Select ${text}`}
                       />
-                      <code className="break-all text-foreground">{text}</code>
+                      {isFile ? (
+                        <span className="flex items-center gap-1.5 min-w-0 text-foreground">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="truncate font-medium">{data._file_name}</span>
+                          <span className="text-muted-foreground shrink-0">({formatBytes(Number(data._size) || 0)})</span>
+                        </span>
+                      ) : (
+                        <code className="break-all text-foreground">{text}</code>
+                      )}
                       <span className={isAvailable ? 'text-success' : 'text-muted-foreground'}>{item.status}</span>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
