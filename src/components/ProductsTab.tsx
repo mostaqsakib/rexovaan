@@ -494,6 +494,74 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const [totalStockCount, setTotalStockCount] = useState(0);
   const [availableStockCount, setAvailableStockCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const formatBytes = (b: number) => {
+    if (!b) return '0 B';
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+    return `${(b / 1024 / 1024).toFixed(2)} MB`;
+  };
+
+  const handleUploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const MAX = 20 * 1024 * 1024;
+    const tooBig = files.find((f) => f.size > MAX);
+    if (tooBig) {
+      toast.error(`"${tooBig.name}" is over 20MB. Each file must be ≤ 20MB.`);
+      return;
+    }
+    setUploadingFiles(true);
+    setUploadProgress({ done: 0, total: files.length });
+    let success = 0;
+    let failed = 0;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      try {
+        const safe = f.name.replace(/[^\w.\-]+/g, '_').slice(0, 80);
+        const path = `${product.id}/${crypto.randomUUID()}-${safe}`;
+        const { error: upErr } = await supabase.storage
+          .from('product-files')
+          .upload(path, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+        if (upErr) throw upErr;
+        const data = {
+          _file_path: path,
+          _file_name: f.name,
+          _size: f.size,
+          _mime: f.type || 'application/octet-stream',
+        };
+        const { error: insErr } = await supabase
+          .from('bot_product_stock_items')
+          .insert({ product_id: product.id, data });
+        if (insErr) {
+          // best-effort cleanup
+          await supabase.storage.from('product-files').remove([path]);
+          throw insErr;
+        }
+        success++;
+      } catch (err) {
+        console.error('Upload failed for', f.name, err);
+        failed++;
+      }
+      setUploadProgress({ done: i + 1, total: files.length });
+    }
+    setUploadingFiles(false);
+    setUploadProgress(null);
+    if (success > 0) {
+      const { count: newTotalStock } = await supabase
+        .from('bot_product_stock_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', product.id)
+        .eq('status', 'available');
+      await supabase.from('bot_products').update({ stock_source: 'internal', last_known_stock: newTotalStock || 0 }).eq('id', product.id);
+      toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
+      void loadStock('available');
+      onStockChanged?.(product.id);
+    } else {
+      toast.error('All uploads failed');
+    }
+  };
 
   const ingestFiles = async (files: File[]) => {
     const txtFiles = files.filter((f) => f.type === 'text/plain' || /\.txt$/i.test(f.name));
