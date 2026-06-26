@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes } from 'lucide-react';
+import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes, Paperclip, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -494,6 +494,74 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const [totalStockCount, setTotalStockCount] = useState(0);
   const [availableStockCount, setAvailableStockCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const formatBytes = (b: number) => {
+    if (!b) return '0 B';
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+    return `${(b / 1024 / 1024).toFixed(2)} MB`;
+  };
+
+  const handleUploadFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const MAX = 20 * 1024 * 1024;
+    const tooBig = files.find((f) => f.size > MAX);
+    if (tooBig) {
+      toast.error(`"${tooBig.name}" is over 20MB. Each file must be ≤ 20MB.`);
+      return;
+    }
+    setUploadingFiles(true);
+    setUploadProgress({ done: 0, total: files.length });
+    let success = 0;
+    let failed = 0;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      try {
+        const safe = f.name.replace(/[^\w.\-]+/g, '_').slice(0, 80);
+        const path = `${product.id}/${crypto.randomUUID()}-${safe}`;
+        const { error: upErr } = await supabase.storage
+          .from('product-files')
+          .upload(path, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+        if (upErr) throw upErr;
+        const data = {
+          _file_path: path,
+          _file_name: f.name,
+          _size: f.size,
+          _mime: f.type || 'application/octet-stream',
+        };
+        const { error: insErr } = await supabase
+          .from('bot_product_stock_items')
+          .insert({ product_id: product.id, data });
+        if (insErr) {
+          // best-effort cleanup
+          await supabase.storage.from('product-files').remove([path]);
+          throw insErr;
+        }
+        success++;
+      } catch (err) {
+        console.error('Upload failed for', f.name, err);
+        failed++;
+      }
+      setUploadProgress({ done: i + 1, total: files.length });
+    }
+    setUploadingFiles(false);
+    setUploadProgress(null);
+    if (success > 0) {
+      const { count: newTotalStock } = await supabase
+        .from('bot_product_stock_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', product.id)
+        .eq('status', 'available');
+      await supabase.from('bot_products').update({ stock_source: 'internal', last_known_stock: newTotalStock || 0 }).eq('id', product.id);
+      toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
+      void loadStock('available');
+      onStockChanged?.(product.id);
+    } else {
+      toast.error('All uploads failed');
+    }
+  };
 
   const ingestFiles = async (files: File[]) => {
     const txtFiles = files.filter((f) => f.type === 'text/plain' || /\.txt$/i.test(f.name));
@@ -672,8 +740,20 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     setSaving(false);
   };
 
+  const cleanupStorageFiles = async (itemIds: string[]) => {
+    const targets = items.filter((it) => itemIds.includes(it.id));
+    const paths = targets
+      .map((it) => (it.data as Record<string, any> | null)?._file_path)
+      .filter((p): p is string => typeof p === 'string' && p.length > 0);
+    if (paths.length > 0) {
+      try { await supabase.storage.from('product-files').remove(paths); }
+      catch (e) { console.warn('Storage cleanup failed:', e); }
+    }
+  };
+
   const handleRemove = async (itemId: string) => {
     setRemovingId(itemId);
+    await cleanupStorageFiles([itemId]);
     const { error } = await supabase.from('bot_product_stock_items').delete().eq('id', itemId);
     if (error) {
       toast.error('Failed to remove stock');
@@ -693,6 +773,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     let removed = 0;
     for (let i = 0; i < selectedIds.length; i += CHUNK) {
       const chunk = selectedIds.slice(i, i + CHUNK);
+      await cleanupStorageFiles(chunk);
       const { error } = await supabase
         .from('bot_product_stock_items')
         .delete()
@@ -714,6 +795,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     onStockChanged?.(product.id);
     setBulkRemoving(false);
   };
+
 
   const availableCount = availableStockCount;
   const filteredItems = useMemo(
@@ -780,7 +862,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   id={`stock-file-${product.id}`}
                   type="file"
@@ -793,20 +875,48 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     e.target.value = '';
                   }}
                 />
+                <input
+                  id={`stock-upload-${product.id}`}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) await handleUploadFiles(files);
+                    e.target.value = '';
+                  }}
+                />
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 min-w-[120px]"
                   onClick={() => document.getElementById(`stock-file-${product.id}`)?.click()}
-                  disabled={saving}
+                  disabled={saving || uploadingFiles}
                 >
-                  📄 Upload .txt
+                  📄 Load .txt
                 </Button>
-                <Button className="flex-1" onClick={handleAdd} disabled={saving || !value.trim()}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 min-w-[140px] gap-1"
+                  onClick={() => document.getElementById(`stock-upload-${product.id}`)?.click()}
+                  disabled={saving || uploadingFiles}
+                  title="Upload files as stock (each file = 1 stock unit, max 20MB)"
+                >
+                  <Upload className="h-4 w-4" />
+                  {uploadingFiles && uploadProgress
+                    ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
+                    : 'Upload files as stock'}
+                </Button>
+                <Button className="flex-1 min-w-[120px]" onClick={handleAdd} disabled={saving || uploadingFiles || !value.trim()}>
                   {saving ? 'Adding...' : 'Add Stock'}
                 </Button>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Tip: "Upload files as stock" — each file (max 20MB, e.g. .md, .pdf, .zip) becomes 1 stock unit. Customers get the file as download.
+              </p>
             </div>
+
 
             <div className="flex min-h-[260px] flex-col rounded-md border border-border overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
@@ -915,7 +1025,11 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                 ) : filteredItems.length === 0 ? (
                   <div className="p-4 text-sm text-muted-foreground">No {statusFilter} stock found.</div>
                 ) : filteredItems.map((item) => {
-                  const text = Object.values(item.data || {}).join(' | ');
+                  const data = (item.data || {}) as Record<string, any>;
+                  const isFile = !!data._file_path;
+                  const text = isFile
+                    ? `${data._file_name || 'file'}`
+                    : Object.values(data).join(' | ');
                   const isAvailable = item.status === 'available';
                   return (
                     <div key={item.id} className="grid grid-cols-[28px_1fr_86px_68px] gap-2 border-b border-border/60 px-3 py-2 text-xs last:border-b-0">
@@ -927,7 +1041,15 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                         }}
                         aria-label={`Select ${text}`}
                       />
-                      <code className="break-all text-foreground">{text}</code>
+                      {isFile ? (
+                        <span className="flex items-center gap-1.5 min-w-0 text-foreground">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="truncate font-medium">{data._file_name}</span>
+                          <span className="text-muted-foreground shrink-0">({formatBytes(Number(data._size) || 0)})</span>
+                        </span>
+                      ) : (
+                        <code className="break-all text-foreground">{text}</code>
+                      )}
                       <span className={isAvailable ? 'text-success' : 'text-muted-foreground'}>{item.status}</span>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

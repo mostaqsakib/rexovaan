@@ -1315,6 +1315,29 @@ async function sendDocumentBuffer(chatId, fileBuffer, filename, caption, replyMa
   if (!res.ok) console.error("sendDocument failed:", await res.text());
 }
 
+async function sendDocumentByUrl(chatId, url, caption, replyMarkup) {
+  const body = { chat_id: chatId, document: url, parse_mode: "HTML" };
+  if (caption) body.caption = caption;
+  if (replyMarkup) body.reply_markup = replyMarkup;
+  return tgFetch("sendDocument", body);
+}
+
+// Resolve a signed download URL for a stock file item (uses Supabase service role).
+async function signStockFileUrl(filePath, fileName) {
+  try {
+    const { data, error } = await supabase.storage
+      .from("product-files")
+      .createSignedUrl(filePath, 600, { download: fileName || true });
+    if (error || !data?.signedUrl) {
+      console.error("signStockFileUrl failed:", error?.message);
+      return null;
+    }
+    return data.signedUrl;
+  } catch (e) {
+    console.error("signStockFileUrl error:", e?.message);
+    return null;
+  }
+
 function answerCallbackQuery(callbackQueryId, text) {
   tgFetch("answerCallbackQuery", { callback_query_id: callbackQueryId, text }).catch(() => {});
 }
@@ -1677,7 +1700,19 @@ const BULK_DOWNLOAD_THRESHOLD = 20;
 
 async function deliverOrderItems(chatId, product, orderDetails, orderId, headerInfo, emojiMap) {
   const qty = orderDetails.length;
-  const detailKeys = Object.keys(orderDetails[0] || {});
+
+  // Split file items from text items
+  const fileItems = [];
+  const textItems = [];
+  for (const item of orderDetails) {
+    if (item && typeof item === 'object' && typeof item._file_path === 'string') {
+      fileItems.push(item);
+    } else {
+      textItems.push(item);
+    }
+  }
+
+  const detailKeys = Object.keys(textItems[0] || {});
   const isMultiCol = detailKeys.length > 1;
   // Check if product has only link-type data (single meaningful column)
   const isSingleValue = !isMultiCol || detailKeys.length === 1;
@@ -1710,34 +1745,58 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
     : "📦";
   const productHeader = `${productEmojiTag} <b>${product.name} × ${qty}</b>`;
 
-  // Build all formatted items first
-  const formattedItems = orderDetails.map((item, i) => formatItem(item, i));
+  // Build all formatted items first (text items only)
+  const formattedItems = textItems.map((item, i) => formatItem(item, i));
 
-  // Try to fit everything in one message with header
-  const singleMsg = headerInfo + `\n${productHeader}\n\n` + formattedItems.join("\n") + "\n";
-  if (singleMsg.length <= MAX_MSG_LENGTH) {
-    await trackSend(chatId, singleMsg);
-  } else {
-    // Send header separately, then dynamically chunk items to fit within limit
-    await trackSend(chatId, headerInfo);
-    let itemNum = 0;
-    while (itemNum < formattedItems.length) {
-      let msg = `${productEmojiTag} <b>${product.name} (${itemNum + 1}-`;
-      const headerTemplate = msg;
-      let batchEnd = itemNum;
-      let body = "";
-      while (batchEnd < formattedItems.length) {
-        const candidate = body + formattedItems[batchEnd] + "\n";
-        const fullMsg = headerTemplate + `${batchEnd + 1} of ${qty}):</b>\n\n` + candidate;
-        if (fullMsg.length > MAX_MSG_LENGTH && batchEnd > itemNum) break;
-        body = candidate;
-        batchEnd++;
+  if (textItems.length > 0) {
+    // Try to fit everything in one message with header
+    const singleMsg = headerInfo + `\n${productHeader}\n\n` + formattedItems.join("\n") + "\n";
+    if (singleMsg.length <= MAX_MSG_LENGTH) {
+      await trackSend(chatId, singleMsg);
+    } else {
+      // Send header separately, then dynamically chunk items to fit within limit
+      await trackSend(chatId, headerInfo);
+      let itemNum = 0;
+      while (itemNum < formattedItems.length) {
+        let msg = `${productEmojiTag} <b>${product.name} (${itemNum + 1}-`;
+        const headerTemplate = msg;
+        let batchEnd = itemNum;
+        let body = "";
+        while (batchEnd < formattedItems.length) {
+          const candidate = body + formattedItems[batchEnd] + "\n";
+          const fullMsg = headerTemplate + `${batchEnd + 1} of ${textItems.length}):</b>\n\n` + candidate;
+          if (fullMsg.length > MAX_MSG_LENGTH && batchEnd > itemNum) break;
+          body = candidate;
+          batchEnd++;
+        }
+        msg = `${productEmojiTag} <b>${product.name} (${itemNum + 1}-${batchEnd} of ${textItems.length}):</b>\n\n` + body;
+        await trackSend(chatId, msg);
+        itemNum = batchEnd;
       }
-      msg = `${productEmojiTag} <b>${product.name} (${itemNum + 1}-${batchEnd} of ${qty}):</b>\n\n` + body;
-      await trackSend(chatId, msg);
-      itemNum = batchEnd;
+    }
+  } else if (fileItems.length > 0) {
+    // File-only delivery: send a single header so user knows what's coming
+    await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending ${fileItems.length} file(s)…`);
+  }
+
+  // Deliver file items as Telegram documents (signed URLs)
+  for (let i = 0; i < fileItems.length; i++) {
+    const it = fileItems[i];
+    const url = await signStockFileUrl(it._file_path, it._file_name);
+    if (!url) {
+      await trackSend(chatId, `⚠️ Could not prepare file: <code>${it._file_name || 'file'}</code>. Please contact support.`);
+      continue;
+    }
+    try {
+      const cap = fileItems.length > 1 ? `${i + 1} / ${fileItems.length}` : undefined;
+      const res = await sendDocumentByUrl(chatId, url, cap);
+      if (res?.ok && res?.result?.message_id) deliveredMsgIds.push(res.result.message_id);
+    } catch (e) {
+      console.error("file delivery failed:", e?.message);
+      await trackSend(chatId, `⚠️ Failed to send: <code>${it._file_name || 'file'}</code>`);
     }
   }
+
 
   if (qty > BULK_DOWNLOAD_THRESHOLD) {
     await trackSend(chatId, `📁 Bulk order — download as file?`, {

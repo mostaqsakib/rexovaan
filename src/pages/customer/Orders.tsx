@@ -25,23 +25,47 @@ function downloadFile(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+function isFileItem(d: any) {
+  return d && typeof d === 'object' && typeof d._file_path === 'string';
+}
+
 function detailsToTxt(details: any[]) {
-  return details.map((d, i) =>
-    details.length > 1 ? `${i + 1}. ${Object.values(d).join(' | ')}` : Object.values(d).join(' | ')
-  ).join('\n');
+  return details.map((d, i) => {
+    if (isFileItem(d)) return details.length > 1 ? `${i + 1}. [file] ${d._file_name}` : `[file] ${d._file_name}`;
+    return details.length > 1 ? `${i + 1}. ${Object.values(d).join(' | ')}` : Object.values(d).join(' | ');
+  }).join('\n');
 }
 
 function detailsToCsv(details: any[]) {
   if (!details.length) return '';
-  const keys = Array.from(details.reduce((s: Set<string>, d: any) => { Object.keys(d || {}).forEach(k => s.add(k)); return s; }, new Set<string>())) as string[];
+  const keys = Array.from(details.reduce((s: Set<string>, d: any) => { Object.keys(d || {}).filter(k => !k.startsWith('_')).forEach(k => s.add(k)); return s; }, new Set<string>())) as string[];
   const escape = (v: any) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = keys.map(escape).join(',');
-  const rows = details.map(d => keys.map((k) => escape(d?.[k])).join(','));
+  const header = ['File', ...keys].map(escape).join(',');
+  const rows = details.map(d => [isFileItem(d) ? d._file_name : '', ...keys.map((k) => escape(d?.[k]))].join(','));
   return [header, ...rows].join('\n');
 }
+
+async function downloadOrderFile(orderId: string, itemIndex: number, fallbackName?: string) {
+  try {
+    const { data, error } = await supabase.functions.invoke('customer-download-product-file', {
+      body: { order_id: orderId, item_index: itemIndex },
+    });
+    if (error) throw error;
+    if (!(data as any)?.url) throw new Error('No download URL');
+    const a = document.createElement('a');
+    a.href = (data as any).url;
+    a.download = (data as any).file_name || fallbackName || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (e: any) {
+    toast.error(e?.message || 'Download failed');
+  }
+}
+
 
 export default function Orders() {
   const { user, customer, loading: authLoading } = useCustomerAuth();
@@ -221,6 +245,27 @@ export default function Orders() {
                     </Button>
                   </div>
                 </div>
+                {details.some(isFileItem) && (
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-medium text-muted-foreground">Files</div>
+                    <div className="flex flex-col gap-1.5">
+                      {details.map((d, i) => isFileItem(d) ? (
+                        <button
+                          key={i}
+                          onClick={() => downloadOrderFile(o.id, i, d._file_name)}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-left text-xs hover:border-primary hover:bg-primary/5 transition"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <FileText className="h-4 w-4 shrink-0 text-primary" />
+                            <span className="truncate font-medium">{d._file_name}</span>
+                            {d._size ? <span className="text-muted-foreground shrink-0">({(Number(d._size) / 1024).toFixed(1)} KB)</span> : null}
+                          </span>
+                          <Download className="h-3.5 w-3.5 text-primary shrink-0" />
+                        </button>
+                      ) : null)}
+                    </div>
+                  </div>
+                )}
                 <pre className="bg-background/60 rounded-lg p-3 text-xs font-mono whitespace-pre-wrap break-all max-h-64 overflow-auto">{txt || '(no details)'}</pre>
                 {products[o.product_id] && (
                   <DeliveryInstructions
