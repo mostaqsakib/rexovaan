@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes } from 'lucide-react';
+import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes, Paperclip, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
