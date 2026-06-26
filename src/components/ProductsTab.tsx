@@ -555,13 +555,22 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         .eq('product_id', product.id)
         .eq('status', 'available');
       await supabase.from('bot_products').update({ stock_source: 'internal', last_known_stock: newTotalStock || 0 }).eq('id', product.id);
+      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+        body: { productId: product.id, addedCount: success },
+      });
       toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
+      if (broadcastError) {
+        toast.error('Files added, but broadcast could not be started');
+      } else {
+        toast.success('Stock alert broadcast started');
+      }
       void loadStock('available');
       onStockChanged?.(product.id);
     } else {
       toast.error('All uploads failed');
     }
   };
+
 
   const ingestFiles = async (files: File[]) => {
     const txtFiles = files.filter((f) => f.type === 'text/plain' || /\.txt$/i.test(f.name));
