@@ -25,23 +25,47 @@ function downloadFile(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+function isFileItem(d: any) {
+  return d && typeof d === 'object' && typeof d._file_path === 'string';
+}
+
 function detailsToTxt(details: any[]) {
-  return details.map((d, i) =>
-    details.length > 1 ? `${i + 1}. ${Object.values(d).join(' | ')}` : Object.values(d).join(' | ')
-  ).join('\n');
+  return details.map((d, i) => {
+    if (isFileItem(d)) return details.length > 1 ? `${i + 1}. [file] ${d._file_name}` : `[file] ${d._file_name}`;
+    return details.length > 1 ? `${i + 1}. ${Object.values(d).join(' | ')}` : Object.values(d).join(' | ');
+  }).join('\n');
 }
 
 function detailsToCsv(details: any[]) {
   if (!details.length) return '';
-  const keys = Array.from(details.reduce((s: Set<string>, d: any) => { Object.keys(d || {}).forEach(k => s.add(k)); return s; }, new Set<string>())) as string[];
+  const keys = Array.from(details.reduce((s: Set<string>, d: any) => { Object.keys(d || {}).filter(k => !k.startsWith('_')).forEach(k => s.add(k)); return s; }, new Set<string>())) as string[];
   const escape = (v: any) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = keys.map(escape).join(',');
-  const rows = details.map(d => keys.map((k) => escape(d?.[k])).join(','));
+  const header = ['File', ...keys].map(escape).join(',');
+  const rows = details.map(d => [isFileItem(d) ? d._file_name : '', ...keys.map((k) => escape(d?.[k]))].join(','));
   return [header, ...rows].join('\n');
 }
+
+async function downloadOrderFile(orderId: string, itemIndex: number, fallbackName?: string) {
+  try {
+    const { data, error } = await supabase.functions.invoke('customer-download-product-file', {
+      body: { order_id: orderId, item_index: itemIndex },
+    });
+    if (error) throw error;
+    if (!(data as any)?.url) throw new Error('No download URL');
+    const a = document.createElement('a');
+    a.href = (data as any).url;
+    a.download = (data as any).file_name || fallbackName || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (e: any) {
+    toast.error(e?.message || 'Download failed');
+  }
+}
+
 
 export default function Orders() {
   const { user, customer, loading: authLoading } = useCustomerAuth();
