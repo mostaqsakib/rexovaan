@@ -554,7 +554,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         .select('id', { count: 'exact', head: true })
         .eq('product_id', product.id)
         .eq('status', 'available');
-      await supabase.from('bot_products').update({ stock_source: 'internal', last_known_stock: newTotalStock || 0 }).eq('id', product.id);
+      await supabase.from('bot_products').update({ stock_source: 'internal' }).eq('id', product.id);
       const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
         body: { productId: product.id, addedCount: success },
       });
@@ -724,14 +724,15 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         setSaving(false);
         return;
       }
-      // Update last_known_stock immediately to prevent the standalone-bot's background
-      // stock-alert checker from sending a duplicate broadcast while the edge function runs.
+      // Do not update last_known_stock here. The stock-broadcast function updates it
+      // only after the alert is queued/sent; if the function cannot start, the bot's
+      // background stock checker can still detect the new stock and broadcast it.
       const { count: newTotalStock } = await supabase
         .from('bot_product_stock_items')
         .select('id', { count: 'exact', head: true })
         .eq('product_id', product.id)
         .eq('status', 'available');
-      await supabase.from('bot_products').update({ stock_source: 'internal', last_known_stock: newTotalStock || 0 }).eq('id', product.id);
+      await supabase.from('bot_products').update({ stock_source: 'internal' }).eq('id', product.id);
       const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
         body: { productId: product.id, addedCount: insertedCount, stockItemIds: (insertedRows || []).map((row) => row.id) },
       });
