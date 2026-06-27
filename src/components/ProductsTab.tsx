@@ -498,6 +498,9 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const [isDragging, setIsDragging] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
 
   const formatBytes = (b: number) => {
     if (!b) return '0 B';
