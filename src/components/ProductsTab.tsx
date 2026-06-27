@@ -845,23 +845,28 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     let insertedCount = 0;
     let insertedRowIds: string[] = [];
     if (allInserts.length > 0) {
-      const { data: insertedRows, error } = await supabase
-        .from('bot_product_stock_items')
-        .upsert(allInserts, { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true })
-        .select('id');
-      if (error) {
-        toast.error(`Failed to add stock: ${error.message}`);
-        setConfirming(false);
-        return;
+      const CHUNK = 500;
+      for (let i = 0; i < allInserts.length; i += CHUNK) {
+        const chunk = allInserts.slice(i, i + CHUNK);
+        const { data: insertedRows, error } = await supabase
+          .from('bot_product_stock_items')
+          .insert(chunk)
+          .select('id');
+        if (error) {
+          toast.error(`Failed to add stock: ${error.message}`);
+          setConfirming(false);
+          return;
+        }
+        const ids = (insertedRows || []).map((r) => r.id);
+        insertedRowIds.push(...ids);
+        insertedCount += ids.length;
       }
-      insertedRowIds = (insertedRows || []).map((r) => r.id);
-      insertedCount = insertedRowIds.length;
     }
 
     const newInsertedCount = Math.min(insertedCount, newPayloads.length);
     const restoredCount = Math.max(0, insertedCount - newInsertedCount);
 
-    const totalAdded = insertedCount + restoredCount;
+    const totalAdded = insertedCount;
     if (totalAdded === 0) {
       toast.message('Nothing to add — all items skipped');
       setConfirming(false);
