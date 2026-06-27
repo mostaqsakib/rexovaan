@@ -814,25 +814,43 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     if (!review) return;
     setConfirming(true);
     const newLines = review.newLines;
-    const restoreIds: string[] = [];
+    const readdIds: string[] = [];
     (Object.keys(review.buckets) as ReviewBucketKey[]).forEach((k) => {
       if (review.actions[k] === 'readd' && k !== 'available') {
-        restoreIds.push(...review.buckets[k].ids);
+        readdIds.push(...review.buckets[k].ids);
       }
     });
 
+    // Clone re-add rows as NEW available stock — never mutate the original sold/reserved/external/deleted row.
+    let readdPayloads: { product_id: string; data: any }[] = [];
+    if (readdIds.length > 0) {
+      const { data: srcRows, error: srcErr } = await supabase
+        .from('bot_product_stock_items')
+        .select('id, data')
+        .in('id', readdIds);
+      if (srcErr) {
+        toast.error(`Re-add fetch failed: ${srcErr.message}`);
+        setConfirming(false);
+        return;
+      }
+      readdPayloads = (srcRows || []).map((r: any) => ({ product_id: product.id, data: r.data }));
+    }
+
+    const newPayloads = newLines.map((line) => ({
+      product_id: product.id,
+      data: { [product.detailColumns[0] || 'Delivery Info']: line },
+    }));
+    const allInserts = [...newPayloads, ...readdPayloads];
+
     let insertedCount = 0;
     let insertedRowIds: string[] = [];
-    if (newLines.length > 0) {
+    if (allInserts.length > 0) {
       const { data: insertedRows, error } = await supabase
         .from('bot_product_stock_items')
-        .upsert(
-          newLines.map((line) => ({ product_id: product.id, data: { [product.detailColumns[0] || 'Delivery Info']: line } })),
-          { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true }
-        )
+        .upsert(allInserts, { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true })
         .select('id');
       if (error) {
-        toast.error('Failed to add new stock');
+        toast.error(`Failed to add stock: ${error.message}`);
         setConfirming(false);
         return;
       }
@@ -840,19 +858,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       insertedCount = insertedRowIds.length;
     }
 
-    let restoredCount = 0;
-    if (restoreIds.length > 0) {
-      const { data: restoredRows, error: restoreErr } = await supabase
-        .from('bot_product_stock_items')
-        .update({ status: 'available', sold_at: null, sold_order_id: null })
-        .in('id', restoreIds)
-        .select('id');
-      if (restoreErr) {
-        toast.error(`Restore failed: ${restoreErr.message}`);
-      } else {
-        restoredCount = (restoredRows || []).length;
-      }
-    }
+    const newInsertedCount = Math.min(insertedCount, newPayloads.length);
+    const restoredCount = Math.max(0, insertedCount - newInsertedCount);
 
     const totalAdded = insertedCount + restoredCount;
     if (totalAdded === 0) {
