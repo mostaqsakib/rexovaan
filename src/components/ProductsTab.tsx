@@ -875,8 +875,6 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   };
 
 
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
 
   const availableCount = availableStockCount;
   const filteredItems = useMemo(() => {
