@@ -689,19 +689,26 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
   useEffect(() => {
     if (product.stockSource !== 'internal') return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`stock-items-${product.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bot_product_stock_items', filter: `product_id=eq.${product.id}` },
         () => {
-          void loadStock();
-          onStockChanged?.(product.id);
+          // Debounce to avoid refetching 30k+ rows on every sale during heavy tabs
+          if (timer) clearTimeout(timer);
+          const delay = statusFilter === 'available' ? 500 : 4000;
+          timer = setTimeout(() => {
+            void loadStock();
+            onStockChanged?.(product.id);
+          }, delay);
         }
       )
       .subscribe();
 
     return () => {
+      if (timer) clearTimeout(timer);
       void supabase.removeChannel(channel);
     };
   }, [product.id, product.stockSource, statusFilter, onStockChanged]);
