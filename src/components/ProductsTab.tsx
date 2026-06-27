@@ -888,9 +888,9 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       .update({ stock_source: 'internal', last_known_stock: availableTotal })
       .eq('id', product.id);
     const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
-      body: { productId: product.id, addedCount: totalAdded, stockItemIds: [...insertedRowIds, ...restoreIds] },
+      body: { productId: product.id, addedCount: totalAdded, stockItemIds: insertedRowIds },
     });
-    toast.success(`${insertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
+    toast.success(`${newInsertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
     if (broadcastError) {
       await supabase
         .from('bot_products')
