@@ -684,6 +684,16 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     if (product.stockSource === 'internal') void loadStock();
   }, [product.id, product.stockSource, statusFilter]);
 
+  // Reload server-side when date range changes for heavy tabs
+  useEffect(() => {
+    if (product.stockSource !== 'internal') return;
+    if (statusFilter === 'available') return; // available is light, client filter is enough
+    const t = setTimeout(() => { void loadStock(statusFilter, { from: dateFrom, to: dateTo }); }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo]);
+
+
 
   useEffect(() => {
     if (product.stockSource !== 'internal') return;
