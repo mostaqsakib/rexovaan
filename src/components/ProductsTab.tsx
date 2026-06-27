@@ -1028,35 +1028,40 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex flex-1 flex-wrap items-center gap-2 text-xs min-w-[220px]">
-
-                    <span className="text-muted-foreground">From</span>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <span className="text-muted-foreground shrink-0">From</span>
                     <Input
                       type="date"
                       value={dateFrom}
                       onChange={(e) => setDateFrom(e.target.value)}
-                      className="h-7 w-[140px] text-xs"
+                      className="h-8 w-full text-xs sm:w-[150px]"
                     />
-                    <span className="text-muted-foreground">To</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <span className="text-muted-foreground shrink-0">To</span>
                     <Input
                       type="date"
                       value={dateTo}
                       onChange={(e) => setDateTo(e.target.value)}
-                      className="h-7 w-[140px] text-xs"
+                      className="h-8 w-full text-xs sm:w-[150px]"
                     />
-                    {(dateFrom || dateTo) && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => { setDateFrom(''); setDateTo(''); }}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
+                  </label>
+                  {(dateFrom || dateTo) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="col-span-2 h-7 px-2 text-xs sm:col-auto"
+                      onClick={() => { setDateFrom(''); setDateTo(''); }}
+                    >
+                      Clear dates
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+
                   <Button
                     size="sm"
                     variant="outline"
