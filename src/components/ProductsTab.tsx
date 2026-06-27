@@ -498,6 +498,9 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const [isDragging, setIsDragging] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
 
   const formatBytes = (b: number) => {
     if (!b) return '0 B';
@@ -612,11 +615,15 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     }
   };
 
-  const loadStock = async (filter: 'available' | 'sold' | 'all' = statusFilter) => {
+  const loadStock = async (filter: 'available' | 'sold' | 'all' = statusFilter, opts?: { from?: string; to?: string }) => {
     setLoading(true);
     try {
-
-
+      const fromDate = opts?.from ?? dateFrom;
+      const toDate = opts?.to ?? dateTo;
+      const hasDateRange = Boolean(fromDate || toDate);
+      // For heavy tabs (sold/all), avoid loading the whole table by default.
+      const SOLD_DEFAULT_CAP = 1000;
+      const capRows = (filter === 'sold' || filter === 'all') && !hasDateRange;
 
       const buildItemsQuery = () => {
         let q = supabase
@@ -624,22 +631,36 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
           .select('id,data,status,created_at,sold_at,sort_index')
           .eq('product_id', product.id);
         if (filter !== 'all') q = q.eq('status', filter);
-        if (filter === 'all') q = q.order('status', { ascending: true });
-        return q.order('sort_index', { ascending: true }).order('created_at', { ascending: true });
+        // Apply server-side date filter so date-ranged sold queries stay light.
+        if (hasDateRange) {
+          const col = filter === 'sold' ? 'sold_at' : 'created_at';
+          if (fromDate) q = q.gte(col, `${fromDate}T00:00:00`);
+          if (toDate) q = q.lte(col, `${toDate}T23:59:59.999`);
+        }
+        if (capRows) {
+          // Newest first for sold without date range
+          q = q.order('sold_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+        } else {
+          if (filter === 'all') q = q.order('status', { ascending: true });
+          q = q.order('sort_index', { ascending: true }).order('created_at', { ascending: true });
+        }
+        return q;
       };
 
       const PAGE = 1000;
       const allItems: Array<{ id: string; data: Record<string, unknown>; status: string; created_at: string; sold_at: string | null; sort_index?: number | null }> = [];
       let from = 0;
       let pageErr: unknown = null;
-      // Fetch all pages (Supabase caps at 1000 per request)
+      const maxRows = capRows ? SOLD_DEFAULT_CAP : Infinity;
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const { data, error } = await buildItemsQuery().range(from, from + PAGE - 1);
+        const end = Math.min(from + PAGE - 1, capRows ? maxRows - 1 : from + PAGE - 1);
+        const { data, error } = await buildItemsQuery().range(from, end);
         if (error) { pageErr = error; break; }
         const rows = (data || []) as typeof allItems;
         allItems.push(...rows);
         if (rows.length < PAGE) break;
+        if (allItems.length >= maxRows) break;
         from += PAGE;
       }
 
@@ -665,6 +686,17 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   useEffect(() => {
     if (product.stockSource === 'internal') void loadStock();
   }, [product.id, product.stockSource, statusFilter]);
+
+  // Reload server-side when date range changes for heavy tabs
+  useEffect(() => {
+    if (product.stockSource !== 'internal') return;
+    if (statusFilter === 'available') return; // available is light, client filter is enough
+    const t = setTimeout(() => { void loadStock(statusFilter, { from: dateFrom, to: dateTo }); }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo]);
+
+
 
   useEffect(() => {
     if (product.stockSource !== 'internal') return;
@@ -843,8 +875,6 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   };
 
 
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
 
   const availableCount = availableStockCount;
   const filteredItems = useMemo(() => {
@@ -980,49 +1010,58 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
 
             <div className="flex min-h-[260px] flex-col rounded-md border border-border overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
-                <div className="flex rounded-md border border-border bg-background p-0.5">
-                  {(['available', 'sold', 'all'] as const).map((filter) => (
-                    <Button
-                      key={filter}
-                      type="button"
-                      size="sm"
-                      variant={statusFilter === filter ? 'secondary' : 'ghost'}
-                      className="h-6 px-2 text-xs capitalize"
-                      onClick={() => setStatusFilter(filter)}
-                    >
-                      {filter}
-                    </Button>
-                  ))}
+              <div className="flex flex-col gap-2 border-b border-border bg-muted/40 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex rounded-md border border-border bg-background p-0.5">
+                    {(['available', 'sold', 'all'] as const).map((filter) => (
+                      <Button
+                        key={filter}
+                        type="button"
+                        size="sm"
+                        variant={statusFilter === filter ? 'secondary' : 'ghost'}
+                        className="h-7 px-3 text-xs capitalize"
+                        onClick={() => setStatusFilter(filter)}
+                      >
+                        {filter}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <div className="flex items-center gap-1 text-xs">
-                    <span className="text-muted-foreground">From</span>
+
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <span className="text-muted-foreground shrink-0">From</span>
                     <Input
                       type="date"
                       value={dateFrom}
                       onChange={(e) => setDateFrom(e.target.value)}
-                      className="h-7 w-[140px] text-xs"
+                      className="h-8 w-full text-xs sm:w-[150px]"
                     />
-                    <span className="text-muted-foreground">To</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <span className="text-muted-foreground shrink-0">To</span>
                     <Input
                       type="date"
                       value={dateTo}
                       onChange={(e) => setDateTo(e.target.value)}
-                      className="h-7 w-[140px] text-xs"
+                      className="h-8 w-full text-xs sm:w-[150px]"
                     />
-                    {(dateFrom || dateTo) && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => { setDateFrom(''); setDateTo(''); }}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                  </div>
+                  </label>
+                  {(dateFrom || dateTo) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="col-span-2 h-7 px-2 text-xs sm:col-auto"
+                      onClick={() => { setDateFrom(''); setDateTo(''); }}
+                    >
+                      Clear dates
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+
                   <Button
                     size="sm"
                     variant="outline"
