@@ -758,15 +758,20 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       const previousKnownStock = Math.max(0, Number(productRow?.last_known_stock || 0));
       const availableTotal = Math.max(0, Number(newTotalStock || 0));
       const fallbackKnownStock = Math.max(0, availableTotal - insertedCount);
+      // Optimistic bump prevents the bot's background poller from broadcasting again.
       await supabase
         .from('bot_products')
-        .update({ stock_source: 'internal', last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+        .update({ stock_source: 'internal', last_known_stock: availableTotal })
         .eq('id', product.id);
       const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
         body: { productId: product.id, addedCount: insertedCount, stockItemIds: (insertedRows || []).map((row) => row.id) },
       });
       toast.success(`${insertedCount} stock item(s) added${totalDuplicates ? `, ${totalDuplicates} duplicate skipped` : ''}`);
       if (broadcastError) {
+        await supabase
+          .from('bot_products')
+          .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+          .eq('id', product.id);
         toast.error('Stock added, but broadcast could not be started');
       } else {
         toast.success('Stock alert broadcast started');
