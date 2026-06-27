@@ -746,37 +746,27 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     if (lines.length === 0) return;
     setSaving(true);
 
-    // Fetch existing items (id + status + data) to bucket duplicates by status.
-    const existing: Array<{ id: string; status: string; data: Record<string, unknown> }> = [];
-    const PAGE = 1000;
-    let from = 0;
-    while (true) {
-      const { data: rows, error: fetchError } = await supabase
-        .from('bot_product_stock_items')
-        .select('id,status,data')
-        .eq('product_id', product.id)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (fetchError) {
+    // Server-side duplicate detection — sends only the submitted values, no full table download.
+    const valuesLower = lines.map((l) => l.toLowerCase());
+    const matches: Array<{ matched_value: string; id: string; status: string }> = [];
+    const RPC_CHUNK = 2000;
+    for (let i = 0; i < valuesLower.length; i += RPC_CHUNK) {
+      const chunk = valuesLower.slice(i, i + RPC_CHUNK);
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc('find_stock_duplicates', {
+        p_product_id: product.id,
+        p_values: chunk,
+      });
+      if (rpcErr) {
         toast.error('Failed to check duplicate stock');
         setSaving(false);
         return;
       }
-      const batch = (rows || []) as Array<{ id: string; status: string; data: Record<string, unknown> }>;
-      existing.push(...batch);
-      if (batch.length < PAGE) break;
-      from += PAGE;
+      matches.push(...((rpcRows || []) as Array<{ matched_value: string; id: string; status: string }>));
     }
 
-    // line(lowercased) -> first matching existing row
     const valueIndex = new Map<string, { id: string; status: string }>();
-    for (const row of existing) {
-      const data = (row.data || {}) as Record<string, unknown>;
-      for (const v of Object.values(data)) {
-        const key = String(v).trim().toLowerCase();
-        if (!key) continue;
-        if (!valueIndex.has(key)) valueIndex.set(key, { id: row.id, status: row.status });
-      }
+    for (const m of matches) {
+      if (!valueIndex.has(m.matched_value)) valueIndex.set(m.matched_value, { id: m.id, status: m.status });
     }
 
     const buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }> = {
