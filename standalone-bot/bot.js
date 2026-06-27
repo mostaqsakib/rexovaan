@@ -4692,15 +4692,23 @@ async function handleViewOrder(chatId, customer, orderIdOrShortId, emojiMap, edi
   let msg = `📦 <b>Order #${orderNum}</b>\n\n📌 Product: <b>${order.product_name}</b>\n📊 Quantity: ${order.quantity}\n💰 Total: ${Number(order.total_price).toFixed(2)} USDT\n📅 Date: ${date}\n${statusEmoji} Status: <b>${statusLabel}</b>\n`;
 
   const details = order.details || [];
+  // Split file vs text items so file-stock items get re-delivered as documents
+  const fileItems = [];
+  const textItems = [];
+  for (const item of details) {
+    if (item && typeof item === 'object' && typeof item._file_path === 'string') fileItems.push(item);
+    else textItems.push(item);
+  }
+
   if (details.length > 0 && order.status === "completed") {
     msg += `\n${orderProductEmoji} <b>${order.product_name} × ${order.quantity}</b>\n\n`;
     const SHOW_INLINE = 10;
-    const showItems = details.slice(0, SHOW_INLINE);
+    const showItems = textItems.slice(0, SHOW_INLINE);
     const historyKeys = Object.keys(showItems[0] || {});
     const historyMultiCol = historyKeys.length > 1;
     for (let i = 0; i < showItems.length; i++) {
       const entries = Object.entries(showItems[i]).filter(([, v]) => v && String(v).trim());
-      const numPrefix = details.length > 1 ? `${i + 1}. ` : '';
+      const numPrefix = textItems.length > 1 ? `${i + 1}. ` : '';
       if (!historyMultiCol || entries.length <= 1) {
         const mainVal = entries.find(([, v]) => String(v).startsWith('http'))?.[1] || entries[0]?.[1] || '';
         msg += `${numPrefix}<code>${mainVal}</code>\n`;
@@ -4710,7 +4718,8 @@ async function handleViewOrder(chatId, customer, orderIdOrShortId, emojiMap, edi
         msg += `\n`;
       }
     }
-    if (details.length > SHOW_INLINE) msg += `\n... and ${details.length - SHOW_INLINE} more items`;
+    if (textItems.length > SHOW_INLINE) msg += `\n... and ${textItems.length - SHOW_INLINE} more items`;
+    if (fileItems.length > 0) msg += `\n📎 ${fileItems.length} file(s) attached — sending below.`;
   } else if (order.status === "pending_delivery") {
     msg += `\n⏳ <i>This order is awaiting manual delivery from admin.\n⏱ Delivery Time: 30 min — 12 hours. If delayed, full refund guaranteed.</i>`;
   } else if (order.status === "cancelled") {
@@ -4718,7 +4727,7 @@ async function handleViewOrder(chatId, customer, orderIdOrShortId, emojiMap, edi
   }
 
   const btns = [];
-  if (details.length > 0 && order.status === "completed") {
+  if (textItems.length > 0 && order.status === "completed") {
     btns.push([
       applyEmoji({ text: "📄 TXT", callback_data: `dl_txt_${order.id}` }, "download_txt", emojiMap),
       applyEmoji({ text: "📊 CSV", callback_data: `dl_csv_${order.id}` }, "download_csv", emojiMap),
@@ -4726,7 +4735,32 @@ async function handleViewOrder(chatId, customer, orderIdOrShortId, emojiMap, edi
   }
   btns.push([applyEmoji({ text: "🔙 Back to Orders", callback_data: "ordpg_0" }, "back", emojiMap)]);
   await editOrSend(chatId, editMessageId, msg, { inline_keyboard: btns });
+
+  // Re-deliver file-stock items as Telegram documents
+  if (order.status === "completed" && fileItems.length > 0) {
+    for (let i = 0; i < fileItems.length; i++) {
+      const it = fileItems[i];
+      const fname = it._file_name || `file_${i + 1}`;
+      try {
+        const { data: blob, error: dlErr } = await supabase.storage
+          .from("product-files")
+          .download(it._file_path);
+        if (dlErr || !blob) {
+          console.error("order-view file download failed:", dlErr?.message, "path:", it._file_path);
+          await sendMessage(chatId, `⚠️ Could not prepare file: <code>${fname}</code>. Please contact support.`);
+          continue;
+        }
+        const buf = Buffer.from(await blob.arrayBuffer());
+        const cap = fileItems.length > 1 ? `${i + 1} / ${fileItems.length}` : undefined;
+        await sendDocumentBuffer(chatId, buf, fname, cap);
+      } catch (e) {
+        console.error("order-view file delivery failed:", e?.message, "path:", it._file_path);
+        await sendMessage(chatId, `⚠️ Failed to send: <code>${fname}</code>`);
+      }
+    }
+  }
 }
+
 
 // ── Withdrawal ──
 
