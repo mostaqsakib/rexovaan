@@ -1028,8 +1028,9 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <div className="flex items-center gap-1 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-1 flex-wrap items-center gap-2 text-xs min-w-[220px]">
+
                     <span className="text-muted-foreground">From</span>
                     <Input
                       type="date"
