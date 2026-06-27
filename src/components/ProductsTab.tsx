@@ -1205,6 +1205,13 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     </div>
                   );
                 })}
+                {renderHiddenCount > 0 && (
+                  <div className="p-3 text-center text-xs text-muted-foreground bg-muted/30 border-t border-border">
+                    +{renderHiddenCount.toLocaleString()} more loaded (use Export to download all, or narrow with date range)
+                  </div>
+                )}
+                  </>
+                )}
               </div>
             </div>
           </div>
