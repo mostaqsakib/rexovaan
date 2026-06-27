@@ -1,149 +1,158 @@
-# Rexovaan Link Checker — VPS Setup Guide
+# Rexovaan Link Checker — VPS Setup (FAST FETCH MODE)
 
-This worker replaces the cookie-zip system with a **real Chrome browser** that stays logged in to Google forever.
+Inspired by the Gemini Link Checker Chrome extension: instead of opening every
+URL in a Chrome tab, the worker reuses the persistent Chrome profile **cookies**
+and just does HTTP GETs with `redirect: follow`. Then it looks for the same
+text markers the extension uses to decide valid / invalid.
 
-## What you'll do
-
-1. Install Node + Chrome deps + noVNC on your VPS
-2. Login to Google once via noVNC (saved permanently)
-3. Run the worker with PM2 — it polls Supabase and processes jobs from the admin panel
+Result: ~20–25 links/sec instead of ~1/sec. Google login is still required
+(once), because the activation pages need your Google session cookies.
 
 ---
 
-## 1. VPS Requirements
+## Rebuild on an existing VPS (fastest path)
 
-- Ubuntu 22.04 / 24.04 (or Debian 12)
-- 2 GB RAM minimum (4 GB recommended)
-- Root access
+If you already have the worker running and just want to upgrade + re-login:
 
-## 2. Install dependencies
+```bash
+# 1. Stop the old worker
+pm2 stop link-checker
 
-SSH into VPS as root, then:
+# 2. Upload the new vps-worker/ folder (overwrite)
+#    From your laptop:
+scp -r vps-worker/* root@YOUR_VPS_IP:/opt/link-checker/
+
+# 3. On the VPS — update deps and re-login to Google
+ssh root@YOUR_VPS_IP
+cd /opt/link-checker
+npm install
+rm -rf /root/chrome-profile           # wipe old (possibly expired) session
+
+# 4. One-time Google login via noVNC (see below)
+Xvfb :1 -screen 0 1280x800x24 &
+DISPLAY=:1 fluxbox &
+x11vnc -display :1 -nopw -forever -shared -rfbport 5900 &
+websockify -D --web=/usr/share/novnc/ 6080 localhost:5900
+#   then on your laptop: ssh -L 6080:localhost:6080 root@VPS_IP
+#   open http://localhost:6080/vnc.html in your browser
+#   in the noVNC desktop (right-click → xterm):
+DISPLAY=:1 HEADFUL=true node login.js
+#   Log into Google, close the window when done. Session is saved.
+
+# 5. Restart worker
+pm2 restart link-checker
+pm2 logs link-checker
+```
+
+You should see:
+```
+🤖 Rexovaan Link Checker worker (FAST FETCH) started
+   Profile: /root/chrome-profile
+   Concurrency cap: 10 | Retries: 2 | Timeout: 15000 ms
+```
+
+---
+
+## Fresh install (first time on a VPS)
+
+### 1. VPS requirements
+- Ubuntu 22.04 / 24.04 (or Debian 12), 2 GB RAM minimum, root access.
+
+### 2. Install dependencies
 
 ```bash
 # Node.js 20
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 
-# PM2 (process manager)
+# PM2
 npm install -g pm2
 
-# noVNC + xvfb + fluxbox (so you can see Chrome via browser)
+# noVNC for one-time Google login
 apt-get install -y xvfb x11vnc novnc websockify fluxbox xterm
 
-# Chrome system libraries (Playwright will install Chrome itself)
+# Chrome libs
 apt-get install -y libnss3 libatk-bridge2.0-0 libxcomposite1 libxdamage1 \
   libxrandr2 libgbm1 libxkbcommon0 libpango-1.0-0 libcairo2 libasound2t64 \
   libatk1.0-0 libcups2 libdrm2 libxss1 fonts-noto-color-emoji
 ```
 
-## 3. Upload the worker
-
-On your local machine, zip the `vps-worker/` folder and SCP to VPS:
+### 3. Upload worker
 
 ```bash
 scp -r vps-worker root@YOUR_VPS_IP:/opt/link-checker
-```
-
-Then on the VPS:
-
-```bash
+ssh root@YOUR_VPS_IP
 cd /opt/link-checker
 npm install
-npx playwright install chromium    # downloads Chromium ~150MB
+npx playwright install chromium
 cp .env.example .env
-nano .env                          # paste SUPABASE_SERVICE_ROLE_KEY
+nano .env       # paste SUPABASE_SERVICE_ROLE_KEY
 ```
 
-**Get your service role key** from:
-https://supabase.com/dashboard/project/eygkdpfjrjwwbiackfpr/settings/api
-→ copy `service_role` key (not anon!) → paste into `.env`
-
-## 4. One-time Google login (via noVNC)
-
-Start a virtual display + noVNC:
+### 4. One-time Google login (noVNC)
 
 ```bash
-# Start virtual display
 Xvfb :1 -screen 0 1280x800x24 &
 DISPLAY=:1 fluxbox &
 x11vnc -display :1 -nopw -forever -shared -rfbport 5900 &
 websockify -D --web=/usr/share/novnc/ 6080 localhost:5900
 ```
 
-Now open in your laptop browser:
-
+From your laptop, SSH-tunnel and open noVNC:
+```bash
+ssh -L 6080:localhost:6080 root@VPS_IP
+# then in your browser: http://localhost:6080/vnc.html
 ```
-http://YOUR_VPS_IP:6080/vnc.html
-```
 
-(For safety, allow port 6080 only from your IP in the firewall, or tunnel via SSH: `ssh -L 6080:localhost:6080 root@VPS_IP`)
-
-Inside that noVNC desktop, open a terminal (right-click → xterm) and run:
-
+In the noVNC desktop, right-click → xterm:
 ```bash
 cd /opt/link-checker
-DISPLAY=:1 node login.js
+DISPLAY=:1 HEADFUL=true node login.js
 ```
+Log into Google → close the window. Session saved to `/root/chrome-profile`.
 
-Chrome will open → log into your Google account → close the window. **Done — session saved permanently to `/root/chrome-profile`.** Login in your laptop/normal browser does not count; the PM2 worker only uses this VPS profile path.
-
-## 5. Start the worker (background, 24/7)
+### 5. Start the worker 24/7
 
 ```bash
-cd /opt/link-checker
 pm2 start ecosystem.config.cjs
 pm2 save
-pm2 startup        # follow the printed command so it auto-starts on reboot
-```
-
-Check it's running:
-
-```bash
+pm2 startup        # follow printed command
 pm2 logs link-checker
 ```
 
-You should see:
-```
-🤖 Rexovaan Link Checker worker started
-🚀 Launching Chrome with profile: /root/chrome-profile
-```
+---
 
-## 6. Test it
+## How detection works (matches the extension)
 
-1. Go to https://rexovaan.com/admin → Link Checker tab
-2. Pick "Jio Gemini AI Pro 18m" → Start Check
-3. Within ~5 seconds you'll see the progress bar moving in real-time
-4. The admin UI updates live via Supabase Realtime — exactly like before
+Each URL is fetched once (with retries on 429/timeout). The response body is
+lowercased and scanned for:
+
+| Marker (any of) | Verdict |
+|---|---|
+| `already been used` | invalid — already used |
+| `new activation link` | invalid — needs new link |
+| (extra patterns from `INVALID_TEXT_PATTERNS`) | invalid |
+| final URL contains `already / redeemed / expired / error` | invalid |
+| accounts.google.com/signin redirect | **error: re-login needed** |
+| nothing matched | **valid** |
+
+If you ever see `google auth required` in the admin panel, run `node login.js`
+again to refresh cookies. That's the only maintenance.
 
 ---
 
-## How it works
+## Tuning (optional)
+
+Edit `.env`, then `pm2 restart link-checker`:
 
 ```
-Admin panel  ──insert──▶  link_check_jobs (queued)
-                                  │
-                                  │ polled every 5s
-                                  ▼
-                          VPS Worker (Chrome)
-                                  │
-                                  │ claim items + open URLs
-                                  ▼
-                       mark_link_check_result RPC
-                                  │
-                                  ▼
-                  link_check_jobs (running → completed)
-                                  │
-                                  │ realtime postgres_changes
-                                  ▼
-                          Admin panel updates live ✨
+MAX_CONCURRENCY=10        # parallel workers per job
+NAV_TIMEOUT_MS=15000      # per-URL timeout
+RETRIES_ON_ERROR=2        # extra attempts on timeout/429
+DELAY_BETWEEN_JOBS_MS=200 # delay between checks per worker
+INVALID_TEXT_PATTERNS=    # extra invalid markers (comma-separated)
+VALID_TEXT_PATTERNS=      # if set, only these mark as valid
 ```
-
-## Auto-Loop also works automatically
-
-The Auto-Loop toggle in admin already inserts a new `queued` job after each completion (via the existing trigger or cron). The VPS worker picks it up — nothing extra to configure.
-
----
 
 ## Useful commands
 
@@ -151,34 +160,13 @@ The Auto-Loop toggle in admin already inserts a new `queued` job after each comp
 pm2 logs link-checker          # live logs
 pm2 restart link-checker       # restart worker
 pm2 stop link-checker          # stop
-pm2 monit                      # CPU/RAM dashboard
-
-# Re-login (if Google ever signs you out)
-DISPLAY=:1 node login.js
+DISPLAY=:1 HEADFUL=true node login.js   # re-login when Google signs out
 ```
-
-## Tweaking validity detection
-
-Edit `.env`:
-
-```
-INVALID_TEXT_PATTERNS=already been redeemed,no longer available,offer has expired,...
-VALID_TEXT_PATTERNS=subscribe,continue,activate,...
-```
-
-Then `pm2 restart link-checker`.
 
 ## Firewall
 
-Only port 22 (SSH) needs to be public. Block 5900/6080 publicly:
-
+Only port 22 needs to be public. Tunnel noVNC via SSH:
 ```bash
-ufw allow 22
-ufw enable
-# Access noVNC via SSH tunnel only:
-# ssh -L 6080:localhost:6080 root@VPS_IP
+ufw allow 22 && ufw enable
+ssh -L 6080:localhost:6080 root@VPS_IP
 ```
-
----
-
-That's it. The cookie-expiry problem is now permanently gone. 🎉
