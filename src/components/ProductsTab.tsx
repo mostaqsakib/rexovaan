@@ -993,7 +993,34 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     </Button>
                   ))}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-muted-foreground">From</span>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="h-7 w-[140px] text-xs"
+                    />
+                    <span className="text-muted-foreground">To</span>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="h-7 w-[140px] text-xs"
+                    />
+                    {(dateFrom || dateTo) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => { setDateFrom(''); setDateTo(''); }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1005,11 +1032,13 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `${product.name}-${statusFilter}-${Date.now()}.txt`;
+                      const range = dateFrom || dateTo ? `-${dateFrom || 'start'}_to_${dateTo || 'end'}` : '';
+                      a.download = `${product.name}-${statusFilter}${range}-${Date.now()}.txt`;
                       a.click();
                       URL.revokeObjectURL(url);
                       toast.success(`Exported ${filteredItems.length} item(s)`);
                     }}
+
                   >
                     <Download className="h-3.5 w-3.5" /> Export TXT
                   </Button>
