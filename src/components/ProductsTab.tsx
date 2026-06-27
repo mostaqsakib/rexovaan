@@ -1338,8 +1338,145 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
               </div>
             </div>
           </div>
+
+      <Dialog open={!!review} onOpenChange={(o) => { if (!o && !confirming) setReview(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Boxes className="h-5 w-5 text-primary" /> Stock Import Review
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">Review duplicates before adding. Nothing is inserted until you confirm.</p>
+          </DialogHeader>
+          {review && (() => {
+            const bucketMeta: Array<{ key: ReviewBucketKey; label: string; icon: any; color: string }> = [
+              { key: 'available', label: 'Available', icon: AlertTriangle, color: 'text-warning border-warning/30 bg-warning/5' },
+              { key: 'reserved', label: 'Reserved', icon: ShieldCheck, color: 'text-primary border-primary/30 bg-primary/5' },
+              { key: 'sold', label: 'Sold', icon: ShoppingCart, color: 'text-success border-success/30 bg-success/5' },
+              { key: 'external', label: 'External', icon: Globe2, color: 'text-info border-info/30 bg-info/5' },
+              { key: 'invalid', label: 'Deleted', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
+            ];
+            const newCount = review.newLines.length;
+            let willReadd = 0;
+            (Object.keys(review.buckets) as ReviewBucketKey[]).forEach((k) => {
+              if (review.actions[k] === 'readd' && k !== 'available') willReadd += review.buckets[k].ids.length;
+            });
+            const willSkip = (Object.keys(review.buckets) as ReviewBucketKey[]).reduce((acc, k) => {
+              if (review.actions[k] === 'skip' || k === 'available') acc += review.buckets[k].ids.length;
+              return acc;
+            }, 0);
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="rounded-md border border-border p-2.5">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total submitted</div>
+                    <div className="text-xl font-bold tabular-nums">{review.totalSubmitted}</div>
+                  </div>
+                  <div className="rounded-md border border-success/30 bg-success/5 p-2.5">
+                    <div className="text-[10px] uppercase tracking-wide text-success flex items-center gap-1"><Check className="h-3 w-3" /> New unique</div>
+                    <div className="text-xl font-bold tabular-nums">{newCount}</div>
+                  </div>
+                  {bucketMeta.map((b) => {
+                    const Icon = b.icon;
+                    const n = review.buckets[b.key].ids.length;
+                    return (
+                      <div key={b.key} className={`rounded-md border p-2.5 ${b.color}`}>
+                        <div className="text-[10px] uppercase tracking-wide flex items-center gap-1"><Icon className="h-3 w-3" /> {b.label}</div>
+                        <div className="text-xl font-bold tabular-nums">{n}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {review.duplicateInPaste > 0 && (
+                  <div className="text-xs text-muted-foreground">{review.duplicateInPaste} duplicate line(s) in your paste were merged.</div>
+                )}
+
+                <div className="space-y-2">
+                  {bucketMeta.filter((b) => review.buckets[b.key].ids.length > 0).map((b) => {
+                    const Icon = b.icon;
+                    const bucket = review.buckets[b.key];
+                    const expanded = review.expanded[b.key];
+                    const isAvailable = b.key === 'available';
+                    return (
+                      <div key={b.key} className={`rounded-md border ${b.color}`}>
+                        <div className="flex items-center justify-between gap-2 p-3">
+                          <button
+                            type="button"
+                            onClick={() => setReview((r) => r ? { ...r, expanded: { ...r.expanded, [b.key]: !r.expanded[b.key] } } : r)}
+                            className="flex items-center gap-2 text-sm font-medium"
+                          >
+                            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            <Icon className="h-4 w-4" /> {b.label}
+                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-background/60 text-xs tabular-nums">{bucket.ids.length}</span>
+                          </button>
+                          <div className="flex items-center gap-3 text-xs">
+                            <label className="flex items-center gap-1 cursor-pointer">
+                              <input
+                                type="radio"
+                                checked={review.actions[b.key] === 'skip'}
+                                onChange={() => setReview((r) => r ? { ...r, actions: { ...r.actions, [b.key]: 'skip' } } : r)}
+                              />
+                              Skip
+                            </label>
+                            {!isAvailable && (
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  checked={review.actions[b.key] === 'readd'}
+                                  onChange={() => setReview((r) => r ? { ...r, actions: { ...r.actions, [b.key]: 'readd' } } : r)}
+                                />
+                                Re-add as new stock
+                              </label>
+                            )}
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                navigator.clipboard.writeText(bucket.lines.join('\n'));
+                                toast.success(`Copied ${bucket.lines.length} value(s)`);
+                              }}
+                              title="Copy values"
+                            >
+                              <Copy className="h-3.5 w-3.5" /> Copy values
+                            </button>
+                          </div>
+                        </div>
+                        {expanded && (
+                          <div className="border-t border-border/60 bg-background/40 px-3 py-2 max-h-40 overflow-y-auto font-mono text-[11px] leading-relaxed">
+                            {bucket.lines.slice(0, 500).map((l, i) => (
+                              <div key={i} className="truncate">{l}</div>
+                            ))}
+                            {bucket.lines.length > 500 && (
+                              <div className="text-muted-foreground italic">…and {bucket.lines.length - 500} more</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1">
+                  <div className="font-medium text-sm mb-1">Execution preview</div>
+                  <div>Will insert: <span className="font-bold tabular-nums">{newCount}</span> new</div>
+                  <div>Will re-add (restore to available): <span className="font-bold tabular-nums">{willReadd}</span></div>
+                  <div>Will skip: <span className="font-bold tabular-nums">{willSkip}</span></div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setReview(null)} disabled={confirming}>Cancel</Button>
+                  <Button onClick={confirmAdd} disabled={confirming || (newCount + willReadd === 0)}>
+                    {confirming ? 'Applying…' : 'Confirm & apply'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+
 };
 
 const SortableRow = ({ product, onRemove, onStockChanged }: { product: Product; onRemove: (id: string) => void; onStockChanged?: (productId: string) => void }) => {
