@@ -755,6 +755,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         .from('bot_product_stock_items')
         .select('id,status,data')
         .eq('product_id', product.id)
+        .order('id', { ascending: true })
         .range(from, from + PAGE - 1);
       if (fetchError) {
         toast.error('Failed to check duplicate stock');
