@@ -621,7 +621,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       const fromDate = opts?.from ?? dateFrom;
       const toDate = opts?.to ?? dateTo;
       const hasDateRange = Boolean(fromDate || toDate);
-      const buildItemsQuery = (gtCreatedAt?: string | null) => {
+      const buildItemsQuery = () => {
         let q = supabase
           .from('bot_product_stock_items')
           .select('id,data,status,created_at,sold_at,sort_index')
@@ -632,25 +632,25 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
           if (fromDate) q = q.gte(col, `${fromDate}T00:00:00`);
           if (toDate) q = q.lte(col, `${toDate}T23:59:59.999`);
         }
-        // Keyset pagination on created_at ascending (id as tiebreaker via order)
-        if (gtCreatedAt) q = q.gt('created_at', gtCreatedAt);
         return q.order('created_at', { ascending: true }).order('id', { ascending: true });
       };
 
       const PAGE = 1000;
       const allItems: Array<{ id: string; data: Record<string, unknown>; status: string; created_at: string; sold_at: string | null; sort_index?: number | null }> = [];
-      let cursor: string | null = null;
       let pageErr: unknown = null;
-      // Keyset pagination — no cap, fetches every row
+      let offset = 0;
+      // Range-based pagination — robust against duplicate created_at values
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const { data, error } = await buildItemsQuery(cursor).limit(PAGE);
+        const { data, error } = await buildItemsQuery().range(offset, offset + PAGE - 1);
         if (error) { pageErr = error; break; }
         const rows = (data || []) as typeof allItems;
         allItems.push(...rows);
         if (rows.length < PAGE) break;
-        cursor = rows[rows.length - 1].created_at;
+        offset += PAGE;
+        if (offset > 500000) break; // safety cap
       }
+
 
 
       const [totalResult, availableResult] = await Promise.all([
