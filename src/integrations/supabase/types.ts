@@ -1820,6 +1820,14 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      find_stock_duplicates: {
+        Args: { p_product_id: string; p_values: string[] }
+        Returns: {
+          id: string
+          matched_value: string
+          status: string
+        }[]
+      }
       get_bot_quick_stats: {
         Args: { _month: string; _today: string; _week: string }
         Returns: Json
