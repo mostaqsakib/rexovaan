@@ -1780,21 +1780,28 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
     await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending ${fileItems.length} file(s)…`);
   }
 
-  // Deliver file items as Telegram documents (signed URLs)
+  // Deliver file items as Telegram documents — download via service role,
+  // then upload to Telegram as multipart so Telegram never needs to fetch
+  // the private signed URL itself (this was failing silently before).
   for (let i = 0; i < fileItems.length; i++) {
     const it = fileItems[i];
-    const url = await signStockFileUrl(it._file_path, it._file_name);
-    if (!url) {
-      await trackSend(chatId, `⚠️ Could not prepare file: <code>${it._file_name || 'file'}</code>. Please contact support.`);
-      continue;
-    }
+    const fname = it._file_name || `file_${i + 1}`;
     try {
+      const { data: blob, error: dlErr } = await supabase.storage
+        .from("product-files")
+        .download(it._file_path);
+      if (dlErr || !blob) {
+        console.error("storage download failed:", dlErr?.message, "path:", it._file_path);
+        await trackSend(chatId, `⚠️ Could not prepare file: <code>${fname}</code>. Please contact support.`);
+        continue;
+      }
+      const ab = await blob.arrayBuffer();
+      const buf = Buffer.from(ab);
       const cap = fileItems.length > 1 ? `${i + 1} / ${fileItems.length}` : undefined;
-      const res = await sendDocumentByUrl(chatId, url, cap);
-      if (res?.ok && res?.result?.message_id) deliveredMsgIds.push(res.result.message_id);
+      await sendDocumentBuffer(chatId, buf, fname, cap);
     } catch (e) {
-      console.error("file delivery failed:", e?.message);
-      await trackSend(chatId, `⚠️ Failed to send: <code>${it._file_name || 'file'}</code>`);
+      console.error("file delivery failed:", e?.message, "path:", it._file_path);
+      await trackSend(chatId, `⚠️ Failed to send: <code>${fname}</code>`);
     }
   }
 
