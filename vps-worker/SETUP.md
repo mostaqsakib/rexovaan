@@ -71,10 +71,15 @@ npm install -g pm2
 # noVNC for one-time Google login
 apt-get install -y xvfb x11vnc novnc websockify fluxbox xterm
 
-# Chrome libs
+# Chrome libs + real Google Chrome (required for Google login compatibility)
 apt-get install -y libnss3 libatk-bridge2.0-0 libxcomposite1 libxdamage1 \
   libxrandr2 libgbm1 libxkbcommon0 libpango-1.0-0 libcairo2 libasound2t64 \
   libatk1.0-0 libcups2 libdrm2 libxss1 fonts-noto-color-emoji
+wget -qO- https://dl.google.com/linux/linux_signing_key.pub | \
+  gpg --dearmor > /usr/share/keyrings/google-linux.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+  > /etc/apt/sources.list.d/google-chrome.list
+apt update && apt install -y google-chrome-stable
 ```
 
 ### 3. Upload worker
@@ -107,9 +112,13 @@ ssh -L 6080:localhost:6080 root@VPS_IP
 In the noVNC desktop, right-click → xterm:
 ```bash
 cd /opt/link-checker
-DISPLAY=:1 HEADFUL=true node login.js
+DISPLAY=:1 node login.js
 ```
-Log into Google → close the window. Session saved to `/root/chrome-profile`.
+Log into Google → close the Chrome window. Session saved to `/root/chrome-profile`.
+
+If Google shows “This browser or app may not be secure”, you are still using
+Playwright Chromium or an old script. Pull the latest code, install real Chrome,
+then run `DISPLAY=:1 node login.js` again.
 
 ### 5. Start the worker 24/7
 
@@ -160,7 +169,7 @@ VALID_TEXT_PATTERNS=      # if set, only these mark as valid
 pm2 logs link-checker          # live logs
 pm2 restart link-checker       # restart worker
 pm2 stop link-checker          # stop
-DISPLAY=:1 HEADFUL=true node login.js   # re-login when Google signs out
+DISPLAY=:1 node login.js                # re-login when Google signs out
 ```
 
 ## Firewall
