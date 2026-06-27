@@ -824,16 +824,20 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     // Clone re-add rows as NEW available stock — never mutate the original sold/reserved/external/deleted row.
     let readdPayloads: { product_id: string; data: any }[] = [];
     if (readdIds.length > 0) {
-      const { data: srcRows, error: srcErr } = await supabase
-        .from('bot_product_stock_items')
-        .select('id, data')
-        .in('id', readdIds);
-      if (srcErr) {
-        toast.error(`Re-add fetch failed: ${srcErr.message}`);
-        setConfirming(false);
-        return;
+      const FETCH_CHUNK = 200;
+      for (let i = 0; i < readdIds.length; i += FETCH_CHUNK) {
+        const idsChunk = readdIds.slice(i, i + FETCH_CHUNK);
+        const { data: srcRows, error: srcErr } = await supabase
+          .from('bot_product_stock_items')
+          .select('id, data')
+          .in('id', idsChunk);
+        if (srcErr) {
+          toast.error(`Re-add fetch failed: ${srcErr.message}`);
+          setConfirming(false);
+          return;
+        }
+        readdPayloads.push(...(srcRows || []).map((r: any) => ({ product_id: product.id, data: r.data })));
       }
-      readdPayloads = (srcRows || []).map((r: any) => ({ product_id: product.id, data: r.data }));
     }
 
     const newPayloads = newLines.map((line) => ({
