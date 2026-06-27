@@ -841,17 +841,32 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   };
 
 
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
   const availableCount = availableStockCount;
-  const filteredItems = useMemo(
-    () => items.filter((item) => statusFilter === 'all' || item.status === statusFilter),
-    [items, statusFilter]
-  );
-  const currentFilterTotal = statusFilter === 'all'
+  const filteredItems = useMemo(() => {
+    const base = items.filter((item) => statusFilter === 'all' || item.status === statusFilter);
+    if (!dateFrom && !dateTo) return base;
+    const fromMs = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : -Infinity;
+    const toMs = dateTo ? new Date(dateTo + 'T23:59:59.999').getTime() : Infinity;
+    return base.filter((item) => {
+      const ref = item.status === 'sold' ? item.sold_at : item.created_at;
+      if (!ref) return false;
+      const t = new Date(ref).getTime();
+      return t >= fromMs && t <= toMs;
+    });
+  }, [items, statusFilter, dateFrom, dateTo]);
+  const dateFilterActive = Boolean(dateFrom || dateTo);
+  const currentFilterTotal = dateFilterActive
+    ? filteredItems.length
+    : statusFilter === 'all'
     ? totalStockCount
     : statusFilter === 'available'
       ? availableStockCount
       : Math.max(totalStockCount - availableStockCount, filteredItems.length);
   const hiddenByLimitCount = Math.max(currentFilterTotal - filteredItems.length, 0);
+
   const visibleAvailableIds = filteredItems.filter((item) => item.status === 'available').map((item) => item.id);
   const allVisibleAvailableSelected = visibleAvailableIds.length > 0 && visibleAvailableIds.every((id) => selectedIds.includes(id));
 
