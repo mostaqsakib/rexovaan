@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes, Paperclip, Upload, CalendarIcon } from 'lucide-react';
+import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes, Paperclip, Upload, CalendarIcon, ChevronRight, ChevronDown, ShieldCheck, ShoppingCart, Globe2, AlertTriangle, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -505,6 +505,18 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  type ReviewBucketKey = 'available' | 'reserved' | 'sold' | 'external' | 'invalid';
+  type ReviewState = {
+    totalSubmitted: number;
+    duplicateInPaste: number;
+    newLines: string[];
+    buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }>;
+    actions: Record<ReviewBucketKey, 'skip' | 'readd'>;
+    expanded: Record<ReviewBucketKey, boolean>;
+  };
+  const [review, setReview] = useState<ReviewState | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
 
   const formatBytes = (b: number) => {
     if (!b) return '0 B';
@@ -734,89 +746,161 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     if (lines.length === 0) return;
     setSaving(true);
 
-    const { data: existingRows, error: fetchError } = await supabase
-      .from('bot_product_stock_items')
-      .select('data')
-      .eq('product_id', product.id);
-    if (fetchError) {
-      toast.error('Failed to check duplicate stock');
-      setSaving(false);
-      return;
-    }
-
-    const existingValues = new Set(
-      (existingRows || []).flatMap((row) => Object.values((row.data || {}) as Record<string, unknown>).map((item) => String(item).trim().toLowerCase()))
-    );
-    const newLines = lines.filter((line) => !existingValues.has(line.toLowerCase()));
-    const duplicateExisting = lines.length - newLines.length;
-
-    if (newLines.length === 0) {
-      toast.error(`All stock already exists${duplicateInPaste ? ` (${duplicateInPaste} duplicate in paste)` : ''}`);
-      setSaving(false);
-      return;
-    }
-
-    // Use upsert with ignoreDuplicates so DB-level duplicates (unique on product_id+stock_fingerprint)
-    // are silently skipped instead of failing the whole insert.
-    const { data: insertedRows, error } = await supabase
-      .from('bot_product_stock_items')
-      .upsert(
-        newLines.map((line) => ({ product_id: product.id, data: { [product.detailColumns[0] || 'Delivery Info']: line } })),
-        { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true }
-      )
-      .select('id');
-    if (error) {
-      toast.error('Failed to add stock');
-    } else {
-      const insertedCount = (insertedRows || []).length;
-      const dbDuplicates = newLines.length - insertedCount;
-      const totalDuplicates = duplicateExisting + duplicateInPaste + dbDuplicates;
-      if (insertedCount === 0) {
-        toast.error(`All stock already exists${totalDuplicates ? ` (${totalDuplicates} duplicate skipped)` : ''}`);
+    // Fetch existing items (id + status + data) to bucket duplicates by status.
+    const existing: Array<{ id: string; status: string; data: Record<string, unknown> }> = [];
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data: rows, error: fetchError } = await supabase
+        .from('bot_product_stock_items')
+        .select('id,status,data')
+        .eq('product_id', product.id)
+        .range(from, from + PAGE - 1);
+      if (fetchError) {
+        toast.error('Failed to check duplicate stock');
         setSaving(false);
         return;
       }
-      // Do not update last_known_stock here. The stock-broadcast function updates it
-      // only after the alert is queued/sent; if the function cannot start, the bot's
-      // background stock checker can still detect the new stock and broadcast it.
-      const { count: newTotalStock } = await supabase
-        .from('bot_product_stock_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('product_id', product.id)
-        .eq('status', 'available');
-      const { data: productRow } = await supabase
-        .from('bot_products')
-        .select('last_known_stock')
-        .eq('id', product.id)
-        .maybeSingle();
-      const previousKnownStock = Math.max(0, Number(productRow?.last_known_stock || 0));
-      const availableTotal = Math.max(0, Number(newTotalStock || 0));
-      const fallbackKnownStock = Math.max(0, availableTotal - insertedCount);
-      // Optimistic bump prevents the bot's background poller from broadcasting again.
-      await supabase
-        .from('bot_products')
-        .update({ stock_source: 'internal', last_known_stock: availableTotal })
-        .eq('id', product.id);
-      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
-        body: { productId: product.id, addedCount: insertedCount, stockItemIds: (insertedRows || []).map((row) => row.id) },
-      });
-      toast.success(`${insertedCount} stock item(s) added${totalDuplicates ? `, ${totalDuplicates} duplicate skipped` : ''}`);
-      if (broadcastError) {
-        await supabase
-          .from('bot_products')
-          .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
-          .eq('id', product.id);
-        toast.error('Stock added, but broadcast could not be started');
-      } else {
-        toast.success('Stock alert broadcast started');
-      }
-      setValue('');
-      setStatusFilter('available');
-      await loadStock('available');
-      onStockChanged?.(product.id);
+      const batch = (rows || []) as Array<{ id: string; status: string; data: Record<string, unknown> }>;
+      existing.push(...batch);
+      if (batch.length < PAGE) break;
+      from += PAGE;
     }
+
+    // line(lowercased) -> first matching existing row
+    const valueIndex = new Map<string, { id: string; status: string }>();
+    for (const row of existing) {
+      const data = (row.data || {}) as Record<string, unknown>;
+      for (const v of Object.values(data)) {
+        const key = String(v).trim().toLowerCase();
+        if (!key) continue;
+        if (!valueIndex.has(key)) valueIndex.set(key, { id: row.id, status: row.status });
+      }
+    }
+
+    const buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }> = {
+      available: { ids: [], lines: [] },
+      reserved: { ids: [], lines: [] },
+      sold: { ids: [], lines: [] },
+      external: { ids: [], lines: [] },
+      invalid: { ids: [], lines: [] },
+    };
+    const newLines: string[] = [];
+    for (const line of lines) {
+      const hit = valueIndex.get(line.toLowerCase());
+      if (!hit) { newLines.push(line); continue; }
+      const key: ReviewBucketKey =
+        hit.status === 'available' ? 'available' :
+        hit.status === 'reserved' ? 'reserved' :
+        hit.status === 'sold' ? 'sold' :
+        hit.status === 'external' ? 'external' :
+        'invalid';
+      buckets[key].ids.push(hit.id);
+      buckets[key].lines.push(line);
+    }
+
+    setReview({
+      totalSubmitted: rawLines.length,
+      duplicateInPaste,
+      newLines,
+      buckets,
+      actions: { available: 'skip', reserved: 'skip', sold: 'skip', external: 'skip', invalid: 'skip' },
+      expanded: { available: false, reserved: false, sold: false, external: false, invalid: false },
+    });
     setSaving(false);
   };
+
+  const confirmAdd = async () => {
+    if (!review) return;
+    setConfirming(true);
+    const newLines = review.newLines;
+    const restoreIds: string[] = [];
+    (Object.keys(review.buckets) as ReviewBucketKey[]).forEach((k) => {
+      if (review.actions[k] === 'readd' && k !== 'available') {
+        restoreIds.push(...review.buckets[k].ids);
+      }
+    });
+
+    let insertedCount = 0;
+    let insertedRowIds: string[] = [];
+    if (newLines.length > 0) {
+      const { data: insertedRows, error } = await supabase
+        .from('bot_product_stock_items')
+        .upsert(
+          newLines.map((line) => ({ product_id: product.id, data: { [product.detailColumns[0] || 'Delivery Info']: line } })),
+          { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true }
+        )
+        .select('id');
+      if (error) {
+        toast.error('Failed to add new stock');
+        setConfirming(false);
+        return;
+      }
+      insertedRowIds = (insertedRows || []).map((r) => r.id);
+      insertedCount = insertedRowIds.length;
+    }
+
+    let restoredCount = 0;
+    if (restoreIds.length > 0) {
+      const { data: restoredRows, error: restoreErr } = await supabase
+        .from('bot_product_stock_items')
+        .update({ status: 'available', sold_at: null, sold_order_id: null })
+        .in('id', restoreIds)
+        .select('id');
+      if (restoreErr) {
+        toast.error(`Restore failed: ${restoreErr.message}`);
+      } else {
+        restoredCount = (restoredRows || []).length;
+      }
+    }
+
+    const totalAdded = insertedCount + restoredCount;
+    if (totalAdded === 0) {
+      toast.message('Nothing to add — all items skipped');
+      setConfirming(false);
+      setReview(null);
+      setValue('');
+      return;
+    }
+
+    const { count: newTotalStock } = await supabase
+      .from('bot_product_stock_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', product.id)
+      .eq('status', 'available');
+    const { data: productRow } = await supabase
+      .from('bot_products')
+      .select('last_known_stock')
+      .eq('id', product.id)
+      .maybeSingle();
+    const previousKnownStock = Math.max(0, Number(productRow?.last_known_stock || 0));
+    const availableTotal = Math.max(0, Number(newTotalStock || 0));
+    const fallbackKnownStock = Math.max(0, availableTotal - totalAdded);
+    await supabase
+      .from('bot_products')
+      .update({ stock_source: 'internal', last_known_stock: availableTotal })
+      .eq('id', product.id);
+    const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+      body: { productId: product.id, addedCount: totalAdded, stockItemIds: [...insertedRowIds, ...restoreIds] },
+    });
+    toast.success(`${insertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
+    if (broadcastError) {
+      await supabase
+        .from('bot_products')
+        .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+        .eq('id', product.id);
+      toast.error('Stock added, but broadcast could not be started');
+    } else {
+      toast.success('Stock alert broadcast started');
+    }
+    setValue('');
+    setStatusFilter('available');
+    await loadStock('available');
+    onStockChanged?.(product.id);
+    setConfirming(false);
+    setReview(null);
+  };
+
 
   const cleanupStorageFiles = async (itemIds: string[]) => {
     const targets = items.filter((it) => itemIds.includes(it.id));
@@ -1254,8 +1338,145 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
               </div>
             </div>
           </div>
+
+      <Dialog open={!!review} onOpenChange={(o) => { if (!o && !confirming) setReview(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Boxes className="h-5 w-5 text-primary" /> Stock Import Review
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">Review duplicates before adding. Nothing is inserted until you confirm.</p>
+          </DialogHeader>
+          {review && (() => {
+            const bucketMeta: Array<{ key: ReviewBucketKey; label: string; icon: any; color: string }> = [
+              { key: 'available', label: 'Available', icon: AlertTriangle, color: 'text-warning border-warning/30 bg-warning/5' },
+              { key: 'reserved', label: 'Reserved', icon: ShieldCheck, color: 'text-primary border-primary/30 bg-primary/5' },
+              { key: 'sold', label: 'Sold', icon: ShoppingCart, color: 'text-success border-success/30 bg-success/5' },
+              { key: 'external', label: 'External', icon: Globe2, color: 'text-info border-info/30 bg-info/5' },
+              { key: 'invalid', label: 'Deleted', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
+            ];
+            const newCount = review.newLines.length;
+            let willReadd = 0;
+            (Object.keys(review.buckets) as ReviewBucketKey[]).forEach((k) => {
+              if (review.actions[k] === 'readd' && k !== 'available') willReadd += review.buckets[k].ids.length;
+            });
+            const willSkip = (Object.keys(review.buckets) as ReviewBucketKey[]).reduce((acc, k) => {
+              if (review.actions[k] === 'skip' || k === 'available') acc += review.buckets[k].ids.length;
+              return acc;
+            }, 0);
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="rounded-md border border-border p-2.5">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total submitted</div>
+                    <div className="text-xl font-bold tabular-nums">{review.totalSubmitted}</div>
+                  </div>
+                  <div className="rounded-md border border-success/30 bg-success/5 p-2.5">
+                    <div className="text-[10px] uppercase tracking-wide text-success flex items-center gap-1"><Check className="h-3 w-3" /> New unique</div>
+                    <div className="text-xl font-bold tabular-nums">{newCount}</div>
+                  </div>
+                  {bucketMeta.map((b) => {
+                    const Icon = b.icon;
+                    const n = review.buckets[b.key].ids.length;
+                    return (
+                      <div key={b.key} className={`rounded-md border p-2.5 ${b.color}`}>
+                        <div className="text-[10px] uppercase tracking-wide flex items-center gap-1"><Icon className="h-3 w-3" /> {b.label}</div>
+                        <div className="text-xl font-bold tabular-nums">{n}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {review.duplicateInPaste > 0 && (
+                  <div className="text-xs text-muted-foreground">{review.duplicateInPaste} duplicate line(s) in your paste were merged.</div>
+                )}
+
+                <div className="space-y-2">
+                  {bucketMeta.filter((b) => review.buckets[b.key].ids.length > 0).map((b) => {
+                    const Icon = b.icon;
+                    const bucket = review.buckets[b.key];
+                    const expanded = review.expanded[b.key];
+                    const isAvailable = b.key === 'available';
+                    return (
+                      <div key={b.key} className={`rounded-md border ${b.color}`}>
+                        <div className="flex items-center justify-between gap-2 p-3">
+                          <button
+                            type="button"
+                            onClick={() => setReview((r) => r ? { ...r, expanded: { ...r.expanded, [b.key]: !r.expanded[b.key] } } : r)}
+                            className="flex items-center gap-2 text-sm font-medium"
+                          >
+                            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            <Icon className="h-4 w-4" /> {b.label}
+                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-background/60 text-xs tabular-nums">{bucket.ids.length}</span>
+                          </button>
+                          <div className="flex items-center gap-3 text-xs">
+                            <label className="flex items-center gap-1 cursor-pointer">
+                              <input
+                                type="radio"
+                                checked={review.actions[b.key] === 'skip'}
+                                onChange={() => setReview((r) => r ? { ...r, actions: { ...r.actions, [b.key]: 'skip' } } : r)}
+                              />
+                              Skip
+                            </label>
+                            {!isAvailable && (
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  checked={review.actions[b.key] === 'readd'}
+                                  onChange={() => setReview((r) => r ? { ...r, actions: { ...r.actions, [b.key]: 'readd' } } : r)}
+                                />
+                                Re-add as new stock
+                              </label>
+                            )}
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                navigator.clipboard.writeText(bucket.lines.join('\n'));
+                                toast.success(`Copied ${bucket.lines.length} value(s)`);
+                              }}
+                              title="Copy values"
+                            >
+                              <Copy className="h-3.5 w-3.5" /> Copy values
+                            </button>
+                          </div>
+                        </div>
+                        {expanded && (
+                          <div className="border-t border-border/60 bg-background/40 px-3 py-2 max-h-40 overflow-y-auto font-mono text-[11px] leading-relaxed">
+                            {bucket.lines.slice(0, 500).map((l, i) => (
+                              <div key={i} className="truncate">{l}</div>
+                            ))}
+                            {bucket.lines.length > 500 && (
+                              <div className="text-muted-foreground italic">…and {bucket.lines.length - 500} more</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-1">
+                  <div className="font-medium text-sm mb-1">Execution preview</div>
+                  <div>Will insert: <span className="font-bold tabular-nums">{newCount}</span> new</div>
+                  <div>Will re-add (restore to available): <span className="font-bold tabular-nums">{willReadd}</span></div>
+                  <div>Will skip: <span className="font-bold tabular-nums">{willSkip}</span></div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setReview(null)} disabled={confirming}>Cancel</Button>
+                  <Button onClick={confirmAdd} disabled={confirming || (newCount + willReadd === 0)}>
+                    {confirming ? 'Applying…' : 'Confirm & apply'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+
 };
 
 const SortableRow = ({ product, onRemove, onStockChanged }: { product: Product; onRemove: (id: string) => void; onStockChanged?: (productId: string) => void }) => {
