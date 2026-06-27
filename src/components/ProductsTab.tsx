@@ -887,8 +887,11 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       ? availableStockCount
       : Math.max(totalStockCount - availableStockCount, filteredItems.length);
   const hiddenByLimitCount = Math.max(currentFilterTotal - filteredItems.length, 0);
+  const RENDER_CAP = 500;
+  const visibleItems = filteredItems.length > RENDER_CAP ? filteredItems.slice(0, RENDER_CAP) : filteredItems;
+  const renderHiddenCount = filteredItems.length - visibleItems.length;
 
-  const visibleAvailableIds = filteredItems.filter((item) => item.status === 'available').map((item) => item.id);
+  const visibleAvailableIds = visibleItems.filter((item) => item.status === 'available').map((item) => item.id);
   const allVisibleAvailableSelected = visibleAvailableIds.length > 0 && visibleAvailableIds.every((id) => selectedIds.includes(id));
 
   if (product.stockSource !== 'internal') return null;
