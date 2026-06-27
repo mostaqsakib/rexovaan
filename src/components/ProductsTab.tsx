@@ -621,48 +621,37 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       const fromDate = opts?.from ?? dateFrom;
       const toDate = opts?.to ?? dateTo;
       const hasDateRange = Boolean(fromDate || toDate);
-      // For heavy tabs (sold/all), avoid loading the whole table by default.
-      const SOLD_DEFAULT_CAP = 1000;
-      const capRows = (filter === 'sold' || filter === 'all') && !hasDateRange;
-
-      const buildItemsQuery = () => {
+      const buildItemsQuery = (gtCreatedAt?: string | null) => {
         let q = supabase
           .from('bot_product_stock_items')
           .select('id,data,status,created_at,sold_at,sort_index')
           .eq('product_id', product.id);
         if (filter !== 'all') q = q.eq('status', filter);
-        // Apply server-side date filter so date-ranged sold queries stay light.
         if (hasDateRange) {
           const col = filter === 'sold' ? 'sold_at' : 'created_at';
           if (fromDate) q = q.gte(col, `${fromDate}T00:00:00`);
           if (toDate) q = q.lte(col, `${toDate}T23:59:59.999`);
         }
-        if (capRows) {
-          // Newest first for sold without date range
-          q = q.order('sold_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
-        } else {
-          if (filter === 'all') q = q.order('status', { ascending: true });
-          q = q.order('sort_index', { ascending: true }).order('created_at', { ascending: true });
-        }
-        return q;
+        // Keyset pagination on created_at ascending (id as tiebreaker via order)
+        if (gtCreatedAt) q = q.gt('created_at', gtCreatedAt);
+        return q.order('created_at', { ascending: true }).order('id', { ascending: true });
       };
 
       const PAGE = 1000;
       const allItems: Array<{ id: string; data: Record<string, unknown>; status: string; created_at: string; sold_at: string | null; sort_index?: number | null }> = [];
-      let from = 0;
+      let cursor: string | null = null;
       let pageErr: unknown = null;
-      const maxRows = capRows ? SOLD_DEFAULT_CAP : Infinity;
+      // Keyset pagination — no cap, fetches every row
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const end = Math.min(from + PAGE - 1, capRows ? maxRows - 1 : from + PAGE - 1);
-        const { data, error } = await buildItemsQuery().range(from, end);
+        const { data, error } = await buildItemsQuery(cursor).limit(PAGE);
         if (error) { pageErr = error; break; }
         const rows = (data || []) as typeof allItems;
         allItems.push(...rows);
         if (rows.length < PAGE) break;
-        if (allItems.length >= maxRows) break;
-        from += PAGE;
+        cursor = rows[rows.length - 1].created_at;
       }
+
 
       const [totalResult, availableResult] = await Promise.all([
         supabase.from('bot_product_stock_items').select('id', { count: 'exact', head: true }).eq('product_id', product.id),
