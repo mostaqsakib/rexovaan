@@ -1051,16 +1051,18 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     disabled={filteredItems.length === 0}
                     onClick={() => {
                       const headers = Array.from(new Set(filteredItems.flatMap((it) => Object.keys(it.data || {}))));
-                      const rows = [['Status', ...headers].join(',')];
+                      const rows = [['Status', 'Sold At', 'Created At', ...headers].join(',')];
                       filteredItems.forEach((it) => {
                         const cols = headers.map((h) => `"${String((it.data as Record<string, unknown>)?.[h] ?? '').replace(/"/g, '""')}"`);
-                        rows.push([it.status, ...cols].join(','));
+                        rows.push([it.status, it.sold_at || '', it.created_at || '', ...cols].join(','));
                       });
                       const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `${product.name}-${statusFilter}-${Date.now()}.csv`;
+                      const range = dateFrom || dateTo ? `-${dateFrom || 'start'}_to_${dateTo || 'end'}` : '';
+                      a.download = `${product.name}-${statusFilter}${range}-${Date.now()}.csv`;
+
                       a.click();
                       URL.revokeObjectURL(url);
                       toast.success(`Exported ${filteredItems.length} item(s)`);
