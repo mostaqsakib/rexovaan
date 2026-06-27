@@ -26,6 +26,8 @@ const {
   SUPABASE_SERVICE_ROLE_KEY,
   CHROME_PROFILE_DIR = '/root/chrome-profile',
   HEADFUL = 'false',
+  CHROME_CHANNEL = '',
+  CHROME_EXECUTABLE_PATH = '',
   MAX_CONCURRENCY = '10',
   POLL_INTERVAL_MS = '5000',
   NAV_TIMEOUT_MS = '15000',
@@ -124,6 +126,8 @@ async function getBrowser() {
       ],
       locale: 'en-US',
     };
+    if (CHROME_EXECUTABLE_PATH) launchOptions.executablePath = CHROME_EXECUTABLE_PATH;
+    else if (CHROME_CHANNEL) launchOptions.channel = CHROME_CHANNEL;
     let ctx;
     try {
       ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, launchOptions);
