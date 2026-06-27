@@ -912,7 +912,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
             <div className="font-heading text-base font-semibold truncate">{product.name}</div>
             <div className="text-xs text-muted-foreground">
               Available: <span className="text-success font-medium">{availableCount}</span> / Total: {totalStockCount}
-              {hiddenByLimitCount > 0 ? ` · Showing first ${filteredItems.length} ${statusFilter} item(s)` : ''}
+              {filteredItems.length > 0 && ` · Loaded ${filteredItems.length} ${statusFilter}`}
+              {renderHiddenCount > 0 && ` (showing first ${RENDER_CAP}, all exportable)`}
             </div>
           </div>
         </div>
