@@ -252,12 +252,26 @@ async function judgeUrl(ctx, url) {
 }
 
 async function populateItems(job) {
-  const { data: stock, error } = await sb
-    .from('bot_product_stock_items')
-    .select('id, data')
-    .eq('product_id', job.product_id)
-    .eq('status', 'available');
-  if (error) throw error;
+  // Supabase has an implicit 1000-row cap; use keyset pagination to fetch ALL.
+  const stock = [];
+  const PAGE = 1000;
+  let lastId = null;
+  while (true) {
+    let q = sb
+      .from('bot_product_stock_items')
+      .select('id, data')
+      .eq('product_id', job.product_id)
+      .eq('status', 'available')
+      .order('id', { ascending: true })
+      .limit(PAGE);
+    if (lastId) q = q.gt('id', lastId);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    stock.push(...data);
+    if (data.length < PAGE) break;
+    lastId = data[data.length - 1].id;
+  }
 
   const rows = [];
   for (const s of stock || []) {
