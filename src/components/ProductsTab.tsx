@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -841,17 +843,32 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   };
 
 
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
   const availableCount = availableStockCount;
-  const filteredItems = useMemo(
-    () => items.filter((item) => statusFilter === 'all' || item.status === statusFilter),
-    [items, statusFilter]
-  );
-  const currentFilterTotal = statusFilter === 'all'
+  const filteredItems = useMemo(() => {
+    const base = items.filter((item) => statusFilter === 'all' || item.status === statusFilter);
+    if (!dateFrom && !dateTo) return base;
+    const fromMs = dateFrom ? new Date(dateFrom + 'T00:00:00').getTime() : -Infinity;
+    const toMs = dateTo ? new Date(dateTo + 'T23:59:59.999').getTime() : Infinity;
+    return base.filter((item) => {
+      const ref = item.status === 'sold' ? item.sold_at : item.created_at;
+      if (!ref) return false;
+      const t = new Date(ref).getTime();
+      return t >= fromMs && t <= toMs;
+    });
+  }, [items, statusFilter, dateFrom, dateTo]);
+  const dateFilterActive = Boolean(dateFrom || dateTo);
+  const currentFilterTotal = dateFilterActive
+    ? filteredItems.length
+    : statusFilter === 'all'
     ? totalStockCount
     : statusFilter === 'available'
       ? availableStockCount
       : Math.max(totalStockCount - availableStockCount, filteredItems.length);
   const hiddenByLimitCount = Math.max(currentFilterTotal - filteredItems.length, 0);
+
   const visibleAvailableIds = filteredItems.filter((item) => item.status === 'available').map((item) => item.id);
   const allVisibleAvailableSelected = visibleAvailableIds.length > 0 && visibleAvailableIds.every((id) => selectedIds.includes(id));
 
@@ -978,7 +995,34 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     </Button>
                   ))}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-muted-foreground">From</span>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="h-7 w-[140px] text-xs"
+                    />
+                    <span className="text-muted-foreground">To</span>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="h-7 w-[140px] text-xs"
+                    />
+                    {(dateFrom || dateTo) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => { setDateFrom(''); setDateTo(''); }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                   <Button
                     size="sm"
                     variant="outline"
@@ -990,11 +1034,13 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `${product.name}-${statusFilter}-${Date.now()}.txt`;
+                      const range = dateFrom || dateTo ? `-${dateFrom || 'start'}_to_${dateTo || 'end'}` : '';
+                      a.download = `${product.name}-${statusFilter}${range}-${Date.now()}.txt`;
                       a.click();
                       URL.revokeObjectURL(url);
                       toast.success(`Exported ${filteredItems.length} item(s)`);
                     }}
+
                   >
                     <Download className="h-3.5 w-3.5" /> Export TXT
                   </Button>
@@ -1005,16 +1051,18 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     disabled={filteredItems.length === 0}
                     onClick={() => {
                       const headers = Array.from(new Set(filteredItems.flatMap((it) => Object.keys(it.data || {}))));
-                      const rows = [['Status', ...headers].join(',')];
+                      const rows = [['Status', 'Sold At', 'Created At', ...headers].join(',')];
                       filteredItems.forEach((it) => {
                         const cols = headers.map((h) => `"${String((it.data as Record<string, unknown>)?.[h] ?? '').replace(/"/g, '""')}"`);
-                        rows.push([it.status, ...cols].join(','));
+                        rows.push([it.status, it.sold_at || '', it.created_at || '', ...cols].join(','));
                       });
                       const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `${product.name}-${statusFilter}-${Date.now()}.csv`;
+                      const range = dateFrom || dateTo ? `-${dateFrom || 'start'}_to_${dateTo || 'end'}` : '';
+                      a.download = `${product.name}-${statusFilter}${range}-${Date.now()}.csv`;
+
                       a.click();
                       URL.revokeObjectURL(url);
                       toast.success(`Exported ${filteredItems.length} item(s)`);
