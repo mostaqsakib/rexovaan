@@ -1010,21 +1010,24 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
 
             <div className="flex min-h-[260px] flex-col rounded-md border border-border overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
-                <div className="flex rounded-md border border-border bg-background p-0.5">
-                  {(['available', 'sold', 'all'] as const).map((filter) => (
-                    <Button
-                      key={filter}
-                      type="button"
-                      size="sm"
-                      variant={statusFilter === filter ? 'secondary' : 'ghost'}
-                      className="h-6 px-2 text-xs capitalize"
-                      onClick={() => setStatusFilter(filter)}
-                    >
-                      {filter}
-                    </Button>
-                  ))}
+              <div className="flex flex-col gap-2 border-b border-border bg-muted/40 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex rounded-md border border-border bg-background p-0.5">
+                    {(['available', 'sold', 'all'] as const).map((filter) => (
+                      <Button
+                        key={filter}
+                        type="button"
+                        size="sm"
+                        variant={statusFilter === filter ? 'secondary' : 'ghost'}
+                        className="h-7 px-3 text-xs capitalize"
+                        onClick={() => setStatusFilter(filter)}
+                      >
+                        {filter}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
+
                 <div className="flex flex-wrap items-center gap-1.5">
                   <div className="flex items-center gap-1 text-xs">
                     <span className="text-muted-foreground">From</span>
