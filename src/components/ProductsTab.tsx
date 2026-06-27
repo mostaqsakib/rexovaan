@@ -746,89 +746,161 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     if (lines.length === 0) return;
     setSaving(true);
 
-    const { data: existingRows, error: fetchError } = await supabase
-      .from('bot_product_stock_items')
-      .select('data')
-      .eq('product_id', product.id);
-    if (fetchError) {
-      toast.error('Failed to check duplicate stock');
-      setSaving(false);
-      return;
-    }
-
-    const existingValues = new Set(
-      (existingRows || []).flatMap((row) => Object.values((row.data || {}) as Record<string, unknown>).map((item) => String(item).trim().toLowerCase()))
-    );
-    const newLines = lines.filter((line) => !existingValues.has(line.toLowerCase()));
-    const duplicateExisting = lines.length - newLines.length;
-
-    if (newLines.length === 0) {
-      toast.error(`All stock already exists${duplicateInPaste ? ` (${duplicateInPaste} duplicate in paste)` : ''}`);
-      setSaving(false);
-      return;
-    }
-
-    // Use upsert with ignoreDuplicates so DB-level duplicates (unique on product_id+stock_fingerprint)
-    // are silently skipped instead of failing the whole insert.
-    const { data: insertedRows, error } = await supabase
-      .from('bot_product_stock_items')
-      .upsert(
-        newLines.map((line) => ({ product_id: product.id, data: { [product.detailColumns[0] || 'Delivery Info']: line } })),
-        { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true }
-      )
-      .select('id');
-    if (error) {
-      toast.error('Failed to add stock');
-    } else {
-      const insertedCount = (insertedRows || []).length;
-      const dbDuplicates = newLines.length - insertedCount;
-      const totalDuplicates = duplicateExisting + duplicateInPaste + dbDuplicates;
-      if (insertedCount === 0) {
-        toast.error(`All stock already exists${totalDuplicates ? ` (${totalDuplicates} duplicate skipped)` : ''}`);
+    // Fetch existing items (id + status + data) to bucket duplicates by status.
+    const existing: Array<{ id: string; status: string; data: Record<string, unknown> }> = [];
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data: rows, error: fetchError } = await supabase
+        .from('bot_product_stock_items')
+        .select('id,status,data')
+        .eq('product_id', product.id)
+        .range(from, from + PAGE - 1);
+      if (fetchError) {
+        toast.error('Failed to check duplicate stock');
         setSaving(false);
         return;
       }
-      // Do not update last_known_stock here. The stock-broadcast function updates it
-      // only after the alert is queued/sent; if the function cannot start, the bot's
-      // background stock checker can still detect the new stock and broadcast it.
-      const { count: newTotalStock } = await supabase
-        .from('bot_product_stock_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('product_id', product.id)
-        .eq('status', 'available');
-      const { data: productRow } = await supabase
-        .from('bot_products')
-        .select('last_known_stock')
-        .eq('id', product.id)
-        .maybeSingle();
-      const previousKnownStock = Math.max(0, Number(productRow?.last_known_stock || 0));
-      const availableTotal = Math.max(0, Number(newTotalStock || 0));
-      const fallbackKnownStock = Math.max(0, availableTotal - insertedCount);
-      // Optimistic bump prevents the bot's background poller from broadcasting again.
-      await supabase
-        .from('bot_products')
-        .update({ stock_source: 'internal', last_known_stock: availableTotal })
-        .eq('id', product.id);
-      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
-        body: { productId: product.id, addedCount: insertedCount, stockItemIds: (insertedRows || []).map((row) => row.id) },
-      });
-      toast.success(`${insertedCount} stock item(s) added${totalDuplicates ? `, ${totalDuplicates} duplicate skipped` : ''}`);
-      if (broadcastError) {
-        await supabase
-          .from('bot_products')
-          .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
-          .eq('id', product.id);
-        toast.error('Stock added, but broadcast could not be started');
-      } else {
-        toast.success('Stock alert broadcast started');
-      }
-      setValue('');
-      setStatusFilter('available');
-      await loadStock('available');
-      onStockChanged?.(product.id);
+      const batch = (rows || []) as Array<{ id: string; status: string; data: Record<string, unknown> }>;
+      existing.push(...batch);
+      if (batch.length < PAGE) break;
+      from += PAGE;
     }
+
+    // line(lowercased) -> first matching existing row
+    const valueIndex = new Map<string, { id: string; status: string }>();
+    for (const row of existing) {
+      const data = (row.data || {}) as Record<string, unknown>;
+      for (const v of Object.values(data)) {
+        const key = String(v).trim().toLowerCase();
+        if (!key) continue;
+        if (!valueIndex.has(key)) valueIndex.set(key, { id: row.id, status: row.status });
+      }
+    }
+
+    const buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }> = {
+      available: { ids: [], lines: [] },
+      reserved: { ids: [], lines: [] },
+      sold: { ids: [], lines: [] },
+      external: { ids: [], lines: [] },
+      invalid: { ids: [], lines: [] },
+    };
+    const newLines: string[] = [];
+    for (const line of lines) {
+      const hit = valueIndex.get(line.toLowerCase());
+      if (!hit) { newLines.push(line); continue; }
+      const key: ReviewBucketKey =
+        hit.status === 'available' ? 'available' :
+        hit.status === 'reserved' ? 'reserved' :
+        hit.status === 'sold' ? 'sold' :
+        hit.status === 'external' ? 'external' :
+        'invalid';
+      buckets[key].ids.push(hit.id);
+      buckets[key].lines.push(line);
+    }
+
+    setReview({
+      totalSubmitted: rawLines.length,
+      duplicateInPaste,
+      newLines,
+      buckets,
+      actions: { available: 'skip', reserved: 'skip', sold: 'skip', external: 'skip', invalid: 'skip' },
+      expanded: { available: false, reserved: false, sold: false, external: false, invalid: false },
+    });
     setSaving(false);
   };
+
+  const confirmAdd = async () => {
+    if (!review) return;
+    setConfirming(true);
+    const newLines = review.newLines;
+    const restoreIds: string[] = [];
+    (Object.keys(review.buckets) as ReviewBucketKey[]).forEach((k) => {
+      if (review.actions[k] === 'readd' && k !== 'available') {
+        restoreIds.push(...review.buckets[k].ids);
+      }
+    });
+
+    let insertedCount = 0;
+    let insertedRowIds: string[] = [];
+    if (newLines.length > 0) {
+      const { data: insertedRows, error } = await supabase
+        .from('bot_product_stock_items')
+        .upsert(
+          newLines.map((line) => ({ product_id: product.id, data: { [product.detailColumns[0] || 'Delivery Info']: line } })),
+          { onConflict: 'product_id,stock_fingerprint', ignoreDuplicates: true }
+        )
+        .select('id');
+      if (error) {
+        toast.error('Failed to add new stock');
+        setConfirming(false);
+        return;
+      }
+      insertedRowIds = (insertedRows || []).map((r) => r.id);
+      insertedCount = insertedRowIds.length;
+    }
+
+    let restoredCount = 0;
+    if (restoreIds.length > 0) {
+      const { data: restoredRows, error: restoreErr } = await supabase
+        .from('bot_product_stock_items')
+        .update({ status: 'available', sold_at: null, sold_order_id: null })
+        .in('id', restoreIds)
+        .select('id');
+      if (restoreErr) {
+        toast.error(`Restore failed: ${restoreErr.message}`);
+      } else {
+        restoredCount = (restoredRows || []).length;
+      }
+    }
+
+    const totalAdded = insertedCount + restoredCount;
+    if (totalAdded === 0) {
+      toast.message('Nothing to add — all items skipped');
+      setConfirming(false);
+      setReview(null);
+      setValue('');
+      return;
+    }
+
+    const { count: newTotalStock } = await supabase
+      .from('bot_product_stock_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', product.id)
+      .eq('status', 'available');
+    const { data: productRow } = await supabase
+      .from('bot_products')
+      .select('last_known_stock')
+      .eq('id', product.id)
+      .maybeSingle();
+    const previousKnownStock = Math.max(0, Number(productRow?.last_known_stock || 0));
+    const availableTotal = Math.max(0, Number(newTotalStock || 0));
+    const fallbackKnownStock = Math.max(0, availableTotal - totalAdded);
+    await supabase
+      .from('bot_products')
+      .update({ stock_source: 'internal', last_known_stock: availableTotal })
+      .eq('id', product.id);
+    const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+      body: { productId: product.id, addedCount: totalAdded, stockItemIds: [...insertedRowIds, ...restoreIds] },
+    });
+    toast.success(`${insertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
+    if (broadcastError) {
+      await supabase
+        .from('bot_products')
+        .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+        .eq('id', product.id);
+      toast.error('Stock added, but broadcast could not be started');
+    } else {
+      toast.success('Stock alert broadcast started');
+    }
+    setValue('');
+    setStatusFilter('available');
+    await loadStock('available');
+    onStockChanged?.(product.id);
+    setConfirming(false);
+    setReview(null);
+  };
+
 
   const cleanupStorageFiles = async (itemIds: string[]) => {
     const targets = items.filter((it) => itemIds.includes(it.id));
