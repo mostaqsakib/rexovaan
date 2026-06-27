@@ -942,7 +942,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   </div>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2">
                 <input
                   id={`stock-file-${product.id}`}
                   type="file"
@@ -966,30 +966,34 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     e.target.value = '';
                   }}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 min-w-[120px]"
-                  onClick={() => document.getElementById(`stock-file-${product.id}`)?.click()}
-                  disabled={saving || uploadingFiles}
-                >
-                  📄 Load .txt
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 min-w-[140px] gap-1"
-                  onClick={() => document.getElementById(`stock-upload-${product.id}`)?.click()}
-                  disabled={saving || uploadingFiles}
-                  title="Upload files as stock (each file = 1 stock unit, max 20MB)"
-                >
-                  <Upload className="h-4 w-4" />
-                  {uploadingFiles && uploadProgress
-                    ? `Uploading ${uploadProgress.done}/${uploadProgress.total}…`
-                    : 'Upload files as stock'}
-                </Button>
-                <Button className="flex-1 min-w-[120px]" onClick={handleAdd} disabled={saving || uploadingFiles || !value.trim()}>
-                  {saving ? 'Adding...' : 'Add Stock'}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-1"
+                    onClick={() => document.getElementById(`stock-file-${product.id}`)?.click()}
+                    disabled={saving || uploadingFiles}
+                  >
+                    📄 Load .txt
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-1"
+                    onClick={() => document.getElementById(`stock-upload-${product.id}`)?.click()}
+                    disabled={saving || uploadingFiles}
+                    title="Upload files as stock (each file = 1 stock unit, max 20MB)"
+                  >
+                    <Upload className="h-4 w-4" />
+                    {uploadingFiles && uploadProgress
+                      ? `${uploadProgress.done}/${uploadProgress.total}…`
+                      : 'Upload files'}
+                  </Button>
+                </div>
+                <Button className="w-full" onClick={handleAdd} disabled={saving || uploadingFiles || !value.trim()}>
+                  {saving ? 'Adding...' : '+ Add Stock'}
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground">
