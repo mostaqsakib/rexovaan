@@ -79,6 +79,12 @@ const pollMs = parseInt(POLL_INTERVAL_MS, 10);
 const retries = parseInt(RETRIES_ON_ERROR, 10);
 const perJobDelay = parseInt(DELAY_BETWEEN_JOBS_MS, 10);
 const autoRetryFailedCooldownMs = parseInt(process.env.AUTO_RETRY_FAILED_COOLDOWN_MS || '300000', 10);
+const browserFallbackStatuses = new Set(
+  (process.env.BROWSER_FALLBACK_HTTP_STATUSES || '401,403,429')
+    .split(',')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter(Number.isFinite),
+);
 
 let browserCtx = null;
 let browserLaunchPromise = null;
@@ -166,6 +172,47 @@ function isGoogleAuthPage(finalUrl, bodyText) {
     || bodyText.includes("couldn't sign you in");
 }
 
+function classifyPage(finalUrl, bodyText) {
+  if (isGoogleAuthPage(finalUrl, bodyText)) {
+    return { result: 'error', reason: 'google auth required: re-run `node login.js` on the VPS to refresh Chrome profile cookies' };
+  }
+
+  for (const pat of invalidPatterns) {
+    if (bodyText.includes(pat)) return { result: 'invalid', reason: `matched: ${pat}` };
+  }
+  if (/already|redeemed|expired|error/.test(finalUrl)) {
+    return { result: 'invalid', reason: `redirected: ${finalUrl.slice(0, 120)}` };
+  }
+  if (validPatterns.length === 0) return { result: 'valid', reason: 'no invalid markers' };
+  for (const pat of validPatterns) {
+    if (bodyText.includes(pat)) return { result: 'valid', reason: `matched: ${pat}` };
+  }
+  return { result: 'error', reason: 'no valid/invalid markers detected' };
+}
+
+async function judgeUrlInBrowser(ctx, url, reasonPrefix = 'browser fallback') {
+  const page = await ctx.newPage();
+  try {
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
+    await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 8000) }).catch(() => {});
+    const status = response?.status?.() || 0;
+    const finalUrl = page.url().toLowerCase();
+    const bodyText = (await page.locator('body').innerText({ timeout: 5000 }).catch(() => '')).toLowerCase();
+
+    if (status && status >= 400 && status !== 403) {
+      return { result: 'error', reason: `${reasonPrefix}: HTTP ${status}` };
+    }
+
+    const classified = classifyPage(finalUrl, bodyText);
+    if (classified.result === 'error' && classified.reason === 'no valid/invalid markers detected' && status === 403) {
+      return { result: 'error', reason: `${reasonPrefix}: HTTP 403` };
+    }
+    return classified;
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 // Fast fetch judge — mirrors the Chrome extension's logic exactly.
 async function judgeUrl(ctx, url) {
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
@@ -187,26 +234,14 @@ async function judgeUrl(ctx, url) {
         continue;
       }
       if (!res.ok()) {
+        if (browserFallbackStatuses.has(status)) {
+          return await judgeUrlInBrowser(ctx, url, `fast fetch HTTP ${status}`);
+        }
         return { result: 'error', reason: `HTTP ${status}` };
       }
 
       const bodyText = (await res.text()).toLowerCase();
-
-      if (isGoogleAuthPage(finalUrl, bodyText)) {
-        return { result: 'error', reason: 'google auth required: re-run `node login.js` on the VPS to refresh Chrome profile cookies' };
-      }
-
-      for (const pat of invalidPatterns) {
-        if (bodyText.includes(pat)) return { result: 'invalid', reason: `matched: ${pat}` };
-      }
-      if (/already|redeemed|expired|error/.test(finalUrl)) {
-        return { result: 'invalid', reason: `redirected: ${finalUrl.slice(0, 120)}` };
-      }
-      if (validPatterns.length === 0) return { result: 'valid', reason: 'no invalid markers' };
-      for (const pat of validPatterns) {
-        if (bodyText.includes(pat)) return { result: 'valid', reason: `matched: ${pat}` };
-      }
-      return { result: 'error', reason: 'no valid/invalid markers detected' };
+      return classifyPage(finalUrl, bodyText);
     } catch (e) {
       const msg = String(e?.message || e);
       if (attempt <= retries) { await sleep(1000); continue; }
