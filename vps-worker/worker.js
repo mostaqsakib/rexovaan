@@ -11,16 +11,15 @@
 // The persistent profile is still used so Google login cookies apply.
 
 import 'dotenv/config';
+import './polyfill.js'; // MUST be before @supabase import — sets globalThis.WebSocket
+import WebSocket from 'ws';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
-import WebSocket from 'ws';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-
-if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
 
 const {
   SUPABASE_URL,
