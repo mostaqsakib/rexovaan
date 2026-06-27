@@ -505,6 +505,18 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  type ReviewBucketKey = 'available' | 'reserved' | 'sold' | 'external' | 'invalid';
+  type ReviewState = {
+    totalSubmitted: number;
+    duplicateInPaste: number;
+    newLines: string[];
+    buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }>;
+    actions: Record<ReviewBucketKey, 'skip' | 'readd'>;
+    expanded: Record<ReviewBucketKey, boolean>;
+  };
+  const [review, setReview] = useState<ReviewState | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
 
   const formatBytes = (b: number) => {
     if (!b) return '0 B';
