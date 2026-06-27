@@ -689,19 +689,26 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
   useEffect(() => {
     if (product.stockSource !== 'internal') return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
       .channel(`stock-items-${product.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bot_product_stock_items', filter: `product_id=eq.${product.id}` },
         () => {
-          void loadStock();
-          onStockChanged?.(product.id);
+          // Debounce to avoid refetching 30k+ rows on every sale during heavy tabs
+          if (timer) clearTimeout(timer);
+          const delay = statusFilter === 'available' ? 500 : 4000;
+          timer = setTimeout(() => {
+            void loadStock();
+            onStockChanged?.(product.id);
+          }, delay);
         }
       )
       .subscribe();
 
     return () => {
+      if (timer) clearTimeout(timer);
       void supabase.removeChannel(channel);
     };
   }, [product.id, product.stockSource, statusFilter, onStockChanged]);
@@ -887,8 +894,11 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       ? availableStockCount
       : Math.max(totalStockCount - availableStockCount, filteredItems.length);
   const hiddenByLimitCount = Math.max(currentFilterTotal - filteredItems.length, 0);
+  const RENDER_CAP = 500;
+  const visibleItems = filteredItems.length > RENDER_CAP ? filteredItems.slice(0, RENDER_CAP) : filteredItems;
+  const renderHiddenCount = filteredItems.length - visibleItems.length;
 
-  const visibleAvailableIds = filteredItems.filter((item) => item.status === 'available').map((item) => item.id);
+  const visibleAvailableIds = visibleItems.filter((item) => item.status === 'available').map((item) => item.id);
   const allVisibleAvailableSelected = visibleAvailableIds.length > 0 && visibleAvailableIds.every((id) => selectedIds.includes(id));
 
   if (product.stockSource !== 'internal') return null;
@@ -909,7 +919,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
             <div className="font-heading text-base font-semibold truncate">{product.name}</div>
             <div className="text-xs text-muted-foreground">
               Available: <span className="text-success font-medium">{availableCount}</span> / Total: {totalStockCount}
-              {hiddenByLimitCount > 0 ? ` · Showing first ${filteredItems.length} ${statusFilter} item(s)` : ''}
+              {filteredItems.length > 0 && ` · Loaded ${filteredItems.length} ${statusFilter}`}
+              {renderHiddenCount > 0 && ` (showing first ${RENDER_CAP}, all exportable)`}
             </div>
           </div>
         </div>
@@ -1148,7 +1159,9 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   <div className="p-4 text-sm text-muted-foreground">No stock added yet.</div>
                 ) : filteredItems.length === 0 ? (
                   <div className="p-4 text-sm text-muted-foreground">No {statusFilter} stock found.</div>
-                ) : filteredItems.map((item) => {
+                ) : (
+                  <>
+                  {visibleItems.map((item) => {
                   const data = (item.data || {}) as Record<string, any>;
                   const isFile = !!data._file_path;
                   const text = isFile
@@ -1199,6 +1212,13 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     </div>
                   );
                 })}
+                {renderHiddenCount > 0 && (
+                  <div className="p-3 text-center text-xs text-muted-foreground bg-muted/30 border-t border-border">
+                    +{renderHiddenCount.toLocaleString()} more loaded (use Export to download all, or narrow with date range)
+                  </div>
+                )}
+                  </>
+                )}
               </div>
             </div>
           </div>
