@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes, Paperclip, Upload } from 'lucide-react';
+import { Trash2, Check, Pencil, ImagePlus, X, FileVideo, Bold, Italic, Code, Strikethrough, Underline, Link, Hand, GripVertical, Download, ArrowLeft, Package, Boxes, Paperclip, Upload, CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { format } from 'date-fns';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -1032,31 +1036,59 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                  <label className="flex items-center gap-1.5 text-xs">
-                    <span className="text-muted-foreground shrink-0">From</span>
-                    <Input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="h-8 w-full text-xs sm:w-[150px]"
-                    />
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs">
-                    <span className="text-muted-foreground shrink-0">To</span>
-                    <Input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="h-8 w-full text-xs sm:w-[150px]"
-                    />
-                  </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn('h-8 gap-1 text-xs', !dateFrom && 'text-muted-foreground')}
+                      >
+                        <CalendarIcon className="h-3.5 w-3.5" />
+                        {dateFrom ? format(new Date(dateFrom), 'PP') : 'From date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dateFrom ? new Date(dateFrom) : undefined}
+                        onSelect={(date) => setDateFrom(date ? format(date, 'yyyy-MM-dd') : '')}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className={cn('h-8 gap-1 text-xs', !dateTo && 'text-muted-foreground')}
+                      >
+                        <CalendarIcon className="h-3.5 w-3.5" />
+                        {dateTo ? format(new Date(dateTo), 'PP') : 'To date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dateTo ? new Date(dateTo) : undefined}
+                        onSelect={(date) => setDateTo(date ? format(date, 'yyyy-MM-dd') : '')}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+
                   {(dateFrom || dateTo) && (
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="col-span-2 h-7 px-2 text-xs sm:col-auto"
+                      className="h-7 px-2 text-xs"
                       onClick={() => { setDateFrom(''); setDateTo(''); }}
                     >
                       Clear dates
