@@ -1152,7 +1152,9 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   <div className="p-4 text-sm text-muted-foreground">No stock added yet.</div>
                 ) : filteredItems.length === 0 ? (
                   <div className="p-4 text-sm text-muted-foreground">No {statusFilter} stock found.</div>
-                ) : filteredItems.map((item) => {
+                ) : (
+                  <>
+                  {visibleItems.map((item) => {
                   const data = (item.data || {}) as Record<string, any>;
                   const isFile = !!data._file_path;
                   const text = isFile
