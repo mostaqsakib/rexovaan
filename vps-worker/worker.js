@@ -252,6 +252,19 @@ async function judgeUrl(ctx, url) {
 }
 
 async function populateItems(job) {
+  // Idempotent: if items already exist for this job (e.g. recovered from stuck
+  // running state), do NOT re-insert — just return existing count. Otherwise
+  // recovery would duplicate every URL and inflate checked/total.
+  const { count: existingCount, error: countErr } = await sb
+    .from('link_check_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('job_id', job.id);
+  if (countErr) throw countErr;
+  if ((existingCount || 0) > 0) {
+    console.log(`   ↩️ Resuming job — ${existingCount} items already populated`);
+    return existingCount;
+  }
+
   // Supabase has an implicit 1000-row cap; use keyset pagination to fetch ALL.
   const stock = [];
   const PAGE = 1000;
@@ -287,6 +300,7 @@ async function populateItems(job) {
   }
   return rows.length;
 }
+
 
 // Hard timeout wrapper so a single hung URL can't freeze a worker forever.
 async function withHardTimeout(promise, ms, label) {
