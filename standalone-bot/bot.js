@@ -771,7 +771,7 @@ function formatCountdown(endsAt) {
 let cachedDigitEmojis = null;
 let cachedDigitEmojisAt = 0;
 async function getDigitEmojis() {
-  if (cachedDigitEmojis && Date.now() - cachedDigitEmojisAt < 30000) return cachedDigitEmojis;
+  if (cachedDigitEmojis && Date.now() - cachedDigitEmojisAt < 120000) return cachedDigitEmojis;
   try {
     const { data } = await supabase.from("bot_settings").select("value").eq("key", "countdown_digit_emojis").maybeSingle();
     let parsed = {};
