@@ -288,15 +288,43 @@ async function populateItems(job) {
   return rows.length;
 }
 
+// Hard timeout wrapper so a single hung URL can't freeze a worker forever.
+async function withHardTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} hard timeout ${ms}ms`)), ms);
+  });
+  try { return await Promise.race([promise, timeout]); }
+  finally { clearTimeout(timer); }
+}
+
+async function safeMark(itemId, result, reason) {
+  for (let i = 0; i < 3; i++) {
+    const { error } = await sb.rpc('mark_link_check_result', { _item_id: itemId, _result: result, _reason: String(reason || '').slice(0, 480) });
+    if (!error) return;
+    console.error(`mark error (try ${i + 1}):`, error.message);
+    await sleep(1000 * (i + 1));
+  }
+}
+
 async function runWorker(job, ctx, signal) {
   while (!signal.cancelled) {
-    const { data: claimed, error } = await sb.rpc('claim_next_link_check_item', { _job_id: job.id });
-    if (error) { console.error('claim error:', error.message); await sleep(2000); continue; }
-    const item = Array.isArray(claimed) ? claimed[0] : claimed;
-    if (!item) return;
-    const { result, reason } = await judgeUrl(ctx, item.url);
-    await sb.rpc('mark_link_check_result', { _item_id: item.id, _result: result, _reason: reason });
-    if (perJobDelay > 0) await sleep(perJobDelay);
+    let item = null;
+    try {
+      const { data: claimed, error } = await sb.rpc('claim_next_link_check_item', { _job_id: job.id });
+      if (error) { console.error('claim error:', error.message); await sleep(2000); continue; }
+      item = Array.isArray(claimed) ? claimed[0] : claimed;
+      if (!item) return;
+      // Hard-cap any single URL judgement so one stuck page can't hang the worker.
+      const judgement = await withHardTimeout(judgeUrl(ctx, item.url), navTimeout * 3 + 5000, 'judgeUrl')
+        .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
+      await safeMark(item.id, judgement.result, judgement.reason);
+      if (perJobDelay > 0) await sleep(perJobDelay);
+    } catch (e) {
+      console.error('worker iteration error:', e?.message || e);
+      if (item) await safeMark(item.id, 'error', `worker exception: ${String(e?.message || e).slice(0, 200)}`).catch(() => {});
+      await sleep(500);
+    }
   }
 }
 
