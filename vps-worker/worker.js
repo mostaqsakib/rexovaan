@@ -423,10 +423,37 @@ async function autoEnqueueIfNeeded() {
   }
 }
 
+const STALE_RUNNING_MS = parseInt(process.env.STALE_RUNNING_MS || '180000', 10); // 3 min
+
+async function recoverStaleJobs() {
+  // Any job marked 'running' that hasn't progressed (no item updates) in STALE_RUNNING_MS
+  // is from a crashed/restarted worker. Re-queue it so it resumes from where it left off
+  // (claim_next_link_check_item skips already-done items).
+  const cutoff = new Date(Date.now() - STALE_RUNNING_MS).toISOString();
+  const { data: stuck } = await sb
+    .from('link_check_jobs')
+    .select('id, started_at')
+    .eq('status', 'running')
+    .lt('started_at', cutoff);
+  if (!stuck || stuck.length === 0) return;
+  for (const j of stuck) {
+    // Reset any half-claimed items so a fresh worker can pick them up.
+    await sb.from('link_check_items')
+      .update({ status: 'pending' })
+      .eq('job_id', j.id)
+      .eq('status', 'processing');
+    await sb.from('link_check_jobs')
+      .update({ status: 'vps_queued', error_text: 'auto-recovered from stuck running state' })
+      .eq('id', j.id);
+    console.log(`   ♻️ Recovered stuck job ${j.id.slice(0, 8)}`);
+  }
+}
+
 async function pollLoop() {
   while (true) {
     try {
       if (!busy) {
+        await recoverStaleJobs();
         await autoEnqueueIfNeeded();
         const { data: jobs } = await sb
           .from('link_check_jobs')
