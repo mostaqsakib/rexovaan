@@ -1525,22 +1525,48 @@ async function getAllProductStocks(products, { force = false } = {}) {
   }
 
   const stockProducts = products.filter((p) => !p.is_manual_delivery && !p.source_id);
-  // Use per-product COUNT (head=true, exact) in parallel. Counts are not
-  // capped by the 1000-row select limit, so this is always accurate even
-  // for products with very large stock pools.
-  const countEntries = await Promise.all(stockProducts.map(async (product) => {
-    const { count, error } = await supabase
-      .from("bot_product_stock_items")
-      .select("id", { count: "exact", head: true })
-      .eq("product_id", product.id)
-      .eq("status", "available");
-    if (error) {
-      console.error(`Stock count failed for ${product.name}:`, error.message);
-      return [product.id, product.last_known_stock || 0];
+  const stockIds = stockProducts.map((p) => p.id);
+  let stockById = new Map();
+
+  // Try single-roundtrip RPC first
+  let rpcOk = false;
+  if (stockIds.length > 0) {
+    try {
+      const { data, error } = await supabase.rpc('get_product_stock_counts', { _product_ids: stockIds });
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          stockById.set(row.product_id, Number(row.available_count) || 0);
+        }
+        // Products with no available rows are absent from result → default to 0
+        for (const p of stockProducts) {
+          if (!stockById.has(p.id)) stockById.set(p.id, 0);
+        }
+        rpcOk = true;
+      }
+    } catch (e) {
+      console.error('get_product_stock_counts RPC failed, falling back:', e?.message || e);
     }
-    return [product.id, count || 0];
-  }));
-  const stockById = new Map(countEntries);
+  } else {
+    rpcOk = true;
+  }
+
+  // Fallback: per-product COUNT in parallel
+  if (!rpcOk) {
+    const countEntries = await Promise.all(stockProducts.map(async (product) => {
+      const { count, error } = await supabase
+        .from("bot_product_stock_items")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", product.id)
+        .eq("status", "available");
+      if (error) {
+        console.error(`Stock count failed for ${product.name}:`, error.message);
+        return [product.id, product.last_known_stock || 0];
+      }
+      return [product.id, count || 0];
+    }));
+    stockById = new Map(countEntries);
+  }
+
 
   const stocks = products.map((p) => {
     if (p.is_manual_delivery) return p.last_known_stock || 0;
