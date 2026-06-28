@@ -43,14 +43,28 @@ export default function LinkCheckerTab() {
     setInvalidStock((inv.data as InvalidStock[]) || []);
   };
 
+  // Light reload — only jobs (used by realtime to avoid hammering heavy queries)
+  const loadJobsOnly = async () => {
+    const { data } = await supabase
+      .from('link_check_jobs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    setJobs((data as Job[]) || []);
+  };
+
   useEffect(() => { void loadAll(); }, []);
 
-  // Realtime job updates
+  // Realtime job updates — debounced + jobs-only to avoid reloading 500 invalid items on every progress tick
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const ch = supabase.channel('link-check-jobs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'link_check_jobs' }, () => void loadAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'link_check_jobs' }, () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => { void loadJobsOnly(); }, 1500);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => { if (timer) clearTimeout(timer); supabase.removeChannel(ch); };
   }, []);
 
   const startJob = async () => {
