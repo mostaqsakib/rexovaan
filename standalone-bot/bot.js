@@ -1676,7 +1676,7 @@ function removeReplyKeyboard() {
 // on every single message/callback. Cache busts whenever balance/profile is
 // mutated elsewhere (use invalidateCustomerCache(chatId)).
 const _customerCache = new Map();
-const CUSTOMER_CACHE_TTL = 30 * 1000;
+const CUSTOMER_CACHE_TTL = 60 * 1000;
 
 function invalidateCustomerCache(chatId) {
   if (chatId != null) _customerCache.delete(chatId);
