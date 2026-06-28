@@ -55,16 +55,26 @@ export default function LinkCheckerTab() {
 
   useEffect(() => { void loadAll(); }, []);
 
-  // Realtime job updates — debounced + jobs-only to avoid reloading 500 invalid items on every progress tick
+  // Realtime job updates — throttled (max 1s) so continuous progress ticks still surface
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let lastRun = 0;
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      const now = Date.now();
+      const elapsed = now - lastRun;
+      const run = () => { lastRun = Date.now(); pending = null; void loadJobsOnly(); };
+      if (elapsed >= 1000) {
+        run();
+      } else if (!pending) {
+        pending = setTimeout(run, 1000 - elapsed);
+      }
+    };
     const ch = supabase.channel('link-check-jobs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'link_check_jobs' }, () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => { void loadJobsOnly(); }, 1500);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'link_check_jobs' }, trigger)
       .subscribe();
-    return () => { if (timer) clearTimeout(timer); supabase.removeChannel(ch); };
+    // Fallback poll every 3s in case realtime events are missed under load
+    const poll = setInterval(() => { void loadJobsOnly(); }, 3000);
+    return () => { if (pending) clearTimeout(pending); clearInterval(poll); supabase.removeChannel(ch); };
   }, []);
 
   const startJob = async () => {
