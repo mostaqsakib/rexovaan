@@ -1,7 +1,7 @@
 // Fast-fetch + browser-fallback link checker.
 // Ported from vps-worker/worker.js, but Supabase-free and reusable for
 // the Telegram bot. Google activation links use the persistent Chrome
-// profile's cookie jar via BrowserContext.request, matching the site checker.
+// profile's cookie jar for Google activation links, matching the site checker.
 
 import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
@@ -85,27 +85,67 @@ function cookiePathMatches(pathname, cookiePath = '/') {
   return pathname === cookiePath || pathname.startsWith(cookiePath.endsWith('/') ? cookiePath : `${cookiePath}/`);
 }
 
-async function buildCookieHeader(ctx, url) {
+let profileCookieCache = { expiresAt: 0, cookies: [] };
+async function getCachedProfileCookies(ctx) {
+  const now = Date.now();
+  if (profileCookieCache.expiresAt > now) return profileCookieCache.cookies;
+  const cookies = await ctx.cookies([
+    'https://google.com',
+    'https://accounts.google.com',
+    'https://serviceactivation.google.com',
+  ]).catch(() => []);
+  profileCookieCache = { expiresAt: now + 60_000, cookies };
+  return cookies;
+}
+
+function buildCookieHeaderFromList(cookies, url) {
   const initial = new URL(url);
-  const targets = [url];
-  // Google activation URLs often bounce between google.com, accounts.google.com,
-  // and serviceactivation.google.com. Native fetch is much faster than
-  // Playwright's request API, so build the cookie header from the profile once.
-  if (isGoogleActivationUrl(url)) {
-    targets.push('https://accounts.google.com', 'https://serviceactivation.google.com', 'https://google.com');
-  }
-  const cookies = await ctx.cookies(Array.from(new Set(targets))).catch(() => []);
   const seen = new Set();
   const pairs = [];
   for (const c of cookies) {
     const key = `${c.name}=${c.value}`;
     if (seen.has(key)) continue;
-    if (!cookieDomainMatches(initial.hostname, c.domain) && isGoogleActivationUrl(url) && !cookieDomainMatches('google.com', c.domain)) continue;
+    if (!cookieDomainMatches(initial.hostname, c.domain)) continue;
     if (!cookiePathMatches(initial.pathname || '/', c.path || '/')) continue;
     seen.add(key);
     pairs.push(`${c.name}=${c.value}`);
   }
   return pairs.join('; ');
+}
+
+function shouldFollowRedirect(status) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+async function fastFetchWithCookies(url, baseHeaders, ctx) {
+  let currentUrl = url;
+  let method = 'GET';
+  const profileCookies = await getCachedProfileCookies(ctx);
+  for (let redirects = 0; redirects <= 10; redirects++) {
+    const headers = { ...baseHeaders };
+    if (profileCookies.length > 0) {
+      const cookieHeader = buildCookieHeaderFromList(profileCookies, currentUrl);
+      if (cookieHeader) headers.cookie = cookieHeader;
+    }
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), navTimeout);
+    try {
+      const res = await fetch(currentUrl, {
+        method,
+        redirect: 'manual',
+        headers,
+        signal: ac.signal,
+      });
+      if (!shouldFollowRedirect(res.status) || redirects === 10) return res;
+      const location = res.headers.get('location');
+      if (!location) return res;
+      currentUrl = new URL(location, currentUrl).toString();
+      if (res.status === 303) method = 'GET';
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error('too many redirects');
 }
 
 function isGoogleAuthPage(finalUrl, bodyText) {
@@ -295,11 +335,9 @@ async function judgeUrl(url) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), navTimeout);
     try {
-      const res = await fetch(url, {
-        redirect: 'follow',
-        headers,
-        signal: ac.signal,
-      });
+      const res = useChromeCookies
+        ? await fastFetchWithCookies(url, headers, ctx)
+        : await fetch(url, { redirect: 'follow', headers, signal: ac.signal });
       const status = res.status();
       const finalUrl = res.url.toLowerCase();
 
