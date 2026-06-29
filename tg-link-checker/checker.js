@@ -19,6 +19,7 @@ const {
   RETRIES_ON_ERROR = '2',
   FETCH_BYTE_LIMIT = '98304',
   HEAD_FIRST = 'false',
+  LINK_CHECK_ENGINE = 'playwright_request',
   HTTP_CONNECTIONS = '50',
   HTTP_PIPELINING = '2',
   BROWSER_CONCURRENCY = '5',
@@ -32,6 +33,7 @@ const navTimeout = parseInt(NAV_TIMEOUT_MS, 10);
 const retries = parseInt(RETRIES_ON_ERROR, 10);
 const fetchByteLimit = Math.max(0, parseInt(FETCH_BYTE_LIMIT, 10) || 0);
 const headFirst = HEAD_FIRST !== 'false';
+const linkCheckEngine = String(LINK_CHECK_ENGINE || 'playwright_request').toLowerCase();
 const httpConnections = Math.max(1, parseInt(HTTP_CONNECTIONS, 10) || 50);
 const httpPipelining = Math.max(1, parseInt(HTTP_PIPELINING, 10) || 2);
 const browserConcurrency = Math.max(1, parseInt(BROWSER_CONCURRENCY, 10) || 5);
@@ -44,7 +46,7 @@ try {
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 120_000,
   }));
-  console.log(`⚡ HTTP pool enabled (connections=${httpConnections}, pipelining=${httpPipelining})`);
+  console.log(`⚡ HTTP pool enabled (connections=${httpConnections}, pipelining=${httpPipelining}, engine=${linkCheckEngine})`);
 } catch {
   // undici is optional at runtime; Node's built-in fetch still works.
 }
@@ -173,6 +175,14 @@ async function readTextLimited(res, limitBytes) {
   } finally {
     reader.releaseLock();
   }
+}
+
+async function readApiResponseTextLimited(res, limitBytes) {
+  // Playwright APIResponse already handles cookies, redirects, and decompression.
+  // It does not expose a streaming reader, so trim after decode for classification.
+  const text = await res.text();
+  if (!limitBytes || limitBytes <= 0) return text.toLowerCase();
+  return text.slice(0, limitBytes).toLowerCase();
 }
 
 function isGoogleAuthPage(finalUrl, bodyText) {
@@ -362,6 +372,57 @@ async function judgeUrl(url, { ctx, profileCookies = [] } = {}) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), navTimeout);
     try {
+      if (useChromeCookies && ctx && linkCheckEngine !== 'native_http') {
+        if (headFirst) {
+          const headRes = await ctx.request.fetch(url, {
+            method: 'HEAD',
+            headers,
+            timeout: navTimeout,
+            maxRedirects: 10,
+          });
+          const headUrl = headRes.url().toLowerCase();
+          if (/already|redeemed|expired|error/.test(headUrl)) {
+            await headRes.dispose().catch(() => {});
+            return { result: 'invalid', reason: `redirected: ${headUrl.slice(0, 120)}` };
+          }
+          await headRes.dispose().catch(() => {});
+        }
+
+        const res = await ctx.request.get(url, {
+          headers,
+          timeout: navTimeout,
+          maxRedirects: 10,
+        });
+        const status = res.status();
+        const finalUrl = res.url().toLowerCase();
+
+        if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
+          await res.dispose().catch(() => {});
+          await sleep(status === 429 ? 3000 : 1000 * attempt);
+          continue;
+        }
+
+        if (!res.ok()) {
+          if (browserFallbackStatuses.has(status)) {
+            await res.dispose().catch(() => {});
+            return await judgeUrlInBrowser(url, `playwright request HTTP ${status}`);
+          }
+          await res.dispose().catch(() => {});
+          return { result: 'error', reason: `HTTP ${status}` };
+        }
+
+        const bodyText = await readApiResponseTextLimited(res, fetchByteLimit);
+        await res.dispose().catch(() => {});
+        const classified = classifyPage(finalUrl, bodyText);
+        if (classified.result === 'error' && classified.reason.startsWith('google auth required')) {
+          if ((await getProfileCookieCount(ctx)) === 0) {
+            return { result: 'error', reason: `google auth required — no Google cookies found in ${CHROME_PROFILE_DIR}. Run DISPLAY=:1 node login.js with the same root/user, then close Chrome and restart pm2.` };
+          }
+          return await judgeUrlInBrowser(url, 'playwright request google auth');
+        }
+        return classified;
+      }
+
       if (useChromeCookies && headFirst) {
         const headHeaders = { ...headers };
         delete headHeaders.range;
