@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Bot, InputFile } from 'grammy';
-import { checkUrls } from './checker.js';
+import { checkUrls, prewarm } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
 import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from './formatter.js';
 
@@ -238,7 +238,9 @@ bot.catch((err) => {
 });
 
 console.log(`🚀 tg-link-checker starting (concurrency=${maxConc}, inline_limit=${inlineLimit})`);
+prewarm().catch(() => {});
 bot.start({
   drop_pending_updates: true,
   onStart: (me) => console.log(`✅ @${me.username} online`),
 });
+
