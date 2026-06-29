@@ -198,6 +198,7 @@ async function judgeUrl(ctx, url) {
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
+      await awaitCooldown();
       const res = await ctx.request.get(url, {
         timeout: navTimeout,
         maxRedirects: 5,
@@ -207,6 +208,7 @@ async function judgeUrl(ctx, url) {
       const finalUrl = res.url().toLowerCase();
 
       if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
+        if (status === 429) triggerCooldown(2500); // global brief pause
         await sleep(status === 429 ? 3000 : 1000 * attempt);
         continue;
       }
