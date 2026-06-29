@@ -215,30 +215,39 @@ async function judgeUrlInBrowser(ctx, url, reasonPrefix = 'browser fallback') {
   }
 }
 
-// Fast fetch judge — mirrors the Chrome extension's logic exactly.
+// Fast fetch judge — mirrors the Chrome extension's logic, with
+// Range-limited bodies and smarter retry (only on transient failures).
 async function judgeUrl(ctx, url) {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+  };
+  if (fetchByteLimit > 0) headers['Range'] = `bytes=0-${fetchByteLimit - 1}`;
+
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
       const res = await ctx.request.get(url, {
         timeout: navTimeout,
         maxRedirects: 10,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
+        headers,
       });
       const status = res.status();
       const finalUrl = res.url().toLowerCase();
 
-      if (status === 429 && attempt <= retries) {
-        await sleep(3000);
+      // Transient — retry with backoff.
+      if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
+        await sleep(status === 429 ? 3000 : 1000 * attempt);
         continue;
       }
-      if (!res.ok()) {
+      // 206 Partial Content is success when we sent a Range header.
+      const ok = res.ok() || status === 206;
+      if (!ok) {
         if (browserFallbackStatuses.has(status)) {
           return await judgeUrlInBrowser(ctx, url, `fast fetch HTTP ${status}`);
         }
+        // Permanent error — no retry.
         return { result: 'error', reason: `HTTP ${status}` };
       }
 
@@ -246,7 +255,8 @@ async function judgeUrl(ctx, url) {
       return classifyPage(finalUrl, bodyText);
     } catch (e) {
       const msg = String(e?.message || e);
-      if (attempt <= retries) { await sleep(1000); continue; }
+      const transient = /timeout|socket hang up|econnreset|enetunreach|etimedout|network/i.test(msg);
+      if (transient && attempt <= retries) { await sleep(1000 * attempt); continue; }
       if (/timeout/i.test(msg)) return { result: 'error', reason: 'Timeout' };
       return { result: 'error', reason: msg.slice(0, 240) };
     }
