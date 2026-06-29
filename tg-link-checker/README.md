@@ -46,8 +46,8 @@ npx playwright install-deps chromium    # only needed if not using real Chrome
 cp .env.example .env
 nano .env                               # set BOT_TOKEN, ALLOWED_USER_IDS
 
-# 6. (Optional) Sign in to Google so browser fallback has cookies
-HEADFUL=true node login.js
+# 6. Sign in to Google so checker can reuse the same Chrome profile cookies
+DISPLAY=:1 node login.js
 
 # 7. Run via pm2
 sudo npm install -g pm2
@@ -81,8 +81,9 @@ pm2 restart tg-link-checker
 
 ```
 bot.js        Telegram entry (grammY). Per-user FIFO via queue.js.
-checker.js    undici Pool for fast HTTP + Playwright fallback for 403/429.
+checker.js    Playwright persistent Chrome profile + cookies-only fast requests.
 queue.js      Per-user FIFO; different users run in parallel.
 formatter.js  Progress text, summary, URL extraction.
 login.js      One-off headful Chrome to seed Google cookies.
+diagnose.js   VPS-side profile/cookie/final-URL debug helper.
 ```
