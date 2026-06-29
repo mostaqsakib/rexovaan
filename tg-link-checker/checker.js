@@ -58,8 +58,54 @@ const browserFallbackStatuses = new Set(
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function getHostname(url) {
+  try { return new URL(url).hostname.toLowerCase(); }
+  catch { return ''; }
+}
+
+function isGoogleHost(hostname) {
+  return hostname === 'google.com'
+    || hostname.endsWith('.google.com')
+    || hostname === 'gstatic.com'
+    || hostname.endsWith('.gstatic.com')
+    || hostname === 'googleapis.com'
+    || hostname.endsWith('.googleapis.com');
+}
+
 function isGoogleActivationUrl(url) {
   return /(^|\.)google\.com\/subscription\//i.test(String(url));
+}
+
+function cookieDomainMatches(hostname, cookieDomain = '') {
+  const domain = cookieDomain.replace(/^\./, '').toLowerCase();
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+function cookiePathMatches(pathname, cookiePath = '/') {
+  return pathname === cookiePath || pathname.startsWith(cookiePath.endsWith('/') ? cookiePath : `${cookiePath}/`);
+}
+
+async function buildCookieHeader(ctx, url) {
+  const initial = new URL(url);
+  const targets = [url];
+  // Google activation URLs often bounce between google.com, accounts.google.com,
+  // and serviceactivation.google.com. Native fetch is much faster than
+  // Playwright's request API, so build the cookie header from the profile once.
+  if (isGoogleActivationUrl(url)) {
+    targets.push('https://accounts.google.com', 'https://serviceactivation.google.com', 'https://google.com');
+  }
+  const cookies = await ctx.cookies(Array.from(new Set(targets))).catch(() => []);
+  const seen = new Set();
+  const pairs = [];
+  for (const c of cookies) {
+    const key = `${c.name}=${c.value}`;
+    if (seen.has(key)) continue;
+    if (!cookieDomainMatches(initial.hostname, c.domain) && isGoogleActivationUrl(url) && !cookieDomainMatches('google.com', c.domain)) continue;
+    if (!cookiePathMatches(initial.pathname || '/', c.path || '/')) continue;
+    seen.add(key);
+    pairs.push(`${c.name}=${c.value}`);
+  }
+  return pairs.join('; ');
 }
 
 function isGoogleAuthPage(finalUrl, bodyText) {
@@ -228,7 +274,7 @@ async function judgeUrlInBrowser(url, reasonPrefix = 'browser fallback') {
   }
 }
 
-// ------- Fast HTTP fetch (Playwright request, shares Chrome cookies) -------
+// ------- Fast HTTP fetch (native fetch + Chrome profile cookies) -------
 async function judgeUrl(url) {
   const headers = {
     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
@@ -240,23 +286,29 @@ async function judgeUrl(url) {
 
   const useChromeCookies = isGoogleActivationUrl(url);
   const ctx = await getBrowser();
+  if (useChromeCookies) {
+    const cookieHeader = await buildCookieHeader(ctx, url);
+    if (cookieHeader) headers.cookie = cookieHeader;
+  }
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), navTimeout);
     try {
-      const res = await ctx.request.get(url, {
-        timeout: navTimeout,
-        maxRedirects: 10,
+      const res = await fetch(url, {
+        redirect: 'follow',
         headers,
+        signal: ac.signal,
       });
       const status = res.status();
-      const finalUrl = res.url().toLowerCase();
+      const finalUrl = res.url.toLowerCase();
 
       if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
         await sleep(status === 429 ? 3000 : 1000 * attempt);
         continue;
       }
 
-      const ok = res.ok() || status === 206;
+      const ok = res.ok || status === 206;
       if (!ok) {
         if (browserFallbackStatuses.has(status)) {
           return await judgeUrlInBrowser(url, `fast fetch HTTP ${status}`);
@@ -275,24 +327,15 @@ async function judgeUrl(url) {
       return classified;
     } catch (e) {
       const msg = String(e?.message || e);
-      const transient = /timeout|socket hang up|econnreset|enetunreach|etimedout|network|other side closed/i.test(msg);
+      const transient = /abort|timeout|socket hang up|econnreset|enetunreach|etimedout|network|other side closed/i.test(msg);
       if (transient && attempt <= retries) { await sleep(1000 * attempt); continue; }
-      if (/timeout/i.test(msg)) return { result: 'error', reason: 'Timeout' };
+      if (/abort|timeout/i.test(msg)) return { result: 'error', reason: 'Timeout' };
       return { result: 'error', reason: msg.slice(0, 240) };
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
-
-// Pre-warm the browser context so the first job doesn't pay cold-start cost.
-export async function prewarm() {
-  try {
-    await getBrowser();
-    console.log('🔥 Browser pre-warmed');
-  } catch (e) {
-    console.warn('prewarm failed (will retry on first use):', e?.message || e);
-  }
-}
-
 
 // Pre-warm the browser context so the first job doesn't pay cold-start cost.
 export async function prewarm() {
