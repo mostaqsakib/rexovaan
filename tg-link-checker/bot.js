@@ -26,7 +26,25 @@ const allowed = ALLOWED_USER_IDS.split(',').map((s) => s.trim()).filter(Boolean)
 const allowedSet = new Set(allowed);
 const isAllowed = (id) => allowedSet.size === 0 || allowedSet.has(Number(id));
 
-const bot = new Bot(BOT_TOKEN);
+const bot = new Bot(BOT_TOKEN, {
+  client: {
+    timeoutSeconds: 180,
+  },
+});
+
+async function withRetry(fn, label, attempts = 4) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      console.error(`${label} attempt ${i} failed:`, e?.message || e);
+      await new Promise((r) => setTimeout(r, 1500 * i));
+    }
+  }
+  throw lastErr;
+}
 
 bot.command('start', (ctx) => ctx.reply(
   '👋 <b>Link Checker Bot</b>\n\n'
@@ -126,51 +144,76 @@ async function runJob(ctx, progressMsgId, urls, label) {
     valid: valid.length, invalid: invalid.length, errors: errors.length,
   }, true);
 
-  // Deliver results (per category)
-  await deliverCategory(ctx, '✅ VALID', valid, label);
-  await deliverCategory(ctx, '❌ INVALID', invalid, label);
+  // Deliver results (per category) — never let delivery failures kill summary
+  try { await deliverCategory(ctx, '✅ VALID', valid, label); }
+  catch (e) { await safeReply(ctx, `⚠️ Failed to deliver VALID list: ${escapeHtml(String(e?.message || e))}`); }
+  try { await deliverCategory(ctx, '❌ INVALID', invalid, label); }
+  catch (e) { await safeReply(ctx, `⚠️ Failed to deliver INVALID list: ${escapeHtml(String(e?.message || e))}`); }
   if (errors.length > 0 && errors.length <= 20) {
     const lines = errors.slice(0, 20).map((e) => `${e.url} — ${e.reason}`).join('\n');
-    await ctx.reply(`⚠️ <b>ERRORS (${errors.length})</b>\n<pre>${escapeHtml(lines)}</pre>`, { parse_mode: 'HTML' });
+    await safeReply(ctx, `⚠️ <b>ERRORS (${errors.length})</b>\n${escapeHtml(lines)}`);
   } else if (errors.length > 20) {
-    await ctx.replyWithDocument(new InputFile(Buffer.from(
-      errors.map((e) => `${e.url}\t${e.reason}`).join('\n'), 'utf8',
-    ), { filename: `errors-${safeName(label)}.txt` }), {
-      caption: `⚠️ ${errors.length} errors`,
-    });
+    try {
+      await withRetry(() => ctx.replyWithDocument(
+        new InputFile(Buffer.from(errors.map((e) => `${e.url}\t${e.reason}`).join('\n'), 'utf8'),
+          { filename: `errors-${safeName(label)}.txt` }),
+        { caption: `⚠️ ${errors.length} errors` },
+      ), 'errors doc');
+    } catch (e) {
+      await safeReply(ctx, `⚠️ Could not send errors file: ${escapeHtml(String(e?.message || e))}`);
+    }
   }
 
-  await ctx.reply(
-    buildSummary({
-      total: urls.length, valid: valid.length, invalid: invalid.length,
-      errors: errors.length, durationMs,
-    }),
-    { parse_mode: 'HTML' },
-  );
+  await safeReply(ctx, buildSummary({
+    total: urls.length, valid: valid.length, invalid: invalid.length,
+    errors: errors.length, durationMs,
+  }));
+}
+
+async function safeReply(ctx, text) {
+  try { await ctx.reply(text, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } }); }
+  catch (e) { console.error('reply failed:', e?.message || e); }
 }
 
 async function deliverCategory(ctx, header, list, label) {
   if (list.length === 0) {
-    await ctx.reply(`${header} (0)`, { parse_mode: 'HTML' });
+    await safeReply(ctx, `${header} (0)`);
     return;
   }
   if (list.length <= inlineLimit) {
-    // Chunk inline if needed to stay under Telegram 4096-char limit.
     const lines = list.join('\n');
     const body = `<b>${header} (${list.length})</b>\n${escapeHtml(lines)}`;
     if (body.length < 3900) {
-      await ctx.reply(body, {
+      await withRetry(() => ctx.reply(body, {
         parse_mode: 'HTML',
         link_preview_options: { is_disabled: true },
-      });
+      }), `${header} inline`);
       return;
     }
   }
-  const filename = `${header.includes('VALID') ? 'valid' : 'invalid'}-${safeName(label)}.txt`;
-  await ctx.replyWithDocument(
-    new InputFile(Buffer.from(list.join('\n'), 'utf8'), { filename }),
-    { caption: `<b>${header} (${list.length})</b>`, parse_mode: 'HTML' },
-  );
+  const baseName = header.includes('VALID') ? 'valid' : 'invalid';
+  const filename = `${baseName}-${safeName(label)}.txt`;
+  const buf = Buffer.from(list.join('\n'), 'utf8');
+  // Telegram bot file limit ~50 MB. Split if huge to keep uploads reliable.
+  const MAX_BYTES = 8 * 1024 * 1024; // 8 MB chunks for fast/reliable upload
+  if (buf.length <= MAX_BYTES) {
+    await withRetry(() => ctx.replyWithDocument(
+      new InputFile(buf, { filename }),
+      { caption: `<b>${header} (${list.length})</b>`, parse_mode: 'HTML' },
+    ), `${header} doc`);
+    return;
+  }
+  // Split by line count proportional to size
+  const parts = Math.ceil(buf.length / MAX_BYTES);
+  const perPart = Math.ceil(list.length / parts);
+  for (let i = 0; i < parts; i++) {
+    const slice = list.slice(i * perPart, (i + 1) * perPart);
+    if (slice.length === 0) break;
+    await withRetry(() => ctx.replyWithDocument(
+      new InputFile(Buffer.from(slice.join('\n'), 'utf8'), { filename: `${baseName}-part${i + 1}-${safeName(label)}.txt` }),
+      { caption: `<b>${header} part ${i + 1}/${parts} (${slice.length})</b>`, parse_mode: 'HTML' },
+    ), `${header} doc part ${i + 1}`);
+  }
 }
 
 function safeName(s) {
