@@ -180,7 +180,7 @@ async function judgeUrl(ctx, url) {
     try {
       const res = await ctx.request.get(url, {
         timeout: navTimeout,
-        maxRedirects: 10,
+        maxRedirects: 5,
         headers,
       });
       const status = res.status();
@@ -232,9 +232,33 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
   let nextIdx = 0;
   let checked = 0, valid = 0, invalid = 0, errors = 0;
 
+  // Throttle progress callbacks to reduce per-check overhead (bot edits etc.).
+  let lastTick = 0;
+  let tickTimer = null;
+  const PROGRESS_MIN_MS = 150;
+  const emit = () => {
+    if (typeof onProgress !== 'function') return;
+    try { onProgress({ checked, total, valid, invalid, errors }); } catch {}
+  };
   const tick = () => {
-    if (typeof onProgress === 'function') {
-      try { onProgress({ checked, total, valid, invalid, errors }); } catch {}
+    if (typeof onProgress !== 'function') return;
+    const now = Date.now();
+    if (checked === total) {
+      if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
+      lastTick = now;
+      emit();
+      return;
+    }
+    if (now - lastTick >= PROGRESS_MIN_MS) {
+      lastTick = now;
+      if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
+      emit();
+    } else if (!tickTimer) {
+      tickTimer = setTimeout(() => {
+        tickTimer = null;
+        lastTick = Date.now();
+        emit();
+      }, PROGRESS_MIN_MS - (now - lastTick));
     }
   };
 
