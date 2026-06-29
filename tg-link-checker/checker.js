@@ -158,20 +158,13 @@ async function getBrowser() {
     }
     const cookieCount = await getProfileCookieCount(ctx);
     console.log('🍪 Google profile cookies loaded:', cookieCount);
-    // Block heavy assets + non-essential scripts to make fallback much faster.
-    // Allow scripts only from Google auth/subscription domains (needed for redirects/markers).
+    // Block only heavy static assets — keep scripts running so Google redirects work reliably.
     await ctx.route('**/*', (route) => {
-      const req = route.request();
-      const t = req.resourceType();
+      const t = route.request().resourceType();
       if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') return route.abort();
-      if (t === 'script') {
-        const u = req.url();
-        if (/google\.com|gstatic\.com|googleapis\.com/i.test(u)) return route.continue();
-        return route.abort();
-      }
-      if (t === 'websocket' || t === 'eventsource') return route.abort();
       return route.continue();
     }).catch(() => {});
+
     ctx.on('close', () => { browserCtx = null; browserLaunchPromise = null; });
     browserCtx = ctx;
     return ctx;
