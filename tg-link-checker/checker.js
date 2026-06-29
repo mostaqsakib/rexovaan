@@ -58,20 +58,6 @@ const browserFallbackStatuses = new Set(
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function getHostname(url) {
-  try { return new URL(url).hostname.toLowerCase(); }
-  catch { return ''; }
-}
-
-function isGoogleHost(hostname) {
-  return hostname === 'google.com'
-    || hostname.endsWith('.google.com')
-    || hostname === 'gstatic.com'
-    || hostname.endsWith('.gstatic.com')
-    || hostname === 'googleapis.com'
-    || hostname.endsWith('.googleapis.com');
-}
-
 function isGoogleActivationUrl(url) {
   return /(^|\.)google\.com\/subscription\//i.test(String(url));
 }
@@ -326,10 +312,6 @@ async function judgeUrl(url) {
 
   const useChromeCookies = isGoogleActivationUrl(url);
   const ctx = await getBrowser();
-  if (useChromeCookies) {
-    const cookieHeader = await buildCookieHeader(ctx, url);
-    if (cookieHeader) headers.cookie = cookieHeader;
-  }
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     const ac = new AbortController();
