@@ -437,6 +437,18 @@ async function autoEnqueueIfNeeded() {
       continue;
     }
 
+    // Skip if product has 0 available stock — no point queueing an empty job.
+    const { count: availCount, error: stockErr } = await sb
+      .from('bot_product_stock_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', product.id)
+      .eq('status', 'available');
+    if (stockErr) throw stockErr;
+    if (!availCount || availCount === 0) {
+      // Quiet skip — auto-resumes when stock is added.
+      continue;
+    }
+
     const { error: insertError } = await sb.from('link_check_jobs').insert({
       product_id: product.id,
       cookie_id: null,
