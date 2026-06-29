@@ -210,6 +210,12 @@ function classifyPage(finalUrl, bodyText) {
   return { result: 'error', reason: 'no valid/invalid markers detected' };
 }
 
+function hasAnyMarker(bodyText) {
+  return invalidPatterns.some((pat) => bodyText.includes(pat))
+    || validPatterns.some((pat) => bodyText.includes(pat))
+    || /already|redeemed|expired|error/.test(bodyText);
+}
+
 async function withHardTimeout(promise, ms, label) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -413,6 +419,9 @@ async function judgeUrl(url, { ctx, profileCookies = [] } = {}) {
 
         const bodyText = await readApiResponseTextLimited(res, fetchByteLimit);
         await res.dispose().catch(() => {});
+        if (useChromeCookies && !hasAnyMarker(bodyText)) {
+          return await judgeUrlInBrowser(url, 'playwright request no markers');
+        }
         const classified = classifyPage(finalUrl, bodyText);
         if (classified.result === 'error' && classified.reason.startsWith('google auth required')) {
           if ((await getProfileCookieCount(ctx)) === 0) {
@@ -455,6 +464,9 @@ async function judgeUrl(url, { ctx, profileCookies = [] } = {}) {
       }
 
       const bodyText = await readTextLimited(res, fetchByteLimit);
+      if (useChromeCookies && !hasAnyMarker(bodyText)) {
+        return await judgeUrlInBrowser(url, 'fast fetch no markers');
+      }
       const classified = classifyPage(finalUrl, bodyText);
       if (classified.result === 'error' && classified.reason.startsWith('google auth required')) {
         if (useChromeCookies && ctx && (await getProfileCookieCount(ctx)) === 0) {
