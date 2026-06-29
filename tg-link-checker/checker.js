@@ -55,6 +55,17 @@ const browserFallbackStatuses = new Set(
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// B: global cooldown gate — 429 detect হলে সব worker একসাথে কিছুক্ষণ থামবে।
+let cooldownUntil = 0;
+function triggerCooldown(ms) {
+  const until = Date.now() + ms;
+  if (until > cooldownUntil) cooldownUntil = until;
+}
+async function awaitCooldown() {
+  const wait = cooldownUntil - Date.now();
+  if (wait > 0) await sleep(wait);
+}
+
 function isGoogleAuthPage(finalUrl, bodyText) {
   return /accounts\.google\.com\/(signin|servicelogin|v3\/signin|interactive_login|challenge)/i.test(finalUrl)
     || bodyText.includes('sign in to continue')
@@ -147,8 +158,17 @@ async function getBrowser() {
 async function judgeUrlInBrowser(ctx, url, reasonPrefix = 'browser fallback') {
   const page = await ctx.newPage();
   try {
+    // D: block heavy assets in fallback path only — body text-ই দরকার।
+    await page.route('**/*', (route) => {
+      const t = route.request().resourceType();
+      if (t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet') {
+        return route.abort();
+      }
+      return route.continue();
+    }).catch(() => {});
+
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
-    await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 8000) }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 5000) }).catch(() => {});
     const status = response?.status?.() || 0;
     const finalUrl = page.url().toLowerCase();
     const bodyText = (await page.locator('body').innerText({ timeout: 5000 }).catch(() => '')).toLowerCase();
@@ -178,6 +198,7 @@ async function judgeUrl(ctx, url) {
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
+      await awaitCooldown();
       const res = await ctx.request.get(url, {
         timeout: navTimeout,
         maxRedirects: 5,
@@ -187,6 +208,7 @@ async function judgeUrl(ctx, url) {
       const finalUrl = res.url().toLowerCase();
 
       if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
+        if (status === 429) triggerCooldown(2500); // global brief pause
         await sleep(status === 429 ? 3000 : 1000 * attempt);
         continue;
       }
