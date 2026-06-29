@@ -228,20 +228,6 @@ async function judgeUrlInBrowser(url, reasonPrefix = 'browser fallback') {
   }
 }
 
-// ------- Global 429/cooldown gate -------
-// When Google rate-limits, ALL workers briefly pause instead of each one
-// independently retrying. Prevents the retry storm that makes higher
-// concurrency paradoxically slower.
-let cooldownUntil = 0;
-async function awaitCooldown() {
-  const wait = cooldownUntil - Date.now();
-  if (wait > 0) await sleep(wait);
-}
-function triggerCooldown(ms) {
-  const until = Date.now() + ms;
-  if (until > cooldownUntil) cooldownUntil = until;
-}
-
 // ------- Fast HTTP fetch (Playwright request, shares Chrome cookies) -------
 async function judgeUrl(url) {
   const headers = {
@@ -249,7 +235,6 @@ async function judgeUrl(url) {
     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'accept-language': 'en-US,en;q=0.9',
     'accept-encoding': 'gzip, deflate, br',
-    'connection': 'keep-alive',
   };
   if (fetchByteLimit > 0) headers['range'] = `bytes=0-${fetchByteLimit - 1}`;
 
@@ -257,18 +242,16 @@ async function judgeUrl(url) {
   const ctx = await getBrowser();
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
-    await awaitCooldown();
     try {
       const res = await ctx.request.get(url, {
         timeout: navTimeout,
-        maxRedirects: 5,
+        maxRedirects: 10,
         headers,
       });
       const status = res.status();
       const finalUrl = res.url().toLowerCase();
 
       if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
-        if (status === 429) triggerCooldown(3000); // global pause for everyone
         await sleep(status === 429 ? 3000 : 1000 * attempt);
         continue;
       }
@@ -299,6 +282,17 @@ async function judgeUrl(url) {
     }
   }
 }
+
+// Pre-warm the browser context so the first job doesn't pay cold-start cost.
+export async function prewarm() {
+  try {
+    await getBrowser();
+    console.log('🔥 Browser pre-warmed');
+  } catch (e) {
+    console.warn('prewarm failed (will retry on first use):', e?.message || e);
+  }
+}
+
 
 // Pre-warm the browser context so the first job doesn't pay cold-start cost.
 export async function prewarm() {
