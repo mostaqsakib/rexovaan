@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { Bot, InputFile } from 'grammy';
 import { checkUrls } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
@@ -193,26 +196,36 @@ async function deliverCategory(ctx, header, list, label) {
   }
   const baseName = header.includes('VALID') ? 'valid' : 'invalid';
   const filename = `${baseName}-${safeName(label)}.txt`;
-  const buf = Buffer.from(list.join('\n'), 'utf8');
-  // Telegram bot file limit ~50 MB. Split if huge to keep uploads reliable.
-  const MAX_BYTES = 8 * 1024 * 1024; // 8 MB chunks for fast/reliable upload
-  if (buf.length <= MAX_BYTES) {
-    await withRetry(() => ctx.replyWithDocument(
-      new InputFile(buf, { filename }),
-      { caption: `<b>${header} (${list.length})</b>`, parse_mode: 'HTML' },
-    ), `${header} doc`);
+  const content = list.join('\n');
+  const MAX_BYTES = 8 * 1024 * 1024;
+  const totalBytes = Buffer.byteLength(content, 'utf8');
+  if (totalBytes <= MAX_BYTES) {
+    await sendDocFromString(ctx, content, filename, `<b>${header} (${list.length})</b>`);
     return;
   }
-  // Split by line count proportional to size
-  const parts = Math.ceil(buf.length / MAX_BYTES);
+  const parts = Math.ceil(totalBytes / MAX_BYTES);
   const perPart = Math.ceil(list.length / parts);
   for (let i = 0; i < parts; i++) {
     const slice = list.slice(i * perPart, (i + 1) * perPart);
     if (slice.length === 0) break;
+    await sendDocFromString(ctx, slice.join('\n'),
+      `${baseName}-part${i + 1}-${safeName(label)}.txt`,
+      `<b>${header} part ${i + 1}/${parts} (${slice.length})</b>`);
+  }
+}
+
+async function sendDocFromString(ctx, content, filename, caption) {
+  // Write to a temp file and upload via path — far more reliable than Buffer
+  // for grammy/fetch on long uploads (avoids spurious "Network request failed").
+  const tmp = path.join(os.tmpdir(), `tglc-${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`);
+  await fs.promises.writeFile(tmp, content, 'utf8');
+  try {
     await withRetry(() => ctx.replyWithDocument(
-      new InputFile(Buffer.from(slice.join('\n'), 'utf8'), { filename: `${baseName}-part${i + 1}-${safeName(label)}.txt` }),
-      { caption: `<b>${header} part ${i + 1}/${parts} (${slice.length})</b>`, parse_mode: 'HTML' },
-    ), `${header} doc part ${i + 1}`);
+      new InputFile(tmp, filename),
+      { caption, parse_mode: 'HTML' },
+    ), `doc ${filename}`);
+  } finally {
+    fs.promises.unlink(tmp).catch(() => {});
   }
 }
 
