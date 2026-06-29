@@ -232,10 +232,7 @@ async function judgeUrl(url) {
   if (fetchByteLimit > 0) headers['range'] = `bytes=0-${fetchByteLimit - 1}`;
 
   const useChromeCookies = isGoogleActivationUrl(url);
-  let ctx = null;
-  if (useChromeCookies) {
-    ctx = await getBrowser();
-  }
+  const ctx = await getBrowser();
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
