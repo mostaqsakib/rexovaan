@@ -55,6 +55,17 @@ const browserFallbackStatuses = new Set(
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// B: global cooldown gate — 429 detect হলে সব worker একসাথে কিছুক্ষণ থামবে।
+let cooldownUntil = 0;
+function triggerCooldown(ms) {
+  const until = Date.now() + ms;
+  if (until > cooldownUntil) cooldownUntil = until;
+}
+async function awaitCooldown() {
+  const wait = cooldownUntil - Date.now();
+  if (wait > 0) await sleep(wait);
+}
+
 function isGoogleAuthPage(finalUrl, bodyText) {
   return /accounts\.google\.com\/(signin|servicelogin|v3\/signin|interactive_login|challenge)/i.test(finalUrl)
     || bodyText.includes('sign in to continue')
