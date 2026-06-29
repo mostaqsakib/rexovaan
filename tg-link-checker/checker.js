@@ -343,13 +343,18 @@ async function judgeUrlInBrowser(url, reasonPrefix = 'browser fallback') {
 
 // ------- Fast HTTP fetch (native fetch + Chrome profile cookies) -------
 async function judgeUrl(url, { ctx, profileCookies = [] } = {}) {
+  // NOTE: do NOT set accept-encoding manually — that disables undici/fetch
+  // auto-decompression and body comes back as compressed bytes, so pattern
+  // matching silently fails and everything looks "valid".
   const headers = {
     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'accept-language': 'en-US,en;q=0.9',
-    'accept-encoding': 'gzip, deflate, br',
   };
-  if (fetchByteLimit > 0) headers['range'] = `bytes=0-${fetchByteLimit - 1}`;
+  // Range header also breaks compression on many servers; only use when explicitly enabled.
+  if (fetchByteLimit > 0 && process.env.USE_RANGE_HEADER === 'true') {
+    headers['range'] = `bytes=0-${fetchByteLimit - 1}`;
+  }
 
   const useChromeCookies = isGoogleActivationUrl(url);
 
