@@ -157,11 +157,12 @@ async function deliverCategory(ctx, header, list, label) {
   if (list.length <= inlineLimit) {
     // Chunk inline if needed to stay under Telegram 4096-char limit.
     const lines = list.join('\n');
-    if (lines.length < 3500) {
-      await ctx.reply(
-        `<b>${header} (${list.length})</b>\n<pre>${escapeHtml(lines)}</pre>`,
-        { parse_mode: 'HTML' },
-      );
+    const body = `<b>${header} (${list.length})</b>\n${escapeHtml(lines)}`;
+    if (body.length < 3900) {
+      await ctx.reply(body, {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+      });
       return;
     }
   }

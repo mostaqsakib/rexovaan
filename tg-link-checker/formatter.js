@@ -29,7 +29,10 @@ export function buildProgressText({ checked, total, valid, invalid, errors, elap
   return [
     label ? `<b>${escapeHtml(label)}</b>` : null,
     `${bar} ${pct}%`,
-    `⏳ <b>${checked}/${total}</b>   ✅ ${valid}   ❌ ${invalid}${errors ? `   ⚠️ ${errors}` : ''}`,
+    `⏳ Checked: <b>${checked}/${total}</b>`,
+    `✅ Valid: <b>${valid}</b>`,
+    `❌ Invalid: <b>${invalid}</b>`,
+    errors ? `⚠️ Errors: <b>${errors}</b>` : null,
     `⏱ ${formatDuration(elapsedMs)}`,
   ].filter(Boolean).join('\n');
 }
