@@ -320,7 +320,7 @@ async function judgeUrl(url) {
       const res = useChromeCookies
         ? await fastFetchWithCookies(url, headers, ctx)
         : await fetch(url, { redirect: 'follow', headers, signal: ac.signal });
-      const status = res.status();
+      const status = res.status;
       const finalUrl = res.url.toLowerCase();
 
       if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
