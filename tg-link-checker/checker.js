@@ -202,11 +202,11 @@ async function judgeUrlInBrowser(url, reasonPrefix = 'browser fallback') {
     const page = await ctx.newPage();
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
-      // Skip networkidle — too slow with persistent connections. DOM is enough for marker text.
-      await page.waitForLoadState('load', { timeout: Math.min(navTimeout, 4000) }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 8000) }).catch(() => {});
       const status = response?.status?.() || 0;
       const finalUrl = page.url().toLowerCase();
-      const bodyText = (await page.locator('body').innerText({ timeout: 2500 }).catch(() => '')).toLowerCase();
+      const bodyText = (await page.locator('body').innerText({ timeout: 5000 }).catch(() => '')).toLowerCase();
+
 
 
       if (status && status >= 400 && status !== 403) {
