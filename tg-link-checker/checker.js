@@ -272,14 +272,25 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
     }
   };
 
+  // Batch-level dedupe: identical URLs share a single judgement.
+  const inflight = new Map();
+
   const runWorker = async () => {
     while (true) {
       if (signal?.cancelled) return;
       const i = nextIdx++;
       if (i >= total) return;
       const url = urls[i];
-      const judgement = await withHardTimeout(judgeUrl(ctx, url), navTimeout * 3 + 5000, 'judgeUrl')
-        .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
+      let judgement;
+      const cached = inflight.get(url);
+      if (cached) {
+        judgement = await cached;
+      } else {
+        const p = withHardTimeout(judgeUrl(ctx, url), navTimeout * 3 + 5000, 'judgeUrl')
+          .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
+        inflight.set(url, p);
+        judgement = await p;
+      }
       results[i] = { url, ...judgement };
       checked++;
       if (judgement.result === 'valid') valid++;
