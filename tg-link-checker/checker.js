@@ -63,6 +63,13 @@ function isGoogleAuthPage(finalUrl, bodyText) {
     || bodyText.includes("couldn't sign you in");
 }
 
+function classifyByUrlOnly(finalUrl) {
+  if (/already|redeemed|expired|error/.test(finalUrl)) {
+    return { result: 'invalid', reason: `redirected: ${finalUrl.slice(0, 120)}` };
+  }
+  return null;
+}
+
 function classifyPage(finalUrl, bodyText) {
   if (isGoogleAuthPage(finalUrl, bodyText)) {
     return { result: 'error', reason: 'google auth required (re-run npm run login)' };
@@ -70,9 +77,8 @@ function classifyPage(finalUrl, bodyText) {
   for (const pat of invalidPatterns) {
     if (bodyText.includes(pat)) return { result: 'invalid', reason: `matched: ${pat}` };
   }
-  if (/already|redeemed|expired|error/.test(finalUrl)) {
-    return { result: 'invalid', reason: `redirected: ${finalUrl.slice(0, 120)}` };
-  }
+  const urlHit = classifyByUrlOnly(finalUrl);
+  if (urlHit) return urlHit;
   if (validPatterns.length === 0) return { result: 'valid', reason: 'no invalid markers' };
   for (const pat of validPatterns) {
     if (bodyText.includes(pat)) return { result: 'valid', reason: `matched: ${pat}` };
@@ -198,6 +204,10 @@ async function judgeUrl(ctx, url) {
         return { result: 'error', reason: `HTTP ${status}` };
       }
 
+      // Early exit: if final URL itself signals invalid, skip body download/parse.
+      const urlHit = classifyByUrlOnly(finalUrl);
+      if (urlHit) return urlHit;
+
       const bodyText = (await res.text()).toLowerCase();
       return classifyPage(finalUrl, bodyText);
     } catch (e) {
@@ -262,14 +272,25 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
     }
   };
 
+  // Batch-level dedupe: identical URLs share a single judgement.
+  const inflight = new Map();
+
   const runWorker = async () => {
     while (true) {
       if (signal?.cancelled) return;
       const i = nextIdx++;
       if (i >= total) return;
       const url = urls[i];
-      const judgement = await withHardTimeout(judgeUrl(ctx, url), navTimeout * 3 + 5000, 'judgeUrl')
-        .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
+      let judgement;
+      const cached = inflight.get(url);
+      if (cached) {
+        judgement = await cached;
+      } else {
+        const p = withHardTimeout(judgeUrl(ctx, url), navTimeout * 3 + 5000, 'judgeUrl')
+          .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
+        inflight.set(url, p);
+        judgement = await p;
+      }
       results[i] = { url, ...judgement };
       checked++;
       if (judgement.result === 'valid') valid++;
