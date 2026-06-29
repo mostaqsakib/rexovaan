@@ -18,7 +18,7 @@ const {
   NAV_TIMEOUT_MS = '15000',
   RETRIES_ON_ERROR = '2',
   FETCH_BYTE_LIMIT = '98304',
-  HEAD_FIRST = 'true',
+  HEAD_FIRST = 'false',
   HTTP_CONNECTIONS = '50',
   HTTP_PIPELINING = '2',
   BROWSER_CONCURRENCY = '5',
@@ -358,7 +358,9 @@ async function judgeUrl(url, { ctx, profileCookies = [] } = {}) {
     const timer = setTimeout(() => ac.abort(), navTimeout);
     try {
       if (useChromeCookies && headFirst) {
-        const headRes = await fastFetchWithCookies(url, { ...headers, range: undefined }, profileCookies, 'HEAD', ac.signal);
+        const headHeaders = { ...headers };
+        delete headHeaders.range;
+        const headRes = await fastFetchWithCookies(url, headHeaders, profileCookies, 'HEAD', ac.signal);
         const headUrl = headRes.url.toLowerCase();
         if (/already|redeemed|expired|error/.test(headUrl)) {
           await headRes.body?.cancel?.().catch?.(() => {});

@@ -65,6 +65,9 @@ Defaults are tuned for ~12 GB:
 | `MAX_CONCURRENCY` | `50` | Fast-fetch is network-bound. Bump to 75 if Google does not rate-limit you. |
 | `BROWSER_CONCURRENCY` | `5` | Parallel Chrome pages for fallback (~300 MB each). |
 | `FETCH_BYTE_LIMIT` | `98304` | Only download first 96 KB per URL. |
+| `HTTP_CONNECTIONS` | `50` | Native HTTP keep-alive pool connections for true parallel fetch. |
+| `HTTP_PIPELINING` | `2` | Requests per connection. Keep low for Google stability. |
+| `HEAD_FIRST` | `false` | Optional; only enable if most links are already used/expired. |
 | `INLINE_LIMIT` | `50` | Above this, results come as `.txt` files. |
 | `MAX_LINKS_PER_JOB` | `20000` | Hard cap per submission. |
 
