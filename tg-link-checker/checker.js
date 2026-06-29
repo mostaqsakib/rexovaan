@@ -180,7 +180,7 @@ async function judgeUrl(ctx, url) {
     try {
       const res = await ctx.request.get(url, {
         timeout: navTimeout,
-        maxRedirects: 10,
+        maxRedirects: 5,
         headers,
       });
       const status = res.status();
