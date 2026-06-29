@@ -158,20 +158,13 @@ async function getBrowser() {
     }
     const cookieCount = await getProfileCookieCount(ctx);
     console.log('🍪 Google profile cookies loaded:', cookieCount);
-    // Block heavy assets + non-essential scripts to make fallback much faster.
-    // Allow scripts only from Google auth/subscription domains (needed for redirects/markers).
+    // Block only heavy static assets — keep scripts running so Google redirects work reliably.
     await ctx.route('**/*', (route) => {
-      const req = route.request();
-      const t = req.resourceType();
+      const t = route.request().resourceType();
       if (t === 'image' || t === 'font' || t === 'media' || t === 'stylesheet') return route.abort();
-      if (t === 'script') {
-        const u = req.url();
-        if (/google\.com|gstatic\.com|googleapis\.com/i.test(u)) return route.continue();
-        return route.abort();
-      }
-      if (t === 'websocket' || t === 'eventsource') return route.abort();
       return route.continue();
     }).catch(() => {});
+
 
 
     ctx.on('close', () => { browserCtx = null; browserLaunchPromise = null; });
@@ -209,11 +202,11 @@ async function judgeUrlInBrowser(url, reasonPrefix = 'browser fallback') {
     const page = await ctx.newPage();
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
-      // Skip networkidle — too slow with persistent connections. DOM is enough for marker text.
-      await page.waitForLoadState('load', { timeout: Math.min(navTimeout, 4000) }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 8000) }).catch(() => {});
       const status = response?.status?.() || 0;
       const finalUrl = page.url().toLowerCase();
-      const bodyText = (await page.locator('body').innerText({ timeout: 2500 }).catch(() => '')).toLowerCase();
+      const bodyText = (await page.locator('body').innerText({ timeout: 5000 }).catch(() => '')).toLowerCase();
+
 
 
       if (status && status >= 400 && status !== 403) {
