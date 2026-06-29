@@ -18,6 +18,9 @@ const {
   NAV_TIMEOUT_MS = '15000',
   RETRIES_ON_ERROR = '2',
   FETCH_BYTE_LIMIT = '98304',
+  HEAD_FIRST = 'true',
+  HTTP_CONNECTIONS = '50',
+  HTTP_PIPELINING = '2',
   BROWSER_CONCURRENCY = '5',
 
   INVALID_TEXT_PATTERNS = '',
@@ -28,7 +31,23 @@ const {
 const navTimeout = parseInt(NAV_TIMEOUT_MS, 10);
 const retries = parseInt(RETRIES_ON_ERROR, 10);
 const fetchByteLimit = Math.max(0, parseInt(FETCH_BYTE_LIMIT, 10) || 0);
+const headFirst = HEAD_FIRST !== 'false';
+const httpConnections = Math.max(1, parseInt(HTTP_CONNECTIONS, 10) || 50);
+const httpPipelining = Math.max(1, parseInt(HTTP_PIPELINING, 10) || 2);
 const browserConcurrency = Math.max(1, parseInt(BROWSER_CONCURRENCY, 10) || 5);
+
+try {
+  const { Agent, setGlobalDispatcher } = await import('undici');
+  setGlobalDispatcher(new Agent({
+    connections: httpConnections,
+    pipelining: httpPipelining,
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 120_000,
+  }));
+  console.log(`⚡ HTTP pool enabled (connections=${httpConnections}, pipelining=${httpPipelining})`);
+} catch {
+  // undici is optional at runtime; Node's built-in fetch still works.
+}
 
 const BUILTIN_INVALID_PATTERNS = [
   'already been used',
@@ -72,16 +91,21 @@ function cookiePathMatches(pathname, cookiePath = '/') {
 }
 
 let profileCookieCache = { expiresAt: 0, cookies: [] };
+let profileCookiePromise = null;
 async function getCachedProfileCookies(ctx) {
   const now = Date.now();
   if (profileCookieCache.expiresAt > now) return profileCookieCache.cookies;
-  const cookies = await ctx.cookies([
-    'https://google.com',
-    'https://accounts.google.com',
-    'https://serviceactivation.google.com',
-  ]).catch(() => []);
-  profileCookieCache = { expiresAt: now + 60_000, cookies };
-  return cookies;
+  if (!profileCookiePromise) {
+    profileCookiePromise = ctx.cookies([
+      'https://google.com',
+      'https://accounts.google.com',
+      'https://serviceactivation.google.com',
+    ]).catch(() => []).then((cookies) => {
+      profileCookieCache = { expiresAt: Date.now() + 60_000, cookies };
+      return cookies;
+    }).finally(() => { profileCookiePromise = null; });
+  }
+  return profileCookiePromise;
 }
 
 function buildCookieHeaderFromList(cookies, url) {
@@ -103,35 +127,52 @@ function shouldFollowRedirect(status) {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
-async function fastFetchWithCookies(url, baseHeaders, ctx) {
+async function fastFetchWithCookies(url, baseHeaders, profileCookies, method = 'GET', signal) {
   let currentUrl = url;
-  let method = 'GET';
-  const profileCookies = await getCachedProfileCookies(ctx);
   for (let redirects = 0; redirects <= 10; redirects++) {
     const headers = { ...baseHeaders };
     if (profileCookies.length > 0) {
       const cookieHeader = buildCookieHeaderFromList(profileCookies, currentUrl);
       if (cookieHeader) headers.cookie = cookieHeader;
     }
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), navTimeout);
-    try {
-      const res = await fetch(currentUrl, {
-        method,
-        redirect: 'manual',
-        headers,
-        signal: ac.signal,
-      });
-      if (!shouldFollowRedirect(res.status) || redirects === 10) return res;
-      const location = res.headers.get('location');
-      if (!location) return res;
-      currentUrl = new URL(location, currentUrl).toString();
-      if (res.status === 303) method = 'GET';
-    } finally {
-      clearTimeout(timer);
-    }
+    const res = await fetch(currentUrl, {
+      method,
+      redirect: 'manual',
+      headers,
+      signal,
+    });
+    if (!shouldFollowRedirect(res.status) || redirects === 10) return res;
+    await res.body?.cancel?.().catch?.(() => {});
+    const location = res.headers.get('location');
+    if (!location) return res;
+    currentUrl = new URL(location, currentUrl).toString();
+    if (res.status === 303 && method !== 'HEAD') method = 'GET';
   }
   throw new Error('too many redirects');
+}
+
+async function readTextLimited(res, limitBytes) {
+  if (!res.body || !limitBytes || limitBytes <= 0) return (await res.text()).toLowerCase();
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = '';
+  try {
+    while (bytes < limitBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      text += decoder.decode(value, { stream: true });
+      if (bytes >= limitBytes) {
+        await reader.cancel().catch(() => {});
+        break;
+      }
+    }
+    text += decoder.decode();
+    return text.toLowerCase();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function isGoogleAuthPage(finalUrl, bodyText) {
@@ -301,7 +342,7 @@ async function judgeUrlInBrowser(url, reasonPrefix = 'browser fallback') {
 }
 
 // ------- Fast HTTP fetch (native fetch + Chrome profile cookies) -------
-async function judgeUrl(url) {
+async function judgeUrl(url, { ctx, profileCookies = [] } = {}) {
   const headers = {
     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -311,14 +352,23 @@ async function judgeUrl(url) {
   if (fetchByteLimit > 0) headers['range'] = `bytes=0-${fetchByteLimit - 1}`;
 
   const useChromeCookies = isGoogleActivationUrl(url);
-  const ctx = await getBrowser();
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), navTimeout);
     try {
+      if (useChromeCookies && headFirst) {
+        const headRes = await fastFetchWithCookies(url, { ...headers, range: undefined }, profileCookies, 'HEAD', ac.signal);
+        const headUrl = headRes.url.toLowerCase();
+        if (/already|redeemed|expired|error/.test(headUrl)) {
+          await headRes.body?.cancel?.().catch?.(() => {});
+          return { result: 'invalid', reason: `redirected: ${headUrl.slice(0, 120)}` };
+        }
+        await headRes.body?.cancel?.().catch?.(() => {});
+      }
+
       const res = useChromeCookies
-        ? await fastFetchWithCookies(url, headers, ctx)
+        ? await fastFetchWithCookies(url, headers, profileCookies, 'GET', ac.signal)
         : await fetch(url, { redirect: 'follow', headers, signal: ac.signal });
       const status = res.status;
       const finalUrl = res.url.toLowerCase();
@@ -336,10 +386,10 @@ async function judgeUrl(url) {
         return { result: 'error', reason: `HTTP ${status}` };
       }
 
-      const bodyText = (await res.text()).toLowerCase();
+      const bodyText = await readTextLimited(res, fetchByteLimit);
       const classified = classifyPage(finalUrl, bodyText);
       if (classified.result === 'error' && classified.reason.startsWith('google auth required')) {
-        if (useChromeCookies && (await getProfileCookieCount(ctx)) === 0) {
+        if (useChromeCookies && ctx && (await getProfileCookieCount(ctx)) === 0) {
           return { result: 'error', reason: `google auth required — no Google cookies found in ${CHROME_PROFILE_DIR}. Run DISPLAY=:1 node login.js with the same root/user, then close Chrome and restart pm2.` };
         }
         return await judgeUrlInBrowser(url, 'fast fetch google auth');
@@ -374,6 +424,9 @@ export async function checkUrls(urls, { concurrency, onProgress, signal } = {}) 
   const results = new Array(total);
   let idx = 0;
   let checked = 0, valid = 0, invalid = 0, errors = 0;
+  const needsChromeCookies = urls.some(isGoogleActivationUrl);
+  const ctx = needsChromeCookies ? await getBrowser() : null;
+  const profileCookies = ctx ? await getCachedProfileCookies(ctx) : [];
 
   async function worker() {
     while (true) {
@@ -381,7 +434,7 @@ export async function checkUrls(urls, { concurrency, onProgress, signal } = {}) 
       const i = idx++;
       if (i >= total) return;
       const url = urls[i];
-      const judgement = await withHardTimeout(judgeUrl(url), navTimeout * 3 + 5000, 'judgeUrl')
+      const judgement = await withHardTimeout(judgeUrl(url, { ctx, profileCookies }), navTimeout * 3 + 5000, 'judgeUrl')
         .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
       results[i] = { url, ...judgement };
       checked++;
