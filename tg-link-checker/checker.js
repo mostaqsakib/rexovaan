@@ -1,9 +1,8 @@
 // Fast-fetch + browser-fallback link checker.
 // Ported from vps-worker/worker.js, but Supabase-free and reusable for
-// the Telegram bot. Each job has its own runner with shared undici Pool
-// and (lazy) Playwright context for fallback.
+// the Telegram bot. Google activation links use the persistent Chrome
+// profile's cookie jar via BrowserContext.request, matching the site checker.
 
-import { Agent, request as undiciRequest } from 'undici';
 import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -13,7 +12,7 @@ const execFileAsync = promisify(execFile);
 
 const {
   CHROME_PROFILE_DIR = '/root/tg-checker-chrome-profile',
-  CHROME_CHANNEL = '',
+  CHROME_CHANNEL = 'chrome',
   CHROME_EXECUTABLE_PATH = '',
   HEADFUL = 'false',
   NAV_TIMEOUT_MS = '15000',
@@ -56,17 +55,11 @@ const browserFallbackStatuses = new Set(
   BROWSER_FALLBACK_HTTP_STATUSES.split(',').map((s) => parseInt(s.trim(), 10)).filter(Number.isFinite),
 );
 
-// Shared keep-alive HTTP agent (connection pool).
-const httpAgent = new Agent({
-  keepAliveTimeout: 30_000,
-  keepAliveMaxTimeout: 60_000,
-  connections: 256,
-  pipelining: 1,
-  bodyTimeout: navTimeout,
-  headersTimeout: navTimeout,
-});
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function isGoogleActivationUrl(url) {
+  return /(^|\.)google\.com\/subscription\//i.test(String(url));
+}
 
 function isGoogleAuthPage(finalUrl, bodyText) {
   return /accounts\.google\.com\/(signin|servicelogin|v3\/signin|interactive_login|challenge)/i.test(finalUrl)
@@ -121,10 +114,29 @@ async function cleanupStaleChromeProfileLocks(profileDir) {
   return true;
 }
 
+function isChromeProfileLockError(error) {
+  const msg = String(error?.message || error).toLowerCase();
+  return msg.includes('opening in existing browser session')
+    || msg.includes('processsingleton')
+    || msg.includes('singletonlock')
+    || msg.includes('user data directory is already in use');
+}
+
+async function getProfileCookieCount(ctx) {
+  try {
+    return (await ctx.cookies('https://accounts.google.com')).length
+      + (await ctx.cookies('https://serviceactivation.google.com')).length
+      + (await ctx.cookies('https://google.com')).length;
+  } catch {
+    return 0;
+  }
+}
+
 async function getBrowser() {
   if (browserCtx) return browserCtx;
   if (browserLaunchPromise) return browserLaunchPromise;
   browserLaunchPromise = (async () => {
+    console.log('🚀 Launching Chrome profile:', CHROME_PROFILE_DIR, '| channel:', CHROME_CHANNEL || 'bundled');
     await cleanupStaleChromeProfileLocks(CHROME_PROFILE_DIR);
     const launchOptions = {
       headless: HEADFUL !== 'true',
@@ -134,7 +146,18 @@ async function getBrowser() {
     };
     if (CHROME_EXECUTABLE_PATH) launchOptions.executablePath = CHROME_EXECUTABLE_PATH;
     else if (CHROME_CHANNEL) launchOptions.channel = CHROME_CHANNEL;
-    const ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, launchOptions);
+    let ctx;
+    try {
+      ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, launchOptions);
+    } catch (error) {
+      if (!isChromeProfileLockError(error) || !(await cleanupStaleChromeProfileLocks(CHROME_PROFILE_DIR))) {
+        throw error;
+      }
+      console.warn('⚠️ Removed stale Chrome profile lock; retrying launch once...');
+      ctx = await chromium.launchPersistentContext(CHROME_PROFILE_DIR, launchOptions);
+    }
+    const cookieCount = await getProfileCookieCount(ctx);
+    console.log('🍪 Google profile cookies loaded:', cookieCount);
     // Block heavy assets to make fallback faster.
     await ctx.route('**/*', (route) => {
       const t = route.request().resourceType();
@@ -208,38 +231,41 @@ async function judgeUrl(url) {
   };
   if (fetchByteLimit > 0) headers['range'] = `bytes=0-${fetchByteLimit - 1}`;
 
+  const useChromeCookies = isGoogleActivationUrl(url);
+  let ctx = null;
+  if (useChromeCookies) {
+    ctx = await getBrowser();
+  }
+
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
-      const res = await undiciRequest(url, {
-        method: 'GET',
-        dispatcher: httpAgent,
+      const res = await ctx.request.get(url, {
+        timeout: navTimeout,
+        maxRedirects: 10,
         headers,
-        maxRedirections: 10,
-        bodyTimeout: navTimeout,
-        headersTimeout: navTimeout,
       });
-      const status = res.statusCode;
-      const finalUrl = (res.context?.history?.length ? res.context.history[res.context.history.length - 1] : url).toString().toLowerCase();
+      const status = res.status();
+      const finalUrl = res.url().toLowerCase();
 
       if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
-        // drain body to free socket
-        for await (const _ of res.body) { /* discard */ }
         await sleep(status === 429 ? 3000 : 1000 * attempt);
         continue;
       }
 
-      const ok = (status >= 200 && status < 300) || status === 206;
+      const ok = res.ok() || status === 206;
       if (!ok) {
-        for await (const _ of res.body) { /* discard */ }
         if (browserFallbackStatuses.has(status)) {
           return await judgeUrlInBrowser(url, `fast fetch HTTP ${status}`);
         }
         return { result: 'error', reason: `HTTP ${status}` };
       }
 
-      const bodyText = (await res.body.text()).toLowerCase();
+      const bodyText = (await res.text()).toLowerCase();
       const classified = classifyPage(finalUrl, bodyText);
       if (classified.result === 'error' && classified.reason.startsWith('google auth required')) {
+        if (useChromeCookies && (await getProfileCookieCount(ctx)) === 0) {
+          return { result: 'error', reason: `google auth required — no Google cookies found in ${CHROME_PROFILE_DIR}. Run DISPLAY=:1 node login.js with the same root/user, then close Chrome and restart pm2.` };
+        }
         return await judgeUrlInBrowser(url, 'fast fetch google auth');
       }
       return classified;
