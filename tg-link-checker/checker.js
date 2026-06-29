@@ -147,8 +147,17 @@ async function getBrowser() {
 async function judgeUrlInBrowser(ctx, url, reasonPrefix = 'browser fallback') {
   const page = await ctx.newPage();
   try {
+    // D: block heavy assets in fallback path only — body text-ই দরকার।
+    await page.route('**/*', (route) => {
+      const t = route.request().resourceType();
+      if (t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet') {
+        return route.abort();
+      }
+      return route.continue();
+    }).catch(() => {});
+
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
-    await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 8000) }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 5000) }).catch(() => {});
     const status = response?.status?.() || 0;
     const finalUrl = page.url().toLowerCase();
     const bodyText = (await page.locator('body').innerText({ timeout: 5000 }).catch(() => '')).toLowerCase();
