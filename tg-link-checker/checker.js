@@ -63,13 +63,6 @@ function isGoogleAuthPage(finalUrl, bodyText) {
     || bodyText.includes("couldn't sign you in");
 }
 
-function classifyByUrlOnly(finalUrl) {
-  if (/already|redeemed|expired|error/.test(finalUrl)) {
-    return { result: 'invalid', reason: `redirected: ${finalUrl.slice(0, 120)}` };
-  }
-  return null;
-}
-
 function classifyPage(finalUrl, bodyText) {
   if (isGoogleAuthPage(finalUrl, bodyText)) {
     return { result: 'error', reason: 'google auth required (re-run npm run login)' };
@@ -77,8 +70,9 @@ function classifyPage(finalUrl, bodyText) {
   for (const pat of invalidPatterns) {
     if (bodyText.includes(pat)) return { result: 'invalid', reason: `matched: ${pat}` };
   }
-  const urlHit = classifyByUrlOnly(finalUrl);
-  if (urlHit) return urlHit;
+  if (/already|redeemed|expired|error/.test(finalUrl)) {
+    return { result: 'invalid', reason: `redirected: ${finalUrl.slice(0, 120)}` };
+  }
   if (validPatterns.length === 0) return { result: 'valid', reason: 'no invalid markers' };
   for (const pat of validPatterns) {
     if (bodyText.includes(pat)) return { result: 'valid', reason: `matched: ${pat}` };
