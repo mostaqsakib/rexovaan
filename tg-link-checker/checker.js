@@ -238,7 +238,11 @@ async function judgeUrl(url) {
       }
 
       const bodyText = (await res.body.text()).toLowerCase();
-      return classifyPage(finalUrl, bodyText);
+      const classified = classifyPage(finalUrl, bodyText);
+      if (classified.result === 'error' && classified.reason.startsWith('google auth required')) {
+        return await judgeUrlInBrowser(url, 'fast fetch google auth');
+      }
+      return classified;
     } catch (e) {
       const msg = String(e?.message || e);
       const transient = /timeout|socket hang up|econnreset|enetunreach|etimedout|network|other side closed/i.test(msg);
