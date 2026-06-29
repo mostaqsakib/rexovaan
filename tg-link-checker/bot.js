@@ -1,4 +1,7 @@
 import 'dotenv/config';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { Bot, InputFile } from 'grammy';
 import { checkUrls } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
