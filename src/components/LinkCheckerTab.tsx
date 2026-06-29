@@ -254,8 +254,20 @@ export default function LinkCheckerTab() {
                       <span className="text-success">✓ {j.valid_count} valid</span>
                       <span className="text-destructive">✗ {j.invalid_count} invalid</span>
                       {j.error_count > 0 && <span className="text-warning">! {j.error_count} errors</span>}
+                      {(() => {
+                        const startMs = j.started_at ? new Date(j.started_at).getTime() : null;
+                        const endMs = j.finished_at ? new Date(j.finished_at).getTime() : null;
+                        if (!startMs || !endMs || endMs < startMs) return null;
+                        const secs = Math.max(1, Math.round((endMs - startMs) / 1000));
+                        const h = Math.floor(secs / 3600);
+                        const m = Math.floor((secs % 3600) / 60);
+                        const s = secs % 60;
+                        const dur = h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+                        return <span title="Total time taken">⏱ {dur}</span>;
+                      })()}
                       <span className="ml-auto">{new Date(j.created_at).toLocaleString()}</span>
                     </div>
+
                     {j.error_text && <div className="text-xs text-destructive">{j.error_text}</div>}
                   </div>
                 );
