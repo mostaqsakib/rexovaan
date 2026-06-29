@@ -79,6 +79,7 @@ const maxConc = parseInt(MAX_CONCURRENCY, 10);
 const pollMs = parseInt(POLL_INTERVAL_MS, 10);
 const retries = parseInt(RETRIES_ON_ERROR, 10);
 const perJobDelay = parseInt(DELAY_BETWEEN_JOBS_MS, 10);
+const fetchByteLimit = Math.max(0, parseInt(FETCH_BYTE_LIMIT, 10) || 0);
 const autoRetryFailedCooldownMs = parseInt(process.env.AUTO_RETRY_FAILED_COOLDOWN_MS || '300000', 10);
 const browserFallbackStatuses = new Set(
   (process.env.BROWSER_FALLBACK_HTTP_STATUSES || '401,403,429')
