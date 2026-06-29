@@ -26,7 +26,25 @@ const allowed = ALLOWED_USER_IDS.split(',').map((s) => s.trim()).filter(Boolean)
 const allowedSet = new Set(allowed);
 const isAllowed = (id) => allowedSet.size === 0 || allowedSet.has(Number(id));
 
-const bot = new Bot(BOT_TOKEN);
+const bot = new Bot(BOT_TOKEN, {
+  client: {
+    timeoutSeconds: 180,
+  },
+});
+
+async function withRetry(fn, label, attempts = 4) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      console.error(`${label} attempt ${i} failed:`, e?.message || e);
+      await new Promise((r) => setTimeout(r, 1500 * i));
+    }
+  }
+  throw lastErr;
+}
 
 bot.command('start', (ctx) => ctx.reply(
   '👋 <b>Link Checker Bot</b>\n\n'
