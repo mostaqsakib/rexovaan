@@ -9,7 +9,7 @@ import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from
 
 const {
   BOT_TOKEN,
-  MAX_CONCURRENCY = '75',
+  MAX_CONCURRENCY = '50',
   INLINE_LIMIT = '50',
   PROGRESS_EDIT_INTERVAL_MS = '2000',
   ALLOWED_USER_IDS = '',
