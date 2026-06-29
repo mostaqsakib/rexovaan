@@ -204,6 +204,10 @@ async function judgeUrl(ctx, url) {
         return { result: 'error', reason: `HTTP ${status}` };
       }
 
+      // Early exit: if final URL itself signals invalid, skip body download/parse.
+      const urlHit = classifyByUrlOnly(finalUrl);
+      if (urlHit) return urlHit;
+
       const bodyText = (await res.text()).toLowerCase();
       return classifyPage(finalUrl, bodyText);
     } catch (e) {
