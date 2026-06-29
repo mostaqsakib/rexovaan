@@ -238,7 +238,9 @@ bot.catch((err) => {
 });
 
 console.log(`🚀 tg-link-checker starting (concurrency=${maxConc}, inline_limit=${inlineLimit})`);
+prewarm().catch(() => {});
 bot.start({
   drop_pending_updates: true,
   onStart: (me) => console.log(`✅ @${me.username} online`),
 });
+
