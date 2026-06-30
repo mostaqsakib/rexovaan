@@ -650,53 +650,101 @@ async function getBroadcastChatIds() {
     .select("chat_id, chat_type")
     .eq("is_active", true);
   const ids = [];
-  if (customers) for (const c of customers) ids.push(c.chat_id);
+  if (customers) for (const c of customers) {
+    if (c?.chat_id != null) ids.push(Number(c.chat_id));
+  }
   if (groups) for (const g of groups) {
     if (g.chat_type === "channel") continue; // skip channels for auto-broadcasts
-    ids.push(g.chat_id);
+    ids.push(Number(g.chat_id));
   }
-  return ids;
+  // Always include the admin chat so admin gets a copy of every broadcast.
+  const adminId = Number(envGet("ADMIN_CHAT_ID") || 0);
+  if (adminId) ids.push(adminId);
+  // Dedupe + drop invalid / synthetic (negative non-group) ids
+  const seen = new Set();
+  const out = [];
+  for (const id of ids) {
+    if (!Number.isFinite(id) || id === 0) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+// Single-recipient send with 429 (rate-limit) + transient-error retry.
+// Returns the final tg response (ok:true|false).
+async function sendBroadcastOne(id, text, replyMarkup, { maxRetries = 4 } = {}) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let res;
+    try {
+      res = await sendMessage(id, text, replyMarkup);
+    } catch (e) {
+      res = { ok: false, description: String(e?.message || e) };
+    }
+    if (res?.ok) return res;
+    const desc = String(res?.description || "").toLowerCase();
+    const retryAfter = Number(res?.parameters?.retry_after || 0);
+    const isRate = retryAfter > 0 || desc.includes("too many requests") || desc.includes("retry after");
+    const isTransient = desc.includes("timeout") || desc.includes("timed out") || desc.includes("network") || desc.includes("econn") || desc.includes("fetch failed") || desc.includes("internal server error") || desc.includes("bad gateway") || desc.includes("gateway time");
+    // Permanent failures — don't retry
+    const isPermanent = desc.includes("bot was blocked") || desc.includes("user is deactivated") || desc.includes("chat not found") || desc.includes("kicked") || desc.includes("forbidden");
+    if (isPermanent || attempt === maxRetries) return res;
+    if (isRate) {
+      await new Promise(r => setTimeout(r, (retryAfter > 0 ? retryAfter + 1 : 3) * 1000));
+      continue;
+    }
+    if (isTransient) {
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+      continue;
+    }
+    return res;
+  }
+}
+
+async function _runBroadcast(ids, text, replyMarkup) {
+  const normalizedReplyMarkup = await normalizePurchaseBroadcastKeyboard(replyMarkup);
+  let sent = 0, failed = 0;
+  const messageIds = [];
+  const failureSamples = [];
+  // Telegram limit: ~30 msgs/sec globally for bots. Keep ~20/sec to stay safe.
+  const BATCH = 20;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map((id) => sendBroadcastOne(id, text, normalizedReplyMarkup)));
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j];
+      const val = r.status === "fulfilled" ? r.value : { ok: false, description: String(r.reason?.message || r.reason) };
+      if (val?.ok) {
+        sent++;
+        if (val?.result?.message_id) messageIds.push({ chat_id: batch[j], message_id: val.result.message_id });
+      } else {
+        failed++;
+        if (failureSamples.length < 5) failureSamples.push({ id: batch[j], desc: val?.description });
+      }
+    }
+    if (i + BATCH < ids.length) await new Promise((r) => setTimeout(r, 1100));
+  }
+  if (failureSamples.length) console.log("[broadcast] failure samples:", JSON.stringify(failureSamples));
+  return { total: ids.length, sent, failed, messageIds };
 }
 
 async function broadcastToAll(text, replyMarkup) {
   const ids = await getBroadcastChatIds();
-  const normalizedReplyMarkup = await normalizePurchaseBroadcastKeyboard(replyMarkup);
-  let sent = 0, failed = 0;
-  const messageIds = [];
-  for (let i = 0; i < ids.length; i += 25) {
-    const batch = ids.slice(i, i + 25);
-    const results = await Promise.allSettled(batch.map((id) => sendMessage(id, text, normalizedReplyMarkup)));
-    for (let j = 0; j < results.length; j++) {
-      const r = results[j];
-      if (r.status === "fulfilled" && r.value?.ok) {
-        sent++;
-        if (r.value?.result?.message_id) messageIds.push({ chat_id: batch[j], message_id: r.value.result.message_id });
-      } else failed++;
-    }
-    if (i + 25 < ids.length) await new Promise((r) => setTimeout(r, 1000));
-  }
-  return { total: ids.length, sent, failed, messageIds };
+  return _runBroadcast(ids, text, replyMarkup);
 }
 
 async function broadcastToChats(chatIds, text, replyMarkup) {
-  const ids = (chatIds || []).map(Number).filter((n) => !isNaN(n));
-  const normalizedReplyMarkup = await normalizePurchaseBroadcastKeyboard(replyMarkup);
-  let sent = 0, failed = 0;
-  const messageIds = [];
-  for (let i = 0; i < ids.length; i += 25) {
-    const batch = ids.slice(i, i + 25);
-    const results = await Promise.allSettled(batch.map((id) => sendMessage(id, text, normalizedReplyMarkup)));
-    for (let j = 0; j < results.length; j++) {
-      const r = results[j];
-      if (r.status === "fulfilled" && r.value?.ok) {
-        sent++;
-        if (r.value?.result?.message_id) messageIds.push({ chat_id: batch[j], message_id: r.value.result.message_id });
-      } else failed++;
-    }
-    if (i + 25 < ids.length) await new Promise((r) => setTimeout(r, 1000));
+  const seen = new Set();
+  const ids = [];
+  for (const raw of (chatIds || [])) {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n === 0 || seen.has(n)) continue;
+    seen.add(n); ids.push(n);
   }
-  return { total: ids.length, sent, failed, messageIds };
+  return _runBroadcast(ids, text, replyMarkup);
 }
+
 
 async function showBroadcastProductPicker(chatId, msgId, selectedIds) {
   const { data: prods } = await supabase.from("bot_products").select("id, name, short_code, custom_emoji_id, is_active").eq("is_active", true).order("sort_order");
