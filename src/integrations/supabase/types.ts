@@ -134,6 +134,48 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_broadcast_history: {
+        Row: {
+          admin_chat_id: number | null
+          created_at: string
+          failed_chat_ids: number[]
+          failed_count: number
+          id: string
+          last_resent_at: string | null
+          reply_markup: Json | null
+          resend_count: number
+          sent: number
+          text: string
+          total: number
+        }
+        Insert: {
+          admin_chat_id?: number | null
+          created_at?: string
+          failed_chat_ids?: number[]
+          failed_count?: number
+          id?: string
+          last_resent_at?: string | null
+          reply_markup?: Json | null
+          resend_count?: number
+          sent?: number
+          text: string
+          total?: number
+        }
+        Update: {
+          admin_chat_id?: number | null
+          created_at?: string
+          failed_chat_ids?: number[]
+          failed_count?: number
+          id?: string
+          last_resent_at?: string | null
+          reply_markup?: Json | null
+          resend_count?: number
+          sent?: number
+          text?: string
+          total?: number
+        }
+        Relationships: []
+      }
       bot_button_emojis: {
         Row: {
           button_key: string
