@@ -1931,7 +1931,7 @@ async function showAdminMenu(chatId, emojiMap, editMessageId) {
     [{ text: `💰 Deposits${pendingDeps > 0 ? ` (${pendingDeps})` : ""}`, callback_data: "adm_deposits" }, { text: `💸 Withdrawals${pendingWds > 0 ? ` (${pendingWds})` : ""}`, callback_data: "adm_withdrawals" }],
     [{ text: `⏳ Pending Deliveries${pendingDel > 0 ? ` (${pendingDel})` : ""}`, callback_data: "adm_pending_deliveries" }],
     [{ text: `👥 Customers`, callback_data: "adm_customers" }, { text: `📩 DM User`, callback_data: "adm_dm_user" }],
-    [{ text: `📢 Broadcast`, callback_data: "adm_broadcast" }],
+    [{ text: `📢 Broadcast`, callback_data: "adm_broadcast" }, { text: `📋 History`, callback_data: "adm_bcast_history" }],
     [{ text: `🆕 New Product`, callback_data: "adm_newproduct" }, { text: `💱 Price Change`, callback_data: "adm_pricechange" }],
     [{ text: `🔥 Flash Sales`, callback_data: "adm_flashsales" }, { text: `📰 Sales Feed`, callback_data: "adm_salesfeed" }],
     [{ text: `👥 Groups`, callback_data: "adm_groups" }, { text: `🔑 Keywords`, callback_data: "adm_keywords" }],
