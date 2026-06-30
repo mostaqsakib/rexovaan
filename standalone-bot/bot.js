@@ -7026,10 +7026,33 @@ async function handleCallback(callbackQuery, emojiMap) {
       if (rows.length > 0) replyMarkup = { inline_keyboard: rows };
     }
     await editOrSend(chatId, msgId, `📢 Broadcasting...`);
-    const { total, sent, failed } = await broadcastToAll(htmlText, replyMarkup);
-    await sendMessage(chatId, `✅ <b>Broadcast Complete!</b>\n\n📤 Sent: <b>${sent}</b>\n❌ Failed: <b>${failed}</b>\n👥 Total: <b>${total}</b>${ids.length ? `\n🔘 Buttons: <b>${ids.length}</b>` : ""}`, { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    const { total, sent, failed, failedIds } = await broadcastToAll(htmlText, replyMarkup);
+    let historyId = null;
+    try {
+      const { data: rec } = await supabase
+        .from("bot_broadcast_history")
+        .insert({
+          admin_chat_id: chatId,
+          text: htmlText,
+          reply_markup: replyMarkup || null,
+          total, sent,
+          failed_count: failed,
+          failed_chat_ids: failedIds || [],
+        })
+        .select("id")
+        .single();
+      historyId = rec?.id || null;
+    } catch (e) { console.error("[broadcast history insert]", e?.message || e); }
+    const doneKb = { inline_keyboard: [] };
+    if (failed > 0 && historyId) {
+      doneKb.inline_keyboard.push([{ text: `🔁 Resend to Failed (${failed})`, callback_data: `adm_bcast_resend_${historyId}` }]);
+    }
+    doneKb.inline_keyboard.push([{ text: `📋 Broadcast History`, callback_data: "adm_bcast_history" }]);
+    doneKb.inline_keyboard.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
+    await sendMessage(chatId, `✅ <b>Broadcast Complete!</b>\n\n📤 Sent: <b>${sent}</b>\n❌ Failed: <b>${failed}</b>\n👥 Total: <b>${total}</b>${ids.length ? `\n🔘 Buttons: <b>${ids.length}</b>` : ""}`, doneKb);
     return;
   }
+
 
   if (data === "adm_bcast_cancel" && isAdmin(chatId)) {
     await supabase.from("bot_customers").update({ pending_action: null, pending_inputs: null }).eq("id", customer.id);
