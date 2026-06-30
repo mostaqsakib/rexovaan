@@ -706,6 +706,7 @@ async function _runBroadcast(ids, text, replyMarkup) {
   const normalizedReplyMarkup = await normalizePurchaseBroadcastKeyboard(replyMarkup);
   let sent = 0, failed = 0;
   const messageIds = [];
+  const failedIds = [];
   const failureSamples = [];
   // Telegram limit: ~30 msgs/sec globally for bots. Keep ~20/sec to stay safe.
   const BATCH = 20;
@@ -720,14 +721,16 @@ async function _runBroadcast(ids, text, replyMarkup) {
         if (val?.result?.message_id) messageIds.push({ chat_id: batch[j], message_id: val.result.message_id });
       } else {
         failed++;
+        failedIds.push(batch[j]);
         if (failureSamples.length < 5) failureSamples.push({ id: batch[j], desc: val?.description });
       }
     }
     if (i + BATCH < ids.length) await new Promise((r) => setTimeout(r, 1100));
   }
   if (failureSamples.length) console.log("[broadcast] failure samples:", JSON.stringify(failureSamples));
-  return { total: ids.length, sent, failed, messageIds };
+  return { total: ids.length, sent, failed, messageIds, failedIds };
 }
+
 
 async function broadcastToAll(text, replyMarkup) {
   const ids = await getBroadcastChatIds();
@@ -1928,7 +1931,7 @@ async function showAdminMenu(chatId, emojiMap, editMessageId) {
     [{ text: `💰 Deposits${pendingDeps > 0 ? ` (${pendingDeps})` : ""}`, callback_data: "adm_deposits" }, { text: `💸 Withdrawals${pendingWds > 0 ? ` (${pendingWds})` : ""}`, callback_data: "adm_withdrawals" }],
     [{ text: `⏳ Pending Deliveries${pendingDel > 0 ? ` (${pendingDel})` : ""}`, callback_data: "adm_pending_deliveries" }],
     [{ text: `👥 Customers`, callback_data: "adm_customers" }, { text: `📩 DM User`, callback_data: "adm_dm_user" }],
-    [{ text: `📢 Broadcast`, callback_data: "adm_broadcast" }],
+    [{ text: `📢 Broadcast`, callback_data: "adm_broadcast" }, { text: `📋 History`, callback_data: "adm_bcast_history" }],
     [{ text: `🆕 New Product`, callback_data: "adm_newproduct" }, { text: `💱 Price Change`, callback_data: "adm_pricechange" }],
     [{ text: `🔥 Flash Sales`, callback_data: "adm_flashsales" }, { text: `📰 Sales Feed`, callback_data: "adm_salesfeed" }],
     [{ text: `👥 Groups`, callback_data: "adm_groups" }, { text: `🔑 Keywords`, callback_data: "adm_keywords" }],
@@ -7023,16 +7026,101 @@ async function handleCallback(callbackQuery, emojiMap) {
       if (rows.length > 0) replyMarkup = { inline_keyboard: rows };
     }
     await editOrSend(chatId, msgId, `📢 Broadcasting...`);
-    const { total, sent, failed } = await broadcastToAll(htmlText, replyMarkup);
-    await sendMessage(chatId, `✅ <b>Broadcast Complete!</b>\n\n📤 Sent: <b>${sent}</b>\n❌ Failed: <b>${failed}</b>\n👥 Total: <b>${total}</b>${ids.length ? `\n🔘 Buttons: <b>${ids.length}</b>` : ""}`, { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+    const { total, sent, failed, failedIds } = await broadcastToAll(htmlText, replyMarkup);
+    let historyId = null;
+    try {
+      const { data: rec } = await supabase
+        .from("bot_broadcast_history")
+        .insert({
+          admin_chat_id: chatId,
+          text: htmlText,
+          reply_markup: replyMarkup || null,
+          total, sent,
+          failed_count: failed,
+          failed_chat_ids: failedIds || [],
+        })
+        .select("id")
+        .single();
+      historyId = rec?.id || null;
+    } catch (e) { console.error("[broadcast history insert]", e?.message || e); }
+    const doneKb = { inline_keyboard: [] };
+    if (failed > 0 && historyId) {
+      doneKb.inline_keyboard.push([{ text: `🔁 Resend to Failed (${failed})`, callback_data: `adm_bcast_resend_${historyId}` }]);
+    }
+    doneKb.inline_keyboard.push([{ text: `📋 Broadcast History`, callback_data: "adm_bcast_history" }]);
+    doneKb.inline_keyboard.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
+    await sendMessage(chatId, `✅ <b>Broadcast Complete!</b>\n\n📤 Sent: <b>${sent}</b>\n❌ Failed: <b>${failed}</b>\n👥 Total: <b>${total}</b>${ids.length ? `\n🔘 Buttons: <b>${ids.length}</b>` : ""}`, doneKb);
     return;
   }
+
 
   if (data === "adm_bcast_cancel" && isAdmin(chatId)) {
     await supabase.from("bot_customers").update({ pending_action: null, pending_inputs: null }).eq("id", customer.id);
     await editOrSend(chatId, msgId, "❌ Broadcast cancelled.", { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
     return;
   }
+
+  if (data === "adm_bcast_history" && isAdmin(chatId)) {
+    const { data: rows } = await supabase
+      .from("bot_broadcast_history")
+      .select("id, text, total, sent, failed_count, resend_count, created_at")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (!rows || rows.length === 0) {
+      await editOrSend(chatId, msgId, "📋 <b>Broadcast History</b>\n\n<i>No broadcasts yet.</i>", { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+      return;
+    }
+    const buttons = rows.map((r) => {
+      const preview = (r.text || "").replace(/<[^>]+>/g, "").slice(0, 30);
+      const when = new Date(r.created_at).toISOString().slice(5, 16).replace("T", " ");
+      const tag = r.failed_count > 0 ? `❌${r.failed_count}` : `✅`;
+      return [{ text: `${when} ${tag} ${preview}`, callback_data: `adm_bcast_view_${r.id}` }];
+    });
+    buttons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
+    await editOrSend(chatId, msgId, "📋 <b>Broadcast History</b>\n\nLast 10 broadcasts. Tap one to view & resend to failed.", { inline_keyboard: buttons });
+    return;
+  }
+
+  if (data.startsWith("adm_bcast_view_") && isAdmin(chatId)) {
+    const id = data.replace("adm_bcast_view_", "");
+    const { data: r } = await supabase.from("bot_broadcast_history").select("*").eq("id", id).maybeSingle();
+    if (!r) { await editOrSend(chatId, msgId, "❌ Not found.", { inline_keyboard: [[{ text: "◀️ History", callback_data: "adm_bcast_history" }]] }); return; }
+    const preview = (r.text || "").slice(0, 300);
+    const info = `📋 <b>Broadcast</b>\n\n🗓 ${new Date(r.created_at).toUTCString()}\n👥 Total: <b>${r.total}</b>\n📤 Sent: <b>${r.sent}</b>\n❌ Failed: <b>${r.failed_count}</b>\n🔁 Resends: <b>${r.resend_count || 0}</b>\n\n<b>Preview:</b>\n${preview}`;
+    const kb = { inline_keyboard: [] };
+    if ((r.failed_count || 0) > 0 && Array.isArray(r.failed_chat_ids) && r.failed_chat_ids.length > 0) {
+      kb.inline_keyboard.push([{ text: `🔁 Resend to Failed (${r.failed_chat_ids.length})`, callback_data: `adm_bcast_resend_${r.id}` }]);
+    }
+    kb.inline_keyboard.push([{ text: "◀️ History", callback_data: "adm_bcast_history" }]);
+    await editOrSend(chatId, msgId, info, kb);
+    return;
+  }
+
+  if (data.startsWith("adm_bcast_resend_") && isAdmin(chatId)) {
+    const id = data.replace("adm_bcast_resend_", "");
+    const { data: r } = await supabase.from("bot_broadcast_history").select("*").eq("id", id).maybeSingle();
+    if (!r) { await editOrSend(chatId, msgId, "❌ Not found.", { inline_keyboard: [[{ text: "◀️ History", callback_data: "adm_bcast_history" }]] }); return; }
+    const failedIdsPrev = Array.isArray(r.failed_chat_ids) ? r.failed_chat_ids.map(Number).filter(Boolean) : [];
+    if (failedIdsPrev.length === 0) {
+      await editOrSend(chatId, msgId, "✅ No failed recipients to resend.", { inline_keyboard: [[{ text: "◀️ History", callback_data: "adm_bcast_history" }]] });
+      return;
+    }
+    await editOrSend(chatId, msgId, `🔁 Resending to <b>${failedIdsPrev.length}</b> failed recipients...`);
+    const { total, sent, failed, failedIds } = await broadcastToChats(failedIdsPrev, r.text, r.reply_markup || undefined);
+    await supabase.from("bot_broadcast_history").update({
+      failed_chat_ids: failedIds || [],
+      failed_count: failed,
+      sent: (r.sent || 0) + sent,
+      resend_count: (r.resend_count || 0) + 1,
+      last_resent_at: new Date().toISOString(),
+    }).eq("id", id);
+    const kb = { inline_keyboard: [] };
+    if (failed > 0) kb.inline_keyboard.push([{ text: `🔁 Resend to Failed (${failed})`, callback_data: `adm_bcast_resend_${id}` }]);
+    kb.inline_keyboard.push([{ text: "📋 History", callback_data: "adm_bcast_history" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
+    await sendMessage(chatId, `✅ <b>Resend Complete!</b>\n\n📤 Newly delivered: <b>${sent}</b>\n❌ Still failed: <b>${failed}</b>\n🎯 Targeted: <b>${total}</b>`, kb);
+    return;
+  }
+
 
 
   if (data === "adm_newstock" && isAdmin(chatId)) {
