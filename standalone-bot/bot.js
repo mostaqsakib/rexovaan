@@ -706,6 +706,7 @@ async function _runBroadcast(ids, text, replyMarkup) {
   const normalizedReplyMarkup = await normalizePurchaseBroadcastKeyboard(replyMarkup);
   let sent = 0, failed = 0;
   const messageIds = [];
+  const failedIds = [];
   const failureSamples = [];
   // Telegram limit: ~30 msgs/sec globally for bots. Keep ~20/sec to stay safe.
   const BATCH = 20;
@@ -720,14 +721,16 @@ async function _runBroadcast(ids, text, replyMarkup) {
         if (val?.result?.message_id) messageIds.push({ chat_id: batch[j], message_id: val.result.message_id });
       } else {
         failed++;
+        failedIds.push(batch[j]);
         if (failureSamples.length < 5) failureSamples.push({ id: batch[j], desc: val?.description });
       }
     }
     if (i + BATCH < ids.length) await new Promise((r) => setTimeout(r, 1100));
   }
   if (failureSamples.length) console.log("[broadcast] failure samples:", JSON.stringify(failureSamples));
-  return { total: ids.length, sent, failed, messageIds };
+  return { total: ids.length, sent, failed, messageIds, failedIds };
 }
+
 
 async function broadcastToAll(text, replyMarkup) {
   const ids = await getBroadcastChatIds();
