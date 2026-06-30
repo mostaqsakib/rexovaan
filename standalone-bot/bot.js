@@ -7060,6 +7060,68 @@ async function handleCallback(callbackQuery, emojiMap) {
     return;
   }
 
+  if (data === "adm_bcast_history" && isAdmin(chatId)) {
+    const { data: rows } = await supabase
+      .from("bot_broadcast_history")
+      .select("id, text, total, sent, failed_count, resend_count, created_at")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (!rows || rows.length === 0) {
+      await editOrSend(chatId, msgId, "📋 <b>Broadcast History</b>\n\n<i>No broadcasts yet.</i>", { inline_keyboard: [[{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]] });
+      return;
+    }
+    const buttons = rows.map((r) => {
+      const preview = (r.text || "").replace(/<[^>]+>/g, "").slice(0, 30);
+      const when = new Date(r.created_at).toISOString().slice(5, 16).replace("T", " ");
+      const tag = r.failed_count > 0 ? `❌${r.failed_count}` : `✅`;
+      return [{ text: `${when} ${tag} ${preview}`, callback_data: `adm_bcast_view_${r.id}` }];
+    });
+    buttons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
+    await editOrSend(chatId, msgId, "📋 <b>Broadcast History</b>\n\nLast 10 broadcasts. Tap one to view & resend to failed.", { inline_keyboard: buttons });
+    return;
+  }
+
+  if (data.startsWith("adm_bcast_view_") && isAdmin(chatId)) {
+    const id = data.replace("adm_bcast_view_", "");
+    const { data: r } = await supabase.from("bot_broadcast_history").select("*").eq("id", id).maybeSingle();
+    if (!r) { await editOrSend(chatId, msgId, "❌ Not found.", { inline_keyboard: [[{ text: "◀️ History", callback_data: "adm_bcast_history" }]] }); return; }
+    const preview = (r.text || "").slice(0, 300);
+    const info = `📋 <b>Broadcast</b>\n\n🗓 ${new Date(r.created_at).toUTCString()}\n👥 Total: <b>${r.total}</b>\n📤 Sent: <b>${r.sent}</b>\n❌ Failed: <b>${r.failed_count}</b>\n🔁 Resends: <b>${r.resend_count || 0}</b>\n\n<b>Preview:</b>\n${preview}`;
+    const kb = { inline_keyboard: [] };
+    if ((r.failed_count || 0) > 0 && Array.isArray(r.failed_chat_ids) && r.failed_chat_ids.length > 0) {
+      kb.inline_keyboard.push([{ text: `🔁 Resend to Failed (${r.failed_chat_ids.length})`, callback_data: `adm_bcast_resend_${r.id}` }]);
+    }
+    kb.inline_keyboard.push([{ text: "◀️ History", callback_data: "adm_bcast_history" }]);
+    await editOrSend(chatId, msgId, info, kb);
+    return;
+  }
+
+  if (data.startsWith("adm_bcast_resend_") && isAdmin(chatId)) {
+    const id = data.replace("adm_bcast_resend_", "");
+    const { data: r } = await supabase.from("bot_broadcast_history").select("*").eq("id", id).maybeSingle();
+    if (!r) { await editOrSend(chatId, msgId, "❌ Not found.", { inline_keyboard: [[{ text: "◀️ History", callback_data: "adm_bcast_history" }]] }); return; }
+    const failedIdsPrev = Array.isArray(r.failed_chat_ids) ? r.failed_chat_ids.map(Number).filter(Boolean) : [];
+    if (failedIdsPrev.length === 0) {
+      await editOrSend(chatId, msgId, "✅ No failed recipients to resend.", { inline_keyboard: [[{ text: "◀️ History", callback_data: "adm_bcast_history" }]] });
+      return;
+    }
+    await editOrSend(chatId, msgId, `🔁 Resending to <b>${failedIdsPrev.length}</b> failed recipients...`);
+    const { total, sent, failed, failedIds } = await broadcastToChats(failedIdsPrev, r.text, r.reply_markup || undefined);
+    await supabase.from("bot_broadcast_history").update({
+      failed_chat_ids: failedIds || [],
+      failed_count: failed,
+      sent: (r.sent || 0) + sent,
+      resend_count: (r.resend_count || 0) + 1,
+      last_resent_at: new Date().toISOString(),
+    }).eq("id", id);
+    const kb = { inline_keyboard: [] };
+    if (failed > 0) kb.inline_keyboard.push([{ text: `🔁 Resend to Failed (${failed})`, callback_data: `adm_bcast_resend_${id}` }]);
+    kb.inline_keyboard.push([{ text: "📋 History", callback_data: "adm_bcast_history" }, { text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
+    await sendMessage(chatId, `✅ <b>Resend Complete!</b>\n\n📤 Newly delivered: <b>${sent}</b>\n❌ Still failed: <b>${failed}</b>\n🎯 Targeted: <b>${total}</b>`, kb);
+    return;
+  }
+
+
 
   if (data === "adm_newstock" && isAdmin(chatId)) {
     const { data: prods } = await supabase.from("bot_products").select("id, name, custom_emoji_id").eq("is_active", true).order("sort_order");
