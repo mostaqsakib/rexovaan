@@ -241,17 +241,9 @@ Deno.serve(async (req) => {
       return htmlResp("success", "Payment already processed.");
     }
 
-    // Atomic balance credit via SECURITY DEFINER RPC (FOR UPDATE row lock).
-    const { data: rpcRows, error: creditErr } = await supabase.rpc("refund_customer_balance", {
-      _customer_id: deposit.customer_id,
-      _amount: usdtAmount,
-    });
-    if (creditErr) {
-      console.error("[bKash] refund_customer_balance failed", creditErr);
-    }
-    const newBalance = Array.isArray(rpcRows)
-      ? Number(rpcRows[0]?.new_balance ?? 0)
-      : Number((rpcRows as any)?.new_balance ?? 0);
+    // Apply deposit: clear pay-later due first, then credit balance
+    const applied = await applyDepositCredit(supabase, deposit.customer_id, usdtAmount);
+    const newBalance = applied.newBalance;
 
     await supabase.from("bot_customers")
       .update({ pending_action: null, updated_at: new Date().toISOString() })
@@ -259,9 +251,12 @@ Deno.serve(async (req) => {
 
     const chatId = customer?.chat_id;
     if (chatId) {
+      const plLine = applied.paidPayLater > 0
+        ? `\n🏷️ Pay-Later Cleared: <b>$${applied.paidPayLater.toFixed(2)} USDT</b>`
+        : "";
       await sendTelegram("sendMessage", {
         chat_id: chatId,
-        text: `✅ <b>bKash Payment Verified!</b>\n\n💰 Paid: <b>৳${bdtAmount.toFixed(2)} BDT</b>\n📊 Rate: 1 USD = ${rate} BDT\n💵 Credited: <b>$${usdtAmount.toFixed(2)} USDT</b>\n💳 New Balance: <b>$${newBalance.toFixed(2)} USDT</b>\n🧾 TrxID: <code>${trxID}</code>`,
+        text: `✅ <b>bKash Payment Verified!</b>\n\n💰 Paid: <b>৳${bdtAmount.toFixed(2)} BDT</b>\n📊 Rate: 1 USD = ${rate} BDT\n💵 Credited: <b>$${usdtAmount.toFixed(2)} USDT</b>${plLine}\n💳 New Balance: <b>$${newBalance.toFixed(2)} USDT</b>\n🧾 TrxID: <code>${trxID}</code>`,
         parse_mode: "HTML",
       });
     }
