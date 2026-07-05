@@ -174,6 +174,20 @@ const PaymentMethodsTab = () => {
                   <Button size="sm" variant="outline" onClick={() => handleDelete(m.id)}><Trash2 className="h-3 w-3" /></Button>
                 </div>
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-4 border-t border-border pt-3">
+                <label className="flex items-center gap-2 text-xs">
+                  <Switch checked={m.enabled_for_purchase !== false} onCheckedChange={(v) => handleContextToggle(m.id, 'enabled_for_purchase', v)} />
+                  <span className={m.enabled_for_purchase !== false ? 'text-foreground' : 'text-muted-foreground'}>
+                    Purchase {m.enabled_for_purchase !== false ? 'on' : 'off'}
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 text-xs">
+                  <Switch checked={m.enabled_for_deposit !== false} onCheckedChange={(v) => handleContextToggle(m.id, 'enabled_for_deposit', v)} />
+                  <span className={m.enabled_for_deposit !== false ? 'text-foreground' : 'text-muted-foreground'}>
+                    Deposit {m.enabled_for_deposit !== false ? 'on' : 'off'}
+                  </span>
+                </label>
+              </div>
               {m.custom_emoji_id && (
                 <p className="mt-1 text-xs text-muted-foreground font-mono">Emoji ID: {m.custom_emoji_id}</p>
               )}
