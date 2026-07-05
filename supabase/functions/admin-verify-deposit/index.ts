@@ -330,16 +330,17 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ success: true, action: "pending_delivery", product: product.name, qty, orderId: orderRow?.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // No pending product — just add to balance
-    const newBalance = Number(customer.balance) + amount;
-    await supabase.from("bot_customers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", customer.id);
-
+    // No pending product — apply deposit (pay-later first, then balance)
+    const applied = await applyDepositCredit(supabase, customer.id, amount);
+    const plLine = applied.paidPayLater > 0
+      ? `\n🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>`
+      : "";
     await sendTelegramMessage(customer.chat_id,
-      `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>\nNew Balance: <b>${newBalance.toFixed(2)} USDT</b>`,
+      `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\nNew Balance: <b>${applied.newBalance.toFixed(2)} USDT</b>`,
       mainMenuKeyboard()
     );
 
-    return new Response(JSON.stringify({ success: true, action: "balance_added", newBalance }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true, action: "balance_added", newBalance: applied.newBalance, ...applied }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     console.error("Admin verify error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
