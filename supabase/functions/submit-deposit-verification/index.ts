@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "node:crypto";
+import { applyDepositCredit } from "../_shared/apply-deposit-credit.ts";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 
