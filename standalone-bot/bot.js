@@ -2522,7 +2522,7 @@ async function showReferralMenu(chatId, customer, emojiMap = {}, editMessageId =
 // ── Deposit ──
 
 async function showDepositInfo(chatId, emojiMap, editMessageId) {
-  const { data: methods } = await supabase.from("bot_payment_methods").select("*").eq("is_active", true).order("sort_order");
+  const { data: methods } = await supabase.from("bot_payment_methods").select("*").eq("is_active", true).eq("enabled_for_deposit", true).order("sort_order");
 
   if (methods && methods.length > 0) {
     const buttons = [];
@@ -4172,7 +4172,7 @@ async function showBuyConfirmation(chatId, customer, productId, qty, emojiMap, e
 
 async function showPaymentMethodSelection(chatId, customer, productId, qty, emojiMap, editMessageId) {
   const [{ data: methods }, { data: product }, { data: fresh }] = await Promise.all([
-    supabase.from("bot_payment_methods").select("*").eq("is_active", true).order("sort_order"),
+    supabase.from("bot_payment_methods").select("*").eq("is_active", true).eq("enabled_for_purchase", true).order("sort_order"),
     supabase.from("bot_products").select("name, price, currency, custom_emoji_id").eq("id", productId).single(),
     supabase.from("bot_customers").select("balance").eq("id", customer.id).single(),
   ]);
