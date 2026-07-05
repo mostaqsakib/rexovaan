@@ -17,6 +17,8 @@ interface PaymentMethod {
   payment_details: string;
   instruction: string | null;
   is_active: boolean;
+  enabled_for_purchase: boolean;
+  enabled_for_deposit: boolean;
   sort_order: number;
   created_at: string;
   custom_emoji_id: string | null;
@@ -112,6 +114,13 @@ const PaymentMethodsTab = () => {
   const handleToggle = async (id: string, isActive: boolean) => {
     await supabase.from('bot_payment_methods').update({ is_active: isActive }).eq('id', id);
     setMethods(prev => prev.map(m => m.id === id ? { ...m, is_active: isActive } : m));
+  };
+
+  const handleContextToggle = async (id: string, field: 'enabled_for_purchase' | 'enabled_for_deposit', value: boolean) => {
+    const { error } = await supabase.from('bot_payment_methods').update({ [field]: value } as any).eq('id', id);
+    if (error) { toast.error(error.message); return; }
+    setMethods(prev => prev.map(m => m.id === id ? { ...m, [field]: value } : m));
+    toast.success(`${field === 'enabled_for_purchase' ? 'Purchase' : 'Deposit'} ${value ? 'enabled' : 'disabled'}`);
   };
 
   const handleDelete = async (id: string) => {

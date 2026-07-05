@@ -410,6 +410,16 @@ Deno.serve(async (req) => {
       paymentMethod = String(body.payment_method || "").trim();
       if (!claimedAmount || claimedAmount <= 0) return json({ error: "Valid amount required" }, 400);
       if (!txnRaw) return json({ error: "Transaction ID required" }, 400);
+      if (paymentMethod) {
+        const { data: pm } = await supabase
+          .from("bot_payment_methods")
+          .select("is_active, enabled_for_deposit")
+          .ilike("name", paymentMethod)
+          .maybeSingle();
+        if (pm && (pm.is_active === false || (pm as any).enabled_for_deposit === false)) {
+          return json({ error: "This payment method is currently disabled for deposits" }, 400);
+        }
+      }
     }
 
     const normalizedTxn = normalizeTxnInput(txnRaw);
