@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyDepositCredit } from "../_shared/apply-deposit-credit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
