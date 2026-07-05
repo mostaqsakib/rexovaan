@@ -144,14 +144,16 @@ Deno.serve(async (req) => {
     if (deposit.pending_product_id && deposit.pending_quantity) {
       const { data: product } = await supabase.from("bot_products").select("*").eq("id", deposit.pending_product_id).single();
       if (!product) {
-        // No product found, just add to balance
-        const newBalance = Number(customer.balance) + amount;
-        await supabase.from("bot_customers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", customer.id);
+        // No product found, apply deposit (pay-later first, then balance)
+        const applied = await applyDepositCredit(supabase, customer.id, amount);
+        const plLine = applied.paidPayLater > 0
+          ? `\n🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>`
+          : "";
         await sendTelegramMessage(customer.chat_id,
-          `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>\nNew Balance: <b>${newBalance.toFixed(2)} USDT</b>`,
+          `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\nNew Balance: <b>${applied.newBalance.toFixed(2)} USDT</b>`,
           mainMenuKeyboard()
         );
-        return new Response(JSON.stringify({ success: true, action: "balance_added" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ success: true, action: "balance_added", ...applied }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       const qty = deposit.pending_quantity;
