@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createHmac } from "node:crypto";
+import { applyDepositCredit } from "../_shared/apply-deposit-credit.ts";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 
@@ -482,9 +483,12 @@ Deno.serve(async (req) => {
         depId = dep.id;
       }
 
-      // Credit balance via RPC (atomic)
-      const { data: rpc } = await supabase.rpc("refund_customer_balance", { _customer_id: customer.id, _amount: verifiedAmount });
-      const newBal = Array.isArray(rpc) ? Number(rpc[0]?.new_balance ?? 0) : Number((rpc as any)?.new_balance ?? 0);
+      // Apply deposit: clear pay-later due first, then credit balance
+      const applied = await applyDepositCredit(supabase, customer.id, verifiedAmount);
+      const newBal = applied.newBalance;
+      const plLine2 = applied.paidPayLater > 0
+        ? `🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>\n`
+        : "";
 
       let ltcLine = "";
       if (/LTC/i.test(verifiedVia) && ltcRaw > 0) {
@@ -496,7 +500,7 @@ Deno.serve(async (req) => {
         await sendTelegramMessage(customer.chat_id,
           `✅ <b>Deposit Verified!</b>\n\n` +
           `💰 Amount: <b>${verifiedAmount.toFixed(2)} USDT</b>\n` +
-          `🪙 Via: <b>${escapeHtml(verifiedVia)}</b>\n${ltcLine}` +
+          `🪙 Via: <b>${escapeHtml(verifiedVia)}</b>\n${ltcLine}${plLine2}` +
           `🔗 TxID: <code>${escapeHtml(normalizedTxn)}</code>\n` +
           `💳 New Balance: <b>${newBal.toFixed(2)} USDT</b>`);
       }
