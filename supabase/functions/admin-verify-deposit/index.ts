@@ -179,16 +179,19 @@ Deno.serve(async (req) => {
 
       // Check if deposit + balance covers the order
       if (totalAvailable < totalPrice) {
-        // Insufficient funds — cancel order, add deposit to balance
-        const newBalance = currentBalance + amount;
-        await supabase.from("bot_customers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", customer.id);
+        // Insufficient funds — cancel order, apply deposit (pay-later first, then balance)
+        const applied = await applyDepositCredit(supabase, customer.id, amount);
+        const newBalance = applied.newBalance;
 
         // Clear pending product from deposit
         await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
 
         const shortage = totalPrice - totalAvailable;
+        const plLine = applied.paidPayLater > 0
+          ? `\n🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>`
+          : "";
         await sendTelegramMessage(customer.chat_id,
-          `✅ <b>Deposit Verified!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>\n\n❌ <b>Order Cancelled</b> — Insufficient funds.\nRequired: <b>${totalPrice.toFixed(2)} USDT</b>\nYour Total (deposit + balance): <b>${totalAvailable.toFixed(2)} USDT</b>\nShort by: <b>${shortage.toFixed(2)} USDT</b>\n\nThe deposit has been added to your balance.\nNew Balance: <b>${newBalance.toFixed(2)} USDT</b>\n\nYou can re-order when you have enough balance.`,
+          `✅ <b>Deposit Verified!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\n\n❌ <b>Order Cancelled</b> — Insufficient funds.\nRequired: <b>${totalPrice.toFixed(2)} USDT</b>\nYour Total (deposit + balance): <b>${totalAvailable.toFixed(2)} USDT</b>\nShort by: <b>${shortage.toFixed(2)} USDT</b>\n\nNew Balance: <b>${newBalance.toFixed(2)} USDT</b>\n\nYou can re-order when you have enough balance.`,
           mainMenuKeyboard()
         );
 
@@ -196,7 +199,7 @@ Deno.serve(async (req) => {
         const ADMIN_CHAT_ID = Number(Deno.env.get("ADMIN_CHAT_ID"));
         if (ADMIN_CHAT_ID) {
           await sendTelegramMessage(ADMIN_CHAT_ID,
-            `⚠️ <b>Order Auto-Cancelled</b>\n\nCustomer: ${customer.first_name || ''} (@${customer.username || 'N/A'})\nProduct: ${product.name} x${qty}\nRequired: ${totalPrice.toFixed(2)} USDT\nDeposit: ${amount.toFixed(2)} USDT\nBalance: ${currentBalance.toFixed(2)} USDT\nTotal Available: ${totalAvailable.toFixed(2)} USDT\n\nDeposit added to balance.`
+            `⚠️ <b>Order Auto-Cancelled</b>\n\nCustomer: ${customer.first_name || ''} (@${customer.username || 'N/A'})\nProduct: ${product.name} x${qty}\nRequired: ${totalPrice.toFixed(2)} USDT\nDeposit: ${amount.toFixed(2)} USDT\nBalance: ${currentBalance.toFixed(2)} USDT\nTotal Available: ${totalAvailable.toFixed(2)} USDT\n\nDeposit applied (pay-later ${applied.paidPayLater.toFixed(2)}, balance ${applied.addedToBalance.toFixed(2)}).`
           );
         }
 
