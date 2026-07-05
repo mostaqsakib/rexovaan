@@ -28,13 +28,29 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceKey) return json({ error: "Server is not configured" }, 500);
 
+    // Read optional context filter: 'purchase' | 'deposit'
+    let context = "";
+    try {
+      if (req.method === "POST") {
+        const body = await req.json().catch(() => ({}));
+        context = String(body?.context || "").toLowerCase();
+      } else {
+        const url = new URL(req.url);
+        context = String(url.searchParams.get("context") || "").toLowerCase();
+      }
+    } catch { /* ignore */ }
+
     const supabase = createClient(supabaseUrl, serviceKey);
-    const { data, error } = await supabase
+    let query = supabase
       .from("bot_payment_methods")
-      .select("id,name,emoji,custom_emoji_id,payment_type,payment_details,instruction,is_active,sort_order,created_at")
+      .select("id,name,emoji,custom_emoji_id,payment_type,payment_details,instruction,is_active,enabled_for_purchase,enabled_for_deposit,sort_order,created_at")
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
 
+    if (context === "purchase") query = query.eq("enabled_for_purchase", true);
+    else if (context === "deposit") query = query.eq("enabled_for_deposit", true);
+
+    const { data, error } = await query;
     if (error) throw error;
 
     return json({

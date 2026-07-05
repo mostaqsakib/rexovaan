@@ -80,7 +80,7 @@ export default function Deposit() {
   useEffect(() => {
     if (!authLoading && !user) { navigate('/login?next=/account/deposit'); return; }
     Promise.all([
-      supabase.functions.invoke<{ methods: PaymentMethod[] }>('resolve-payment-methods'),
+      supabase.functions.invoke<{ methods: PaymentMethod[] }>('resolve-payment-methods', { body: { context: 'deposit' } }),
       supabase.from('bot_settings').select('value').eq('key', 'dollar_rate_bdt').maybeSingle(),
     ]).then(([res, rate]) => {
       if (res.error) throw res.error;

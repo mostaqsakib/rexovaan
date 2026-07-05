@@ -626,6 +626,8 @@ export type Database = {
           created_at: string
           custom_emoji_id: string | null
           emoji: string
+          enabled_for_deposit: boolean
+          enabled_for_purchase: boolean
           id: string
           instruction: string | null
           is_active: boolean
@@ -638,6 +640,8 @@ export type Database = {
           created_at?: string
           custom_emoji_id?: string | null
           emoji?: string
+          enabled_for_deposit?: boolean
+          enabled_for_purchase?: boolean
           id?: string
           instruction?: string | null
           is_active?: boolean
@@ -650,6 +654,8 @@ export type Database = {
           created_at?: string
           custom_emoji_id?: string | null
           emoji?: string
+          enabled_for_deposit?: boolean
+          enabled_for_purchase?: boolean
           id?: string
           instruction?: string | null
           is_active?: boolean
