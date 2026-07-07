@@ -119,12 +119,35 @@ Deno.serve(async (req) => {
   if (hasPendingProduct) {
     const { data: updated } = await supabase
       .from("bot_deposits")
-      .update({ status: "pending", amount: paidAmount })
+      .update({ status: "pending", amount: paidAmount, via: "Cryptomus" })
       .eq("id", deposit.id)
       .neq("status", "verified")
       .select("id")
       .maybeSingle();
     if (!updated) return new Response("Already processed", { status: 200 });
+
+    const verifyRes = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/admin-verify-deposit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+      },
+      body: JSON.stringify({ deposit_id: deposit.id, amount: paidAmount }),
+    });
+
+    if (!verifyRes.ok) {
+      const errText = await verifyRes.text().catch(() => "");
+      console.error("[Cryptomus webhook] auto-delivery failed", verifyRes.status, errText);
+
+      const chatId = customer?.chat_id;
+      if (chatId) {
+        await sendTelegram("sendMessage", {
+          chat_id: chatId,
+          text: `✅ <b>Crypto Payment Received!</b>\n\n💵 Paid: <b>$${paidAmount.toFixed(2)} USDT</b>\n🧾 Order: <code>${orderId}</code>\n\n⏳ Processing your order...`,
+          parse_mode: "HTML",
+        });
+      }
+    }
   } else {
     const { data: updated } = await supabase
       .from("bot_deposits")
