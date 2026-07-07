@@ -102,7 +102,10 @@ Deno.serve(async (req) => {
 
   const orderId = body?.order_id as string | undefined;
   const status = body?.status as string | undefined;
-  const paidAmount = Number(body?.payment_amount_usd ?? body?.merchant_amount ?? body?.amount ?? 0);
+  // Invoice is created in USD and customers pay in USDT (~1:1). Credit the
+  // invoice/merchant amount so the user gets exactly what they were billed,
+  // not the fractional USD-converted value (e.g. $10 USDT → $9.99 USD).
+  const paidAmount = Number(body?.merchant_amount ?? body?.amount ?? body?.payment_amount_usd ?? 0);
 
   if (!orderId) return new Response("Missing order_id", { status: 400 });
 
