@@ -2607,7 +2607,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
       await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount` }).eq("id", cust.id);
     }
   } else if (methodName.includes("cryptomus") || paymentType === "cryptomus") {
-    msg += `🪙 <b>Cryptomus Crypto Checkout</b>\n\n`;
+    msg += `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Crypto Checkout</b>\n\n`;
     msg += `💵 Send the amount you want to deposit in <b>USDT/USD</b> (example: <code>5</code>).\n`;
     msg += `<i>Minimum: 0.50 USDT</i>\n`;
 
