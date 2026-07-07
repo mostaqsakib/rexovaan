@@ -4349,7 +4349,7 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
     }
     msg += `\n\n⚠️ bKash auto-payment could not be initialized. Please try again.`;
   } else if (isCryptomus) {
-    msg += `🪙 <b>Cryptomus Crypto Checkout</b>\n\n`;
+    msg += `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Crypto Checkout</b>\n\n`;
     msg += `💵 <b>Amount:</b> ${effectiveAmountToPay.toFixed(2)} USDT\n`;
     msg += `\n━━━━━━━━━━━━━━━━\n`;
     msg += `👇 Tap <b>Pay with Crypto</b> to complete payment. Your order will process automatically after payment.`;
