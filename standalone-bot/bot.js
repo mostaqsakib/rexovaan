@@ -4352,6 +4352,9 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
     msg += `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Crypto Checkout</b>\n\n`;
     msg += `💵 <b>Amount:</b> ${effectiveAmountToPay.toFixed(2)} USDT\n`;
     msg += `\n━━━━━━━━━━━━━━━━\n`;
+    msg += `⚠️ <b>Important:</b> Please pay the <b>exact</b> invoice amount.\n`;
+    msg += `• Overpay → full amount credited ✅\n`;
+    msg += `• Underpay → payment will <b>not</b> be verified ❌\n\n`;
     msg += `👇 Tap <b>Pay with Crypto</b> to complete payment. Your order will process automatically after payment.`;
 
     const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
@@ -5119,7 +5122,7 @@ async function handleMessage(message, emojiMap) {
 
     await sendMessage(
       chatId,
-      `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Checkout Ready</b>\n\nAmount: <b>${amountUSD.toFixed(2)} USDT</b>\nOrder: <code>${escapeHtml(result.orderId || "")}</code>\n\nTap the button below to complete payment. Your balance will be updated automatically after payment.`,
+      `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Checkout Ready</b>\n\nAmount: <b>${amountUSD.toFixed(2)} USDT</b>\nOrder: <code>${escapeHtml(result.orderId || "")}</code>\n\n⚠️ <b>Important:</b> Pay the <b>exact</b> invoice amount.\n• Overpay → full amount credited ✅\n• Underpay → will <b>not</b> be verified ❌\n\nTap the button below to complete payment. Your balance will be updated automatically after payment.`,
       { inline_keyboard: [
         [applyEmoji({ text: "🪙 Pay with Crypto", url: result.url }, "cryptomus_pay", emojiMap)],
         [applyEmoji({ text: "◀️ Back", callback_data: "menu_deposit" }, "back", emojiMap)],
