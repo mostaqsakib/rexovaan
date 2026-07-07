@@ -153,6 +153,7 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
   const chooseMethod = (method: PaymentMethod) => {
     setSelected(method);
     const bk = isBkashMethod(method);
+    const cm = isCryptomusMethod(method);
     if (prefillAmount && !bk) {
       setAmount(String(prefillAmount));
       setBdtAmount('');
@@ -169,6 +170,34 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
     setPendingDeposit(null);
     setVerifiedInfo(null);
     setTimeout(() => document.getElementById('pf-instructions')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
+  const payWithCryptomus = async () => {
+    const usd = Number(amount);
+    if (!usd || usd < 1) { toast.error('Enter at least $1 USD'); return; }
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('cryptomus-create-payment', {
+        body: { amount_usd: usd },
+      });
+      if (error) {
+        let msg = error.message || 'Failed to start crypto payment';
+        try {
+          const ctx: any = (error as any).context;
+          if (ctx && typeof ctx.json === 'function') {
+            const b = await ctx.json();
+            if (b?.error) msg = b.error;
+          }
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
+      if (!data?.url) throw new Error('No payment URL returned');
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start crypto payment');
+      setSubmitting(false);
+    }
   };
 
   const submitDeposit = async () => {
