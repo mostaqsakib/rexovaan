@@ -4352,6 +4352,9 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
     msg += `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Crypto Checkout</b>\n\n`;
     msg += `💵 <b>Amount:</b> ${effectiveAmountToPay.toFixed(2)} USDT\n`;
     msg += `\n━━━━━━━━━━━━━━━━\n`;
+    msg += `⚠️ <b>Important:</b> Please pay the <b>exact</b> invoice amount.\n`;
+    msg += `• Overpay → full amount credited ✅\n`;
+    msg += `• Underpay → payment will <b>not</b> be verified ❌\n\n`;
     msg += `👇 Tap <b>Pay with Crypto</b> to complete payment. Your order will process automatically after payment.`;
 
     const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
