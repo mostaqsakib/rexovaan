@@ -5071,6 +5071,31 @@ async function handleMessage(message, emojiMap) {
   // Channel join verification guard
   if (!(await ensureChannelVerified(chatId))) return;
 
+  if (customer.pending_action?.startsWith("cryptomus_deposit_amount") && text && !text.startsWith("/")) {
+    const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amountUSD) || amountUSD < 0.5) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>0.50 USDT</b>.");
+      return;
+    }
+
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    const result = await createCryptomusPayment(amountUSD, customer.id);
+    if (!result.ok || !result.url) {
+      await sendMessage(chatId, `❌ Cryptomus checkout could not be created: ${escapeHtml(result.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
+      return;
+    }
+
+    await sendMessage(
+      chatId,
+      `💳 <b>Cryptomus Checkout Ready</b>\n\nAmount: <b>${amountUSD.toFixed(2)} USDT</b>\nOrder: <code>${escapeHtml(result.orderId || "")}</code>\n\nTap the button below to complete payment. Your balance will be updated automatically after payment.`,
+      { inline_keyboard: [
+        [applyEmoji({ text: "💳 Pay with Crypto", url: result.url }, "continue_to_pay", emojiMap)],
+        [applyEmoji({ text: "◀️ Back", callback_data: "menu_deposit" }, "back", emojiMap)],
+      ] }
+    );
+    return;
+  }
+
   // ── Customer input collection (purchase pre-checkout) ──
   if (customer.pending_action?.startsWith("collectinput_") && text && !text.startsWith("/")) {
     const parts = customer.pending_action.replace("collectinput_", "").split("_");
