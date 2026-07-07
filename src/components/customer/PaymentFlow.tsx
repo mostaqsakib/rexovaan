@@ -26,6 +26,12 @@ function isBkashMethod(m: PaymentMethod | null) {
   return n.includes('bkash') || n.includes('বিকাশ') || (m.payment_type || '').toLowerCase() === 'bkash';
 }
 
+function isCryptomusMethod(m: PaymentMethod | null) {
+  if (!m) return false;
+  const n = (m.name || '').toLowerCase();
+  return (m.payment_type || '').toLowerCase() === 'cryptomus' || n.includes('cryptomus');
+}
+
 const VERIFY_WINDOW_MS = 5 * 60 * 1000;
 
 export interface PaymentFlowProps {
