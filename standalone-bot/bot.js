@@ -2606,6 +2606,15 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount` }).eq("id", cust.id);
     }
+  } else if (methodName.includes("cryptomus") || paymentType === "cryptomus") {
+    msg += `💳 <b>Cryptomus Crypto Checkout</b>\n\n`;
+    msg += `💵 Send the amount you want to deposit in <b>USDT/USD</b> (example: <code>5</code>).\n`;
+    msg += `<i>Minimum: 0.50 USDT</i>\n`;
+
+    const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
+    if (cust) {
+      await supabase.from("bot_customers").update({ pending_action: `cryptomus_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
+    }
   } else if (methodName.includes("binance") || paymentType === "binance") {
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
     msg += binanceId ? `<b>Binance ID:</b>\n<code>${binanceId}</code>\n<i>👆 Tap to copy</i>\n` : `<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
@@ -2637,7 +2646,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     msg += `💳 <b>Payment Details:</b>\n<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   }
 
-  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash")) {
+  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus")) {
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
     msg += `\n━━━━━━━━━━━━━━━━\nAfter sending, paste your <b>Transaction Hash (TxID)</b> or <b>Order ID</b> here and we'll verify it <b>automatically</b>.`;
   }
