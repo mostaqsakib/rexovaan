@@ -327,12 +327,46 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
             <div className="flex items-center gap-3">
               <div className="grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-primary text-xs font-bold ring-1 ring-primary/30">2</div>
               <h2 className="font-heading text-lg font-bold">
-                {isBkash ? 'Pay with bKash' : `Send via ${selected.name}`}
+                {isBkash ? 'Pay with bKash' : isCryptomus ? 'Pay with Crypto' : `Send via ${selected.name}`}
               </h2>
             </div>
           )}
 
-          {isBkash ? (
+          {isCryptomus ? (
+            <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-primary/[0.08] to-white/[0.02] p-5 space-y-4">
+              {selected.instruction && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3 flex gap-2 text-xs text-amber-200/90">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
+                  <p className="whitespace-pre-wrap leading-relaxed">{selected.instruction}</p>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-cm-usd" className="text-xs uppercase tracking-wider text-muted-foreground">Amount (USD)</Label>
+                <div className="relative">
+                  <Input
+                    id="pf-cm-usd"
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="10.00"
+                    className="h-14 text-2xl font-bold pl-12 pr-20 font-mono"
+                  />
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground text-xl font-bold">$</span>
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">USD</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground pt-1 flex items-center gap-1">
+                  <Info className="h-3 w-3" /> Pay with BTC, USDT, USDC, ETH, TRX & more. Auto-verified on-chain.
+                </p>
+              </div>
+              <Button onClick={payWithCryptomus} disabled={submitting || !amount} className="w-full h-12 text-base gap-2 bg-gradient-to-r from-primary to-[hsl(245_85%_62%)] hover:opacity-95 text-primary-foreground shadow-[0_8px_24px_-8px_hsl(var(--primary)/0.6)]">
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                Continue to Cryptomus
+              </Button>
+            </div>
+          ) : isBkash ? (
             <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-pink-500/[0.06] to-white/[0.02] p-5 space-y-4">
               {selected.instruction && (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3 flex gap-2 text-xs text-amber-200/90">
