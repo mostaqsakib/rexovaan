@@ -63,6 +63,7 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
   const [nowTs, setNowTs] = useState<number>(Date.now());
 
   const isBkash = useMemo(() => isBkashMethod(selected), [selected]);
+  const isCryptomus = useMemo(() => isCryptomusMethod(selected), [selected]);
 
   useEffect(() => {
     Promise.all([
