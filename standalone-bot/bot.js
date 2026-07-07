@@ -2607,7 +2607,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
       await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount` }).eq("id", cust.id);
     }
   } else if (methodName.includes("cryptomus") || paymentType === "cryptomus") {
-    msg += `💳 <b>Cryptomus Crypto Checkout</b>\n\n`;
+    msg += `🪙 <b>Cryptomus Crypto Checkout</b>\n\n`;
     msg += `💵 Send the amount you want to deposit in <b>USDT/USD</b> (example: <code>5</code>).\n`;
     msg += `<i>Minimum: 0.50 USDT</i>\n`;
 
@@ -4349,7 +4349,7 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
     }
     msg += `\n\n⚠️ bKash auto-payment could not be initialized. Please try again.`;
   } else if (isCryptomus) {
-    msg += `💳 <b>Cryptomus Crypto Checkout</b>\n\n`;
+    msg += `🪙 <b>Cryptomus Crypto Checkout</b>\n\n`;
     msg += `💵 <b>Amount:</b> ${effectiveAmountToPay.toFixed(2)} USDT\n`;
     msg += `\n━━━━━━━━━━━━━━━━\n`;
     msg += `👇 Tap <b>Pay with Crypto</b> to complete payment. Your order will process automatically after payment.`;
@@ -4360,7 +4360,7 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
       if (cryptoResult?.ok && cryptoResult.url) {
         const shortProdId = productId.slice(0, 8);
         const payBtn = { inline_keyboard: [
-          [applyEmoji({ text: "💳 Pay with Crypto", url: cryptoResult.url }, "continue_to_pay", emojiMap)],
+          [applyEmoji({ text: "🪙 Pay with Crypto", url: cryptoResult.url }, "cryptomus_pay", emojiMap)],
           [applyEmoji({ text: "◀️ Back", callback_data: `backpay_${shortProdId}_qty_${qty}` }, "back", emojiMap)],
           [applyEmoji({ text: "❌ Cancel Order", callback_data: "cancel_order" }, "cancel_order", emojiMap)],
         ] };
@@ -5119,9 +5119,9 @@ async function handleMessage(message, emojiMap) {
 
     await sendMessage(
       chatId,
-      `💳 <b>Cryptomus Checkout Ready</b>\n\nAmount: <b>${amountUSD.toFixed(2)} USDT</b>\nOrder: <code>${escapeHtml(result.orderId || "")}</code>\n\nTap the button below to complete payment. Your balance will be updated automatically after payment.`,
+      `🪙 <b>Cryptomus Checkout Ready</b>\n\nAmount: <b>${amountUSD.toFixed(2)} USDT</b>\nOrder: <code>${escapeHtml(result.orderId || "")}</code>\n\nTap the button below to complete payment. Your balance will be updated automatically after payment.`,
       { inline_keyboard: [
-        [applyEmoji({ text: "💳 Pay with Crypto", url: result.url }, "continue_to_pay", emojiMap)],
+        [applyEmoji({ text: "🪙 Pay with Crypto", url: result.url }, "cryptomus_pay", emojiMap)],
         [applyEmoji({ text: "◀️ Back", callback_data: "menu_deposit" }, "back", emojiMap)],
       ] }
     );
