@@ -28,44 +28,72 @@ function sign(bodyJson: string, apiKey: string): string {
   return md5(b64 + apiKey);
 }
 
+function getBearerToken(req: Request): string {
+  const authHeader = req.headers.get("Authorization") || "";
+  return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+}
+
+function isServiceRoleToken(token: string): boolean {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (serviceRoleKey && token === serviceRoleKey) return true;
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return false;
+    const pad = "=".repeat((4 - (payload.length % 4)) % 4);
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/") + pad));
+    return decoded?.role === "service_role";
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+    const token = getBearerToken(req);
+    if (!authHeader?.startsWith("Bearer ") || !token) return json({ error: "Unauthorized" }, 401);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
-    const authUserId = userData.user.id;
+    const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const isServiceRole = isServiceRoleToken(token);
 
     const body = await req.json().catch(() => ({}));
     const amountUSD = Number(body?.amount_usd);
     if (!amountUSD || amountUSD <= 0) return json({ error: "Enter a valid USD amount" }, 400);
-    if (amountUSD < 1) return json({ error: "Minimum amount is $1" }, 400);
+    if (amountUSD < 0.5) return json({ error: "Minimum amount is $0.50" }, 400);
 
     const MERCHANT = Deno.env.get("CRYPTOMUS_MERCHANT_ID");
     const API_KEY = Deno.env.get("CRYPTOMUS_PAYMENT_API_KEY");
     if (!MERCHANT || !API_KEY) return json({ error: "Cryptomus not configured" }, 500);
 
-    const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: customer } = await admin
-      .from("bot_customers")
-      .select("id, is_banned")
-      .eq("auth_user_id", authUserId)
-      .maybeSingle();
+    let customerQuery = admin.from("bot_customers").select("id, is_banned");
+    if (isServiceRole) {
+      const customerId = String(body?.customer_id || "");
+      if (!customerId) return json({ error: "customer_id required for bot checkout" }, 400);
+      customerQuery = customerQuery.eq("id", customerId);
+    } else {
+      const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData, error: userErr } = await userClient.auth.getUser();
+      if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+      customerQuery = customerQuery.eq("auth_user_id", userData.user.id);
+    }
+
+    const { data: customer } = await customerQuery.maybeSingle();
     if (!customer) return json({ error: "Customer not found" }, 404);
     if (customer.is_banned) return json({ error: "Account banned" }, 403);
 
     const orderId = `cm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const callbackURL = `${supabaseUrl}/functions/v1/cryptomus-webhook`;
-    const returnURL = `${SITE_URL}/deposit?crypto=return&order=${orderId}`;
-    const successURL = `${SITE_URL}/deposit?crypto=success&order=${orderId}`;
+    const source = body?.source === "bot" ? "bot" : "web";
+    const botUsername = Deno.env.get("BOT_USERNAME") || "";
+    const botURL = botUsername ? `https://t.me/${botUsername}` : SITE_URL;
+    const returnURL = source === "bot" ? botURL : `${SITE_URL}/deposit?crypto=return&order=${orderId}`;
+    const successURL = source === "bot" ? botURL : `${SITE_URL}/deposit?crypto=success&order=${orderId}`;
 
     const payload = {
       amount: amountUSD.toFixed(2),
@@ -101,7 +129,10 @@ Deno.serve(async (req) => {
       amount: 0,
       status: "cryptomus_pending",
       txn_hash: `cryptomus_${orderId}`,
-      source: "web",
+      source,
+      pending_product_id: isServiceRole && body?.pending_product_id ? String(body.pending_product_id) : null,
+      pending_quantity: isServiceRole && body?.pending_quantity ? Number(body.pending_quantity) : null,
+      via: "Cryptomus",
     });
     if (depErr) {
       console.error("[Cryptomus] deposit insert failed", depErr);
