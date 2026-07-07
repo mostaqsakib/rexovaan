@@ -81,6 +81,7 @@ export default function Deposit() {
   const [nowTs, setNowTs] = useState<number>(Date.now());
 
   const isBkash = useMemo(() => isBkashMethod(selected), [selected]);
+  const isCryptomus = useMemo(() => isCryptomusMethod(selected), [selected]);
 
 
   useEffect(() => {
