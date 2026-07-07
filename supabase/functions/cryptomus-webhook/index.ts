@@ -64,19 +64,24 @@ function verifySign(rawBody: string, apiKey: string): { ok: boolean; body: any }
 }
 
 async function sendTelegram(method: string, body: Record<string, unknown>) {
-  const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  const TELEGRAM_API_KEY = (Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY"));
-  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) return;
-  await fetch(`${GATEWAY_URL}/${method}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "X-Connection-Api-Key": TELEGRAM_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
+  if (!BOT_TOKEN) {
+    console.warn("[Cryptomus webhook] BOT_TOKEN missing, skipping Telegram notify");
+    return;
+  }
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.error(`[Cryptomus webhook] Telegram ${method} failed [${res.status}]: ${txt}`);
+    }
+  } catch (e) {
+    console.error(`[Cryptomus webhook] Telegram ${method} error:`, e);
+  }
 }
 
 Deno.serve(async (req) => {
