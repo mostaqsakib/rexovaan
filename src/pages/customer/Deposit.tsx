@@ -246,6 +246,34 @@ export default function Deposit() {
   };
 
 
+  const payWithCryptomus = async () => {
+    const usd = Number(amount);
+    if (!usd || usd < 1) { toast.error('Enter at least $1 USD'); return; }
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('cryptomus-create-payment', {
+        body: { amount_usd: usd },
+      });
+      if (error) {
+        let msg = error.message || 'Failed to start crypto payment';
+        try {
+          const ctx: any = (error as any).context;
+          if (ctx && typeof ctx.json === 'function') {
+            const b = await ctx.json();
+            if (b?.error) msg = b.error;
+          }
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(data.error);
+      if (!data?.url) throw new Error('No payment URL returned');
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start crypto payment');
+      setSubmitting(false);
+    }
+  };
+
   const payWithBkash = async () => {
     const bdt = Number(bdtAmount);
     if (!bdt || bdt < 10) { toast.error('Enter at least 10 BDT'); return; }
