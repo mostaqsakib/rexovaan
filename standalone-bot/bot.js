@@ -3545,6 +3545,40 @@ async function createBkashPayment(amountBDT, customerId, pendingProductId = null
   }
 }
 
+async function createCryptomusPayment(amountUSD, customerId, pendingProductId = null, pendingQuantity = null) {
+  try {
+    const supabaseUrl = envGet("SUPABASE_URL");
+    const serviceKey = envGet("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceKey) {
+      return { ok: false, error: "Cryptomus is not configured on the bot server." };
+    }
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/cryptomus-create-payment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+      },
+      body: JSON.stringify({
+        amount_usd: amountUSD,
+        customer_id: customerId,
+        pending_product_id: pendingProductId,
+        pending_quantity: pendingQuantity,
+        source: "bot",
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.url) {
+      return { ok: false, error: data?.error || `Cryptomus checkout failed (${res.status}).` };
+    }
+    return { ok: true, url: data.url, orderId: data.order_id, uuid: data.uuid };
+  } catch (err) {
+    console.error("[Cryptomus] CreatePayment error:", err.message);
+    return { ok: false, error: err.message || "Unexpected Cryptomus error." };
+  }
+}
+
 async function getDollarRateBDT() {
   const { data } = await supabase.from("bot_settings").select("value").eq("key", "dollar_rate_bdt").maybeSingle();
   return data ? parseFloat(data.value) : 125;
