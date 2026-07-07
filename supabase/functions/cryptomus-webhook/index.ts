@@ -102,10 +102,10 @@ Deno.serve(async (req) => {
 
   const orderId = body?.order_id as string | undefined;
   const status = body?.status as string | undefined;
-  // Invoice is created in USD and customers pay in USDT (~1:1). Credit the
-  // invoice/merchant amount so the user gets exactly what they were billed,
-  // not the fractional USD-converted value (e.g. $10 USDT → $9.99 USD).
-  const paidAmount = Number(body?.merchant_amount ?? body?.amount ?? body?.payment_amount_usd ?? 0);
+  // Credit the ACTUAL USDT the customer paid (1 USDT = 1 USD in our system).
+  // Overpay → user gets the full overpaid amount credited.
+  // Underpay → Cryptomus marks it wrong_amount / not "paid", so it won't verify.
+  const paidAmount = Number(body?.payment_amount ?? body?.merchant_amount ?? body?.amount ?? 0);
 
   if (!orderId) return new Response("Missing order_id", { status: 400 });
 
