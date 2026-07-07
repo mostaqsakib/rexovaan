@@ -26,10 +26,12 @@ function md5(input: string): string {
   function hh(a: number, b: number, c: number, d: number, x: number, s: number, t: number) { return cmn(b ^ c ^ d, a, b, x, s, t); }
   function ii(a: number, b: number, c: number, d: number, x: number, s: number, t: number) { return cmn(c ^ (b | ~d), a, b, x, s, t); }
   const bytes = Array.from(new TextEncoder().encode(input));
-  const bitLen = bytes.length * 8;
+  const bitLenLow = (bytes.length * 8) >>> 0;
+  const bitLenHigh = Math.floor((bytes.length * 8) / 0x100000000) >>> 0;
   bytes.push(0x80);
   while (bytes.length % 64 !== 56) bytes.push(0);
-  for (let i = 0; i < 8; i++) bytes.push((bitLen >>> (8 * i)) & 0xff);
+  for (let i = 0; i < 4; i++) bytes.push((bitLenLow >>> (8 * i)) & 0xff);
+  for (let i = 0; i < 4; i++) bytes.push((bitLenHigh >>> (8 * i)) & 0xff);
   let a = 1732584193, b = -271733879, c = -1732584194, d = 271733878;
   for (let i = 0; i < bytes.length; i += 64) {
     const x = Array.from({ length: 16 }, (_, j) => bytes[i + j * 4] | (bytes[i + j * 4 + 1] << 8) | (bytes[i + j * 4 + 2] << 16) | (bytes[i + j * 4 + 3] << 24));
