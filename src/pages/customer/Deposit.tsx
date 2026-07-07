@@ -392,7 +392,7 @@ export default function Deposit() {
           <div className="flex items-center gap-3">
             <div className="grid h-7 w-7 place-items-center rounded-full bg-primary/15 text-primary text-xs font-bold ring-1 ring-primary/30">2</div>
             <h2 className="font-heading text-lg font-bold">
-              {isBkash ? 'Pay with bKash' : `Send via ${selected.name}`}
+              {isBkash ? 'Pay with bKash' : isCryptomus ? 'Pay with Crypto' : `Send via ${selected.name}`}
             </h2>
           </div>
 
