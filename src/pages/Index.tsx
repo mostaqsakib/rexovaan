@@ -15,6 +15,7 @@ import HistoryTab from '@/components/HistoryTab';
 import CustomersTab from '@/components/CustomersTab';
 import WithdrawalsTab from '@/components/WithdrawalsTab';
 import DepositsTab from '@/components/DepositsTab';
+import CryptomusActivityTab from '@/components/CryptomusActivityTab';
 import PricingTab from '@/components/PricingTab';
 import SpecialPricingTab from '@/components/SpecialPricingTab';
 import PaymentMethodsTab from '@/components/PaymentMethodsTab';
