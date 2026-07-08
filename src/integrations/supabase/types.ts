@@ -419,6 +419,30 @@ export type Database = {
           },
         ]
       }
+      bot_emoji_sticker_sets: {
+        Row: {
+          created_at: string
+          emojis: Json
+          fetched_at: string
+          set_name: string
+          title: string | null
+        }
+        Insert: {
+          created_at?: string
+          emojis?: Json
+          fetched_at?: string
+          set_name: string
+          title?: string | null
+        }
+        Update: {
+          created_at?: string
+          emojis?: Json
+          fetched_at?: string
+          set_name?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
       bot_flash_sales: {
         Row: {
           announcement_messages: Json

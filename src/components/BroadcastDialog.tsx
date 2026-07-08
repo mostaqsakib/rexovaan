@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, Send, Megaphone, ImagePlus, X, Film, Globe, Plus, MousePointerClick } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { TelegramEditor } from '@/components/telegram-editor';
 
 interface BroadcastDialogProps {
   open: boolean;
@@ -176,18 +176,15 @@ const BroadcastDialog = ({ open, onClose }: BroadcastDialogProps) => {
             </div>
           )}
 
-          <Textarea
-            placeholder={"🎉 New Product Alert!\n\nWe've just added Premium accounts at amazing prices. Check /shop now!"}
+          <TelegramEditor
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={setMessage}
+            placeholder="Type your broadcast message..."
             rows={5}
-            className="font-mono text-sm"
+            examplePlaceholder={"🎉 <b>New Product Alert!</b>\n\nWe've just added <i>Premium accounts</i> at amazing prices. Check /shop now!"}
           />
 
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-muted-foreground">
-              Supported: <code>&lt;b&gt;bold&lt;/b&gt;</code>, <code>&lt;i&gt;italic&lt;/i&gt;</code>, <code>&lt;code&gt;code&lt;/code&gt;</code>
-            </div>
+          <div className="flex items-center justify-end">
             <input
               ref={fileInputRef}
               type="file"

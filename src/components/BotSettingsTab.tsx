@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
 import { Loader2, Save, MessageSquare, Info, Gift, DollarSign, Image as ImageIcon, Upload, X, Megaphone } from 'lucide-react';
+import { TelegramEditor, EmojiPacksSettings } from '@/components/telegram-editor';
 
 const BotSettingsTab = () => {
   const [logoUrl, setLogoUrl] = useState('');
@@ -245,11 +245,12 @@ const BotSettingsTab = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Textarea
+          <TelegramEditor
             value={welcomeMsg}
-            onChange={(e) => setWelcomeMsg(e.target.value)}
+            onChange={setWelcomeMsg}
             placeholder="Welcome message..."
-            className="min-h-[200px] font-mono text-sm"
+            rows={8}
+            examplePlaceholder={"👋 <b>Welcome, {name}!</b>\n\nTap /shop to browse products, /balance to check your wallet."}
           />
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
@@ -372,14 +373,12 @@ const BotSettingsTab = () => {
           </div>
           <div className="space-y-2">
             <Label htmlFor="cj-message">Join message template</Label>
-            <Textarea
-              id="cj-message"
+            <TelegramEditor
               value={cjMessage}
-              onChange={(e) => setCjMessage(e.target.value)}
+              onChange={setCjMessage}
               placeholder="🔔 Please join our channel to continue..."
-              className="min-h-[120px] font-mono text-sm"
+              rows={5}
             />
-            <p className="text-xs text-muted-foreground">HTML formatting supported (e.g. <code className="bg-muted px-1 rounded">&lt;b&gt;</code>, <code className="bg-muted px-1 rounded">&lt;i&gt;</code>).</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -399,6 +398,8 @@ const BotSettingsTab = () => {
           </div>
         </CardContent>
       </Card>
+
+      <EmojiPacksSettings />
     </div>
   );
 };
