@@ -122,8 +122,8 @@ const AnnouncementsTab = () => {
           </div>
           <div className="space-y-2">
             <Label>Body (optional)</Label>
-            <Textarea value={body} onChange={e => setBody(e.target.value)} rows={4} placeholder={'Full details. HTML supported: <b>bold</b>, <i>italic</i>, <a href="...">link</a>, <tg-emoji emoji-id="ID">😀</tg-emoji>'} maxLength={2000} className="font-mono text-sm" />
-            <p className="text-[11px] text-muted-foreground">Same format as bot broadcasts — supports premium custom emojis via <code>&lt;tg-emoji emoji-id="..."&gt;</code>.</p>
+            <TelegramEditor value={body} onChange={setBody} rows={5} placeholder="Full details..." />
+            <p className="text-[11px] text-muted-foreground">Same format as bot broadcasts — supports premium custom emojis.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
