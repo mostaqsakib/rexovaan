@@ -186,6 +186,7 @@ const Index = () => {
             {activeTab === 'withdrawals' && <WithdrawalsTab />}
             {activeTab === 'deposits' && <DepositsTab />}
             {activeTab === 'payments' && <PaymentMethodsTab />}
+            {activeTab === 'cryptomus' && <CryptomusActivityTab />}
             {activeTab === 'emojis' && <ButtonEmojisTab />}
             {activeTab === 'referrals' && <ReferralStatsTab />}
             {activeTab === 'resellers' && <ResellersTab />}
