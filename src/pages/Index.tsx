@@ -50,6 +50,7 @@ const TAB_TITLES: Record<string, string> = {
   withdrawals: 'Withdrawals',
   deposits: 'Deposits',
   payments: 'Payment Methods',
+  cryptomus: 'Cryptomus Activity',
   emojis: 'Button Emojis',
   referrals: 'Referrals',
   resellers: 'Resellers',
