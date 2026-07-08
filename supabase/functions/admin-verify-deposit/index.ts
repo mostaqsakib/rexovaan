@@ -54,42 +54,50 @@ async function sheetsRequest(token: string, spreadsheetId: string, path: string,
   return data;
 }
 
-async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: unknown) {
+async function tgFetch(method: string, body: Record<string, unknown>): Promise<{ ok: boolean; status: number; data: any }> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
   const TELEGRAM_API_KEY = (Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY"))!;
+  // Retry transient failures up to 3 times.
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`${GATEWAY_URL}/${method}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": TELEGRAM_API_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, status: res.status, data };
+      lastErr = { status: res.status, data };
+      // Don't retry client errors (bad chat id, blocked bot, etc.)
+      if (res.status >= 400 && res.status < 500) break;
+    } catch (e) {
+      lastErr = e;
+    }
+    await new Promise((r) => setTimeout(r, 500 * attempt));
+  }
+  console.error(`[admin-verify-deposit] Telegram ${method} failed after retries:`, JSON.stringify(lastErr));
+  return { ok: false, status: 0, data: lastErr };
+}
+
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: unknown) {
   const body: Record<string, unknown> = { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true };
   if (replyMarkup) body.reply_markup = replyMarkup;
-  await fetch(`${GATEWAY_URL}/sendMessage`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": TELEGRAM_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return await tgFetch("sendMessage", body);
 }
 
 async function sendTelegramPhoto(chatId: number, photoUrl: string, caption?: string, replyMarkup?: unknown) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-  const TELEGRAM_API_KEY = (Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY"))!;
   const body: Record<string, unknown> = { chat_id: chatId, photo: photoUrl, parse_mode: "HTML" };
   if (caption) body.caption = caption;
   if (replyMarkup) body.reply_markup = replyMarkup;
-  await fetch(`${GATEWAY_URL}/sendPhoto`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": TELEGRAM_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return await tgFetch("sendPhoto", body);
 }
 
 async function sendTelegramVideo(chatId: number, videoUrl: string, caption?: string, replyMarkup?: unknown) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-  const TELEGRAM_API_KEY = (Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY"))!;
   const body: Record<string, unknown> = { chat_id: chatId, video: videoUrl, parse_mode: "HTML" };
   if (caption) body.caption = caption;
   if (replyMarkup) body.reply_markup = replyMarkup;
-  await fetch(`${GATEWAY_URL}/sendVideo`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": TELEGRAM_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  return await tgFetch("sendVideo", body);
 }
 
 const mainMenuKeyboard = () => ({
