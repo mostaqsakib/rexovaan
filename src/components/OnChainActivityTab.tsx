@@ -164,7 +164,7 @@ const OnChainActivityTab = () => {
       id: r.id,
       kind: 'ignored' as const,
       date: r.created_at,
-      token: r.token_symbol || 'UNKNOWN',
+      token: sanitizeSymbol(r.token_symbol),
       address: r.address,
       tx_hash: r.tx_hash,
       amount: Number(r.amount || 0),
