@@ -53,6 +53,14 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
   const rpcUrl = getRpcUrl(chain);
   if (!rpcUrl) return { chain: chain.id, skipped: "no rpc" };
 
+  // Only touch this chain if some reservation actually received funds here.
+  // Prevents gas-tank alerts for chains the user doesn't use (e.g. Polygon/ETH/AVAX when only BSC is active).
+  const relevantRows = rows.filter((row) => {
+    const rc: string[] = row.received_chains && row.received_chains.length > 0 ? row.received_chains : ["bsc"];
+    return rc.includes(chain.id);
+  });
+  if (relevantRows.length === 0) return { chain: chain.id, skipped: "no rows for this chain" };
+
   const provider = new ethers.JsonRpcProvider(rpcUrl, { chainId: chain.chainId, name: chain.name });
   const feeData = await provider.getFeeData();
   const gasPrice = ((feeData.gasPrice ?? ethers.parseUnits("1", "gwei")) * 11n) / 10n;
@@ -65,6 +73,7 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
   const gasStatus = await checkGasTank(chain, master.address, provider, supabase);
   let masterNonce = await provider.getTransactionCount(master.address, "pending");
   const masterBnb: bigint = await provider.getBalance(master.address);
+
 
   const results: any[] = [];
   for (const row of rows) {
