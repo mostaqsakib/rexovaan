@@ -7,8 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Loader2, Save, MessageSquare, Info, RotateCcw } from 'lucide-react';
+import { Loader2, Save, MessageSquare, Info, RotateCcw, Sparkles, X } from 'lucide-react';
 import { TelegramEditor } from '@/components/telegram-editor';
+import EmojiPicker from '@/components/telegram-editor/EmojiPicker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TgEmoji } from '@/components/TelegramRichText';
 
 // ---- Template registry (matches standalone-bot/bot.js) ----
 type Section = {
