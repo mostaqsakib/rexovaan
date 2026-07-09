@@ -175,33 +175,53 @@ const OnChainActivityTab = () => {
       if (!reservedByAddress.has(key)) reservedByAddress.set(key, r);
     });
 
-    const credited: any[] = registry.map((r) => ({
-      id: r.id,
-      kind: 'credited' as const,
-      date: r.credited_at,
-      token: r.token,
-      address: r.address,
-      tx_hash: r.tx_hash,
-      amount: Number(r.amount || 0),
-    }));
-    const ignored: any[] = fakes.map((r) => {
-      const reservedMatch = r.reserved_address_id
+    const custLabel = (id: string | null | undefined) => {
+      if (!id) return '—';
+      const c = customers[id];
+      if (!c) return '—';
+      return c.username ? `@${c.username}` : c.first_name || `#${c.chat_id ?? '—'}`;
+    };
+
+    const credited: any[] = registry.map((r) => {
+      const match = r.reserved_address_id
         ? reservedById.get(r.reserved_address_id)
         : reservedByAddress.get(r.address.toLowerCase());
-      const depositAmount = Number(reservedMatch?.expected_amount || reservedMatch?.received_amount || 0);
+      const depositAmount = Number(match?.expected_amount || r.amount || 0);
+      return {
+        id: r.id,
+        kind: 'credited' as const,
+        date: r.credited_at,
+        token: r.token,
+        contract: null as string | null,
+        address: r.address,
+        from: null as string | null,
+        tx_hash: r.tx_hash,
+        amount: Number(r.amount || 0),
+        depositAmount,
+        customer: custLabel(match?.customer_id),
+      };
+    });
 
+    const ignored: any[] = fakes.map((r) => {
+      const match = r.reserved_address_id
+        ? reservedById.get(r.reserved_address_id)
+        : reservedByAddress.get(r.address.toLowerCase());
+      const depositAmount = Number(match?.expected_amount || match?.received_amount || 0);
       return {
         id: r.id,
         kind: 'ignored' as const,
         date: r.created_at,
         token: sanitizeSymbol(r.token_symbol),
+        contract: r.contract,
         address: r.address,
+        from: r.from_address,
         tx_hash: r.tx_hash,
         amount: Number(r.amount || 0),
         depositAmount,
-        contract: r.contract,
+        customer: custLabel(r.customer_id || match?.customer_id),
       };
     });
+
     const combined = [...credited, ...ignored].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
@@ -212,10 +232,12 @@ const OnChainActivityTab = () => {
       return (
         r.tx_hash.toLowerCase().includes(n) ||
         r.address.toLowerCase().includes(n) ||
+        (r.from || '').toLowerCase().includes(n) ||
+        (r.customer || '').toLowerCase().includes(n) ||
         (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, fakes, reserved, q, tokenFilter]);
+  }, [registry, fakes, reserved, customers, q, tokenFilter]);
 
 
   const filteredReserved = useMemo(() => {
@@ -422,10 +444,12 @@ type LedgerRow = {
   date: string;
   token: string;
   address: string;
+  from: string | null;
   tx_hash: string;
   amount: number;
   depositAmount?: number;
-  contract?: string;
+  contract?: string | null;
+  customer?: string;
 };
 
 const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
@@ -435,17 +459,19 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
         <table className="w-full text-xs">
           <thead className="border-b border-border/60 bg-muted/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="px-3 py-2">Date</th>
+              <th className="px-3 py-2">Time</th>
+              <th className="px-3 py-2">Customer</th>
               <th className="px-3 py-2">Token</th>
-              <th className="px-3 py-2">Destination</th>
-              <th className="px-3 py-2">Tx hash</th>
-              <th className="px-3 py-2 text-right">Amount</th>
-              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2 text-right">Amount (USDT)</th>
+              <th className="px-3 py-2">Contract</th>
+              <th className="px-3 py-2">To (Gateway)</th>
+              <th className="px-3 py-2">From</th>
+              <th className="px-3 py-2">Tx</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No records</td></tr>
+              <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No records</td></tr>
             )}
             {rows.map((r) => {
               const isIgnored = r.kind === 'ignored';
@@ -454,67 +480,58 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                   <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
                     {new Date(r.date).toLocaleString()}
                   </td>
+                  <td className="px-3 py-2">{r.customer || '—'}</td>
                   <td className="px-3 py-2">
                     {isIgnored ? (
-                      <div className="flex flex-col gap-0.5">
-                        <Badge variant="outline" className="w-fit border-warning/40 bg-warning/10 text-warning">
-                          {r.token}
-                        </Badge>
-                        {r.contract && (
-                          <a
-                            href={`${BSCSCAN}/token/${r.contract}`}
-                            target="_blank" rel="noreferrer"
-                            className="font-mono text-[10px] text-muted-foreground hover:text-primary"
-                            title={r.contract}
-                          >
-                            {short(r.contract, 6)}
-                          </a>
-                        )}
-                      </div>
+                      <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">
+                        {r.token}
+                      </Badge>
                     ) : (
-                      <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary">
-                        {r.token} · BEP20
+                      <Badge className="bg-success/10 text-success ring-1 ring-success/30">
+                        {r.token}
                       </Badge>
                     )}
                   </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    {r.depositAmount && r.depositAmount > 0 ? (
+                      <span className={`font-semibold ${isIgnored ? 'text-warning' : 'text-success'}`}>
+                        {r.depositAmount.toFixed(2)}
+                        <span className="ml-1 text-[10px] font-normal opacity-70">USDT</span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono">
-                    <button onClick={() => copy(r.address)} className="hover:text-primary">
-                      {short(r.address, 8)} <Copy className="ml-1 inline h-3 w-3" />
+                    {r.contract ? (
+                      <a href={`${BSCSCAN}/token/${r.contract}`} target="_blank" rel="noreferrer"
+                         className="text-muted-foreground hover:text-primary" title={r.contract}>
+                        {short(r.contract, 6)}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground/60">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono">
+                    <button onClick={() => copy(r.address)} className="hover:text-primary" title={r.address}>
+                      {short(r.address, 6)}
                     </button>
                   </td>
                   <td className="px-3 py-2 font-mono">
-                    <a
-                      href={`${BSCSCAN}/tx/${r.tx_hash}`}
-                      target="_blank" rel="noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {short(r.tx_hash, 8)}
+                    {r.from ? (
+                      <a href={`${BSCSCAN}/address/${r.from}`} target="_blank" rel="noreferrer"
+                         className="text-muted-foreground hover:text-primary" title={r.from}>
+                        {short(r.from, 6)}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground/60">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono">
+                    <a href={`${BSCSCAN}/tx/${r.tx_hash}`} target="_blank" rel="noreferrer"
+                       className="inline-flex items-center gap-1 text-primary hover:underline">
+                      {short(r.tx_hash, 6)} <ExternalLink className="h-3 w-3" />
                     </a>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {isIgnored ? (
-                      <div className="flex flex-col items-end leading-tight">
-                        <span className="font-semibold text-warning">
-                          {r.depositAmount && r.depositAmount > 0 ? r.depositAmount.toFixed(2) : '—'} <span className="text-[10px] font-normal opacity-70">USDT</span>
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          sent: {formatRaw(r.amount)} {r.token}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="font-semibold text-success">
-                        {Number(r.amount).toFixed(2)} <span className="text-[10px] font-normal opacity-70">{r.token}</span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {isIgnored ? (
-                      <Badge variant="outline" className="border-muted-foreground/30 bg-muted/30 text-muted-foreground">
-                        spam · ignored
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-success/10 text-success ring-1 ring-success/30">credited</Badge>
-                    )}
                   </td>
                 </tr>
               );
