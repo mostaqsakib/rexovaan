@@ -478,14 +478,14 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                   <td className="px-3 py-2 text-right">
                     {isIgnored ? (
                       <div className="flex flex-col items-end leading-tight">
-                        <span className="font-semibold text-warning" title="Raw token units — decimals unknown for unsupported tokens">
-                          {formatRaw(r.amount)}
+                        <span className="font-semibold text-warning">
+                          {formatRaw(r.amount)} <span className="text-[10px] font-normal opacity-70">{r.token}</span>
                         </span>
-                        <span className="text-[10px] text-muted-foreground">raw units</span>
+                        <span className="text-[10px] text-muted-foreground">not credited</span>
                       </div>
                     ) : (
                       <span className="font-semibold text-success">
-                        {Number(r.amount).toFixed(2)}
+                        {Number(r.amount).toFixed(2)} <span className="text-[10px] font-normal opacity-70">{r.token}</span>
                       </span>
                     )}
                   </td>
