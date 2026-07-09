@@ -1,0 +1,15 @@
+{
+  "name": "rexovaan-emoji-sync",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "login": "node login.js",
+    "sync": "node sync.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "input": "^1.0.1",
+    "telegram": "^2.26.16"
+  }
+}
