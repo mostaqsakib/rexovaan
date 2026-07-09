@@ -1,0 +1,1 @@
+UPDATE bot_custom_emoji_cache SET status = 'pending' WHERE status = 'failed';
