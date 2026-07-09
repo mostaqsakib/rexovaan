@@ -173,10 +173,12 @@ export function TelegramEditor({
 
       {/* Preview */}
       {showPreview && value.trim() && (
-        <div className="border-t bg-muted/20 p-3 space-y-1">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Telegram Preview</div>
-          <div className="rounded-lg bg-white p-3 text-sm break-words text-neutral-900">
-            <TelegramRichText html={value} />
+        <div className="border-t bg-[#0e1621] p-4 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-[#8e9ba8]">Telegram Preview</div>
+          <div className="flex justify-start">
+            <div className="max-w-[480px] rounded-[12px] rounded-bl-[4px] bg-white px-[14px] py-[10px] text-sm break-words text-neutral-900 shadow-[0_1px_2px_rgba(16,35,47,0.15)]">
+              <TelegramRichText html={value} />
+            </div>
           </div>
         </div>
       )}
