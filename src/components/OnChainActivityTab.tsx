@@ -143,7 +143,7 @@ const OnChainActivityTab = () => {
       const known = registry.find((r) => r.tx_hash.toLowerCase() === h.toLowerCase());
       const fake = fakes.find((r) => r.tx_hash.toLowerCase() === h.toLowerCase());
       if (known) setLookupResult(`✅ Credited: ${known.amount} ${known.token} → ${short(known.address)}`);
-      else if (fake) setLookupResult(`⚠️ Fake / unsupported token detected: ${fake.token_symbol || fake.contract}`);
+      else if (fake) setLookupResult(`⚠️ Unsupported / scam token detected: ${fake.token_symbol || fake.contract}`);
       else setLookupResult('No local record. Open on BscScan for on-chain details.');
     } finally {
       setLookupBusy(false);
