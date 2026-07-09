@@ -77,6 +77,12 @@ const sanitizeSymbol = (raw: string | null | undefined): string => {
   return 'Unknown';
 };
 
+const formatRaw = (n: number): string => {
+  if (!isFinite(n)) return '—';
+  if (n >= 1e6) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return n.toLocaleString();
+};
+
 const copy = (text: string) => {
   navigator.clipboard.writeText(text);
   toast.success('Copied');
