@@ -127,13 +127,14 @@ Deno.serve(async (req) => {
         }
 
         // Update deposit + reservation
-        await supabase.from("bot_deposits").update({
+        const { error: depUpdErr } = await supabase.from("bot_deposits").update({
           status: "verified",
           verified_at: new Date().toISOString(),
           bep20_tx_hash: txHash,
           bep20_token: tok.symbol,
-          verification_note: `BEP20 ${tok.symbol} auto-verified. Tx ${txHash}`,
+          txn_hash: txHash,
         } as any).eq("id", res.deposit_id);
+        if (depUpdErr) console.error("bot_deposits update err", depUpdErr);
 
         const newReceived = Number(res.received_amount || 0) + amt;
         await supabase.from("bep20_reserved_addresses").update({
