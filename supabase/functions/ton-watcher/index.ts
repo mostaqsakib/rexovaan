@@ -30,10 +30,20 @@ async function fetchTonEvents(address: string) {
   return await res.json();
 }
 
+async function getTonAddress(): Promise<string | null> {
+  const { data } = await supabase
+    .from("bot_settings")
+    .select("value")
+    .eq("key", "usdt_ton_address")
+    .maybeSingle();
+
+  return (data?.value || Deno.env.get("USDT_TON_ADDRESS") || "").trim() || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const tonAddress = Deno.env.get("USDT_TON_ADDRESS");
+    const tonAddress = await getTonAddress();
     if (!tonAddress) {
       return new Response(JSON.stringify({ error: "USDT_TON_ADDRESS not set" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
