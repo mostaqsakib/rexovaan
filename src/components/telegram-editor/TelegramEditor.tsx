@@ -173,6 +173,7 @@ export function TelegramEditor({
     const s = serialize(el);
     lastValueRef.current = s;
     setIsEmpty(!el.textContent && el.querySelectorAll('.tge-emoji, img').length === 0);
+    mountEmojiRootsRef.current?.();
     onChange(s);
   }, [onChange]);
 
