@@ -8,7 +8,21 @@ const supabase = createClient(
 
 // USDT Jetton master on TON
 const USDT_JETTON = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs";
+const USDT_JETTON_RAW = "0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe";
 const USDT_DECIMALS = 6;
+
+function isUsdtJetton(jetton: { address?: string; symbol?: string; name?: string; decimals?: number } | undefined) {
+  if (!jetton) return false;
+  const address = String(jetton.address || "").toLowerCase();
+  if (address === USDT_JETTON.toLowerCase() || address === USDT_JETTON_RAW.toLowerCase()) return true;
+
+  const normalizedSymbol = String(jetton.symbol || "")
+    .toUpperCase()
+    .replace(/₮/g, "T")
+    .replace(/[^A-Z0-9]/g, "");
+
+  return normalizedSymbol === "USDT" && Number(jetton.decimals ?? USDT_DECIMALS) === USDT_DECIMALS;
+}
 
 async function notifyCustomer(chatId: string, text: string) {
   const token = Deno.env.get("BOT_TOKEN");
@@ -78,11 +92,7 @@ Deno.serve(async (req) => {
         if (act.type !== "JettonTransfer") continue;
         const jt = act.JettonTransfer;
         if (!jt) continue;
-        if (jt.jetton?.address && jt.jetton.address.toLowerCase() !== USDT_JETTON.toLowerCase()) {
-          // Only USDT jetton
-          const sym = (jt.jetton?.symbol || "").toUpperCase();
-          if (sym !== "USDT") continue;
-        }
+        if (!isUsdtJetton(jt.jetton)) continue;
         // recipient must be our wallet
         const dest = jt.recipient?.address || jt.destination?.address;
         if (!dest) continue;
@@ -119,9 +129,10 @@ Deno.serve(async (req) => {
 
         if (reservation.deposit_id) {
           await supabase.from("bot_deposits").update({
-            status: "confirmed",
+            status: "verified",
             amount: receivedUsd,
             txn_hash: txHash,
+            verified_at: new Date().toISOString(),
           }).eq("id", reservation.deposit_id);
         }
 
