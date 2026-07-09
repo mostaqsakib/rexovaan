@@ -2664,7 +2664,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     msg += `💳 <b>Payment Details:</b>\n<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   }
 
-  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || methodName.includes("usdt/usdc bep20"))) {
+  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || paymentType === "polygon" || methodName.includes("usdt/usdc bep20") || methodName.includes("usdt polygon"))) {
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
     msg += `\n━━━━━━━━━━━━━━━━\nAfter sending, paste your <b>Transaction Hash (TxID)</b> or <b>Order ID</b> here and we'll verify it <b>automatically</b>.`;
   }
