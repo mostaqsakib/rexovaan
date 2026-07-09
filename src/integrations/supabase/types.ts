@@ -113,10 +113,15 @@ export type Database = {
           derivation_index: number
           expected_amount: number
           expires_at: string
+          gas_tx_hash: string | null
           id: string
           paid_at: string | null
           received_amount: number
           status: string
+          sweep_attempts: number | null
+          sweep_last_error: string | null
+          sweep_last_try_at: string | null
+          sweep_status: string | null
           sweep_tx_hash: string | null
           swept_at: string | null
           token: string
@@ -131,10 +136,15 @@ export type Database = {
           derivation_index: number
           expected_amount: number
           expires_at: string
+          gas_tx_hash?: string | null
           id?: string
           paid_at?: string | null
           received_amount?: number
           status?: string
+          sweep_attempts?: number | null
+          sweep_last_error?: string | null
+          sweep_last_try_at?: string | null
+          sweep_status?: string | null
           sweep_tx_hash?: string | null
           swept_at?: string | null
           token: string
@@ -149,10 +159,15 @@ export type Database = {
           derivation_index?: number
           expected_amount?: number
           expires_at?: string
+          gas_tx_hash?: string | null
           id?: string
           paid_at?: string | null
           received_amount?: number
           status?: string
+          sweep_attempts?: number | null
+          sweep_last_error?: string | null
+          sweep_last_try_at?: string | null
+          sweep_status?: string | null
           sweep_tx_hash?: string | null
           swept_at?: string | null
           token?: string
