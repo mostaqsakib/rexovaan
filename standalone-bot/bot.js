@@ -5196,6 +5196,53 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
+  if (customer.pending_action?.startsWith("polygon_deposit_amount") && text && !text.startsWith("/")) {
+    const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>1 USDT</b>.");
+      return;
+    }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    try {
+      const res = await fetch(`${process.env.SUPABASE_URL}/functions/v1/bep20-reserve-address`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
+        body: JSON.stringify({ customer_id: customer.id, expected_amount: amountUSD, token: "ANY" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.address) {
+        await sendMessage(chatId, `❌ Could not reserve address: ${escapeHtml(data.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
+        return;
+      }
+      const expiresMin = Math.max(1, Math.round((new Date(data.expires_at).getTime() - Date.now()) / 60000));
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data.address)}`;
+
+      const { data: polAddrRow } = await supabase.from("bot_settings").select("value").eq("key", "polygon_address_msg").maybeSingle();
+      const template = polAddrRow?.value || `🟣 <b>USDT/USDC Polygon — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT/USDC</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send to this address (Polygon / MATIC):</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted on this address.\n⚠️ <b>Polygon network only.</b> Wrong network = lost funds.\n\nAuto-verified after ~20 confirmations (~40 sec).`;
+      const caption = template
+        .replace(/\{amount\}/g, amountUSD.toFixed(2))
+        .replace(/\{expires_min\}/g, String(expiresMin))
+        .replace(/\{address\}/g, data.address);
+
+      const backBtn = applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "polygon_back_menu", emojiMap);
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: qrUrl,
+          caption,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: [[backBtn]] },
+        }),
+      });
+    } catch (e) {
+      await sendMessage(chatId, `❌ Reserve failed: ${escapeHtml(String(e))}`, mainMenuKeyboard(emojiMap));
+    }
+    return;
+  }
+
 
   // ── Customer input collection (purchase pre-checkout) ──
   if (customer.pending_action?.startsWith("collectinput_") && text && !text.startsWith("/")) {
