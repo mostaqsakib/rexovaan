@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
           await supabase.from("bot_deposits").update({
             status: "confirmed",
             amount: receivedUsd,
-            payment_details: `TON memo:${memo} tx:${txHash}`,
+            txn_hash: txHash,
           }).eq("id", reservation.deposit_id);
         }
 
