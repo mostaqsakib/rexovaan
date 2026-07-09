@@ -168,7 +168,7 @@ export function TelegramEditor({
         onKeyDown={onKeyDown}
         rows={rows}
         placeholder={placeholder}
-        className="rounded-none border-0 font-mono text-sm resize-y focus-visible:ring-0 bg-[#eff8de] dark:bg-[#1a2e1a] text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-500"
+        className="rounded-none border-0 font-mono text-sm resize-y focus-visible:ring-0 bg-white text-neutral-900 placeholder:text-neutral-500"
       />
 
       {/* Preview */}
