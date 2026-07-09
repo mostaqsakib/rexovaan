@@ -175,7 +175,7 @@ export function TelegramEditor({
       {showPreview && value.trim() && (
         <div className="border-t bg-muted/20 p-3 space-y-1">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Telegram Preview</div>
-          <div className="rounded-lg bg-[#eff8de] dark:bg-[#1a2e1a] p-3 text-sm break-words text-neutral-900 dark:text-neutral-100">
+          <div className="rounded-lg bg-white p-3 text-sm break-words text-neutral-900">
             <TelegramRichText html={value} />
           </div>
         </div>
