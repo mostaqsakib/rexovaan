@@ -71,7 +71,7 @@ async function fetchSymbol(rpcUrl: string, contract: string, cache: Map<string, 
   }
 }
 
-async function scanChain(chain: ChainCfg, supabase: any, reservations: any[]) {
+async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], override?: { fromBlock?: number; skipStateWrite?: boolean }) {
   const rpcUrl = getRpcUrl(chain);
   if (!rpcUrl) return { chain: chain.id, skipped: "no rpc" };
 
@@ -89,22 +89,29 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[]) {
   try {
     latest = Number(hexToBigInt(await rpc(rpcUrl, "eth_blockNumber", [])));
   } catch (e) {
-    await supabase.from("evm_chain_state").upsert({
-      chain: chain.id, last_error: `blockNumber: ${(e as Error).message}`, last_run_at: new Date().toISOString(),
-    }, { onConflict: "chain" });
+    if (!override?.skipStateWrite) {
+      await supabase.from("evm_chain_state").upsert({
+        chain: chain.id, last_error: `blockNumber: ${(e as Error).message}`, last_run_at: new Date().toISOString(),
+      }, { onConflict: "chain" });
+    }
     return { chain: chain.id, error: (e as Error).message };
   }
 
   const safeTo = latest - confReq;
-  let fromBlock = Number(state?.last_block || 0);
-  if (fromBlock === 0) fromBlock = safeTo - 200;
-  else fromBlock = Math.max(0, fromBlock - 10);
+  let fromBlock = override?.fromBlock ?? Number(state?.last_block || 0);
+  if (override?.fromBlock === undefined) {
+    if (fromBlock === 0) fromBlock = safeTo - 200;
+    else fromBlock = Math.max(0, fromBlock - 10);
+  }
   if (fromBlock > safeTo) {
-    await supabase.from("evm_chain_state").upsert({
-      chain: chain.id, last_run_at: new Date().toISOString(), last_error: null,
-    }, { onConflict: "chain" });
+    if (!override?.skipStateWrite) {
+      await supabase.from("evm_chain_state").upsert({
+        chain: chain.id, last_run_at: new Date().toISOString(), last_error: null,
+      }, { onConflict: "chain" });
+    }
     return { chain: chain.id, scanned: 0, latest };
   }
+
 
   const knownContracts = new Set(chain.tokens.map((t) => t.address.toLowerCase()));
   const resByAddr = new Map<string, any>();
