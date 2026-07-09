@@ -55,6 +55,7 @@ export type Database = {
           address: string
           amount: number | null
           block_number: number | null
+          chain: string
           contract: string
           created_at: string
           customer_id: string | null
@@ -72,6 +73,7 @@ export type Database = {
           address: string
           amount?: number | null
           block_number?: number | null
+          chain?: string
           contract: string
           created_at?: string
           customer_id?: string | null
@@ -89,6 +91,7 @@ export type Database = {
           address?: string
           amount?: number | null
           block_number?: number | null
+          chain?: string
           contract?: string
           created_at?: string
           customer_id?: string | null
@@ -117,6 +120,7 @@ export type Database = {
           address: string
           amount: number
           block_number: number
+          chain: string
           credited_at: string
           deposit_id: string | null
           id: string
@@ -129,6 +133,7 @@ export type Database = {
           address: string
           amount: number
           block_number: number
+          chain?: string
           credited_at?: string
           deposit_id?: string | null
           id?: string
@@ -141,6 +146,7 @@ export type Database = {
           address?: string
           amount?: number
           block_number?: number
+          chain?: string
           credited_at?: string
           deposit_id?: string | null
           id?: string
@@ -179,6 +185,7 @@ export type Database = {
           id: string
           paid_at: string | null
           received_amount: number
+          received_chains: string[]
           status: string
           sweep_attempts: number | null
           sweep_last_error: string | null
@@ -202,6 +209,7 @@ export type Database = {
           id?: string
           paid_at?: string | null
           received_amount?: number
+          received_chains?: string[]
           status?: string
           sweep_attempts?: number | null
           sweep_last_error?: string | null
@@ -225,6 +233,7 @@ export type Database = {
           id?: string
           paid_at?: string | null
           received_amount?: number
+          received_chains?: string[]
           status?: string
           sweep_attempts?: number | null
           sweep_last_error?: string | null
@@ -1659,6 +1668,57 @@ export type Database = {
           id?: string
           token?: string
           used_at?: string | null
+        }
+        Relationships: []
+      }
+      evm_chain_state: {
+        Row: {
+          chain: string
+          chunk_size: number
+          confirmations: number
+          enabled: boolean
+          last_block: number
+          last_error: string | null
+          last_run_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          chain: string
+          chunk_size?: number
+          confirmations?: number
+          enabled?: boolean
+          last_block?: number
+          last_error?: string | null
+          last_run_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          chain?: string
+          chunk_size?: number
+          confirmations?: number
+          enabled?: boolean
+          last_block?: number
+          last_error?: string | null
+          last_run_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      evm_gas_alerts: {
+        Row: {
+          chain: string
+          last_alerted_at: string
+          last_balance: number | null
+        }
+        Insert: {
+          chain: string
+          last_alerted_at?: string
+          last_balance?: number | null
+        }
+        Update: {
+          chain?: string
+          last_alerted_at?: string
+          last_balance?: number | null
         }
         Relationships: []
       }
