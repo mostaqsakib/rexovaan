@@ -4,6 +4,7 @@ import { EMOJI_CATEGORIES, searchEmojis } from './emoji-data';
 import { Input } from '@/components/ui/input';
 import { Search, Clock, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { TgEmoji } from '@/components/TelegramRichText';
 
 interface CustomEmoji { custom_emoji_id: string; emoji: string; thumb_url: string | null }
 interface StickerSet { set_name: string; title: string; emojis: CustomEmoji[] }
