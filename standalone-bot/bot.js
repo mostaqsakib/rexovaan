@@ -2624,6 +2624,14 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `bep20_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
+  } else if (paymentType === "polygon" || methodName.includes("usdt polygon") || methodName.includes("polygon")) {
+    const { data: polAmtRow } = await supabase.from("bot_settings").select("value").eq("key", "polygon_amount_msg").maybeSingle();
+    const polAmtMsg = polAmtRow?.value || `🟣 <b>USDT/USDC Polygon (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get a <b>unique Polygon address</b> just for this deposit. Send USDT or USDC on <b>Polygon (MATIC network)</b> — auto-credited after ~20 confirmations (~40 sec).`;
+    msg += polAmtMsg + "\n";
+    const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
+    if (cust) {
+      await supabase.from("bot_customers").update({ pending_action: `polygon_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
+    }
   } else if (methodName.includes("binance") || paymentType === "binance") {
 
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
