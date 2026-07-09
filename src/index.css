@@ -159,15 +159,16 @@
   /* Telegram-flavored rich text rendering on the customer site */
   .tg-content { font-size: 0.95rem; }
   .tg-content > * + * { margin-top: 0.5rem; }
-  .tg-content b, .tg-content strong { font-weight: 600; color: hsl(var(--foreground)); }
+  .tg-content b, .tg-content strong { font-weight: 700; color: inherit; }
   .tg-content i, .tg-content em { font-style: italic; }
   .tg-content u { text-decoration: underline; }
   .tg-content s, .tg-content strike, .tg-content del { text-decoration: line-through; opacity: 0.75; }
-  .tg-content a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px; }
-  .tg-content a:hover { color: hsl(var(--primary-glow)); }
+  .tg-content a { color: #2481cc; text-decoration: underline; text-underline-offset: 2px; }
+  .tg-content a:hover { opacity: 0.85; }
   .tg-content code {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 0.85em;
+    color: inherit;
     background: hsl(var(--muted));
     padding: 0.1em 0.4em;
     border-radius: 0.35rem;
