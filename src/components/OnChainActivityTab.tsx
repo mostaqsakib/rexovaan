@@ -79,8 +79,8 @@ const sanitizeSymbol = (raw: string | null | undefined): string => {
 
 const formatRaw = (n: number): string => {
   if (!isFinite(n)) return '—';
-  if (n >= 1e6) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  return n.toLocaleString();
+  if (Math.abs(n) >= 1000) return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 };
 
 const copy = (text: string) => {
