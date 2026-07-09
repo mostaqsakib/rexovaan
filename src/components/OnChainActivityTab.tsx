@@ -289,10 +289,6 @@ const OnChainActivityTab = () => {
         <TabPill active={tab === 'addresses'} onClick={() => setTab('addresses')}
           icon={<Wallet className="h-3.5 w-3.5" />}
           label="Per-order addresses" count={reserved.length} />
-        <TabPill active={tab === 'fake'} onClick={() => setTab('fake')}
-          icon={<ShieldAlert className="h-3.5 w-3.5" />}
-          label="Unsupported / Scam tokens" count={fakes.length}
-          tone={fakes.length > 0 ? 'destructive' : undefined} />
       </div>
 
       {/* Filters */}
