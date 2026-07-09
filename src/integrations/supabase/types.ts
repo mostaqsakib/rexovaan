@@ -50,6 +50,168 @@ export type Database = {
         }
         Relationships: []
       }
+      bep20_payment_registry: {
+        Row: {
+          address: string
+          amount: number
+          block_number: number
+          credited_at: string
+          deposit_id: string | null
+          id: string
+          log_index: number
+          reserved_address_id: string | null
+          token: string
+          tx_hash: string
+        }
+        Insert: {
+          address: string
+          amount: number
+          block_number: number
+          credited_at?: string
+          deposit_id?: string | null
+          id?: string
+          log_index: number
+          reserved_address_id?: string | null
+          token: string
+          tx_hash: string
+        }
+        Update: {
+          address?: string
+          amount?: number
+          block_number?: number
+          credited_at?: string
+          deposit_id?: string | null
+          id?: string
+          log_index?: number
+          reserved_address_id?: string | null
+          token?: string
+          tx_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bep20_payment_registry_deposit_id_fkey"
+            columns: ["deposit_id"]
+            isOneToOne: false
+            referencedRelation: "bot_deposits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bep20_payment_registry_reserved_address_id_fkey"
+            columns: ["reserved_address_id"]
+            isOneToOne: false
+            referencedRelation: "bep20_reserved_addresses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bep20_reserved_addresses: {
+        Row: {
+          address: string
+          created_at: string
+          customer_id: string | null
+          deposit_id: string | null
+          derivation_index: number
+          expected_amount: number
+          expires_at: string
+          id: string
+          paid_at: string | null
+          received_amount: number
+          status: string
+          sweep_tx_hash: string | null
+          swept_at: string | null
+          token: string
+          tx_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          customer_id?: string | null
+          deposit_id?: string | null
+          derivation_index: number
+          expected_amount: number
+          expires_at: string
+          id?: string
+          paid_at?: string | null
+          received_amount?: number
+          status?: string
+          sweep_tx_hash?: string | null
+          swept_at?: string | null
+          token: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          customer_id?: string | null
+          deposit_id?: string | null
+          derivation_index?: number
+          expected_amount?: number
+          expires_at?: string
+          id?: string
+          paid_at?: string | null
+          received_amount?: number
+          status?: string
+          sweep_tx_hash?: string | null
+          swept_at?: string | null
+          token?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bep20_reserved_addresses_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "bot_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bep20_reserved_addresses_deposit_id_fkey"
+            columns: ["deposit_id"]
+            isOneToOne: false
+            referencedRelation: "bot_deposits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bep20_settings: {
+        Row: {
+          address_ttl_minutes: number
+          confirmations_required: number
+          created_at: string
+          id: number
+          min_gas_balance: number
+          next_index: number
+          sweep_destination: string
+          updated_at: string
+          watcher_last_block: number
+        }
+        Insert: {
+          address_ttl_minutes?: number
+          confirmations_required?: number
+          created_at?: string
+          id?: number
+          min_gas_balance?: number
+          next_index?: number
+          sweep_destination?: string
+          updated_at?: string
+          watcher_last_block?: number
+        }
+        Update: {
+          address_ttl_minutes?: number
+          confirmations_required?: number
+          created_at?: string
+          id?: number
+          min_gas_balance?: number
+          next_index?: number
+          sweep_destination?: string
+          updated_at?: string
+          watcher_last_block?: number
+        }
+        Relationships: []
+      }
       bot_balance_adjustments: {
         Row: {
           created_at: string
@@ -362,6 +524,9 @@ export type Database = {
       bot_deposits: {
         Row: {
           amount: number | null
+          bep20_address: string | null
+          bep20_token: string | null
+          bep20_tx_hash: string | null
           created_at: string
           customer_id: string
           id: string
@@ -376,6 +541,9 @@ export type Database = {
         }
         Insert: {
           amount?: number | null
+          bep20_address?: string | null
+          bep20_token?: string | null
+          bep20_tx_hash?: string | null
           created_at?: string
           customer_id: string
           id?: string
@@ -390,6 +558,9 @@ export type Database = {
         }
         Update: {
           amount?: number | null
+          bep20_address?: string | null
+          bep20_token?: string | null
+          bep20_tx_hash?: string | null
           created_at?: string
           customer_id?: string
           id?: string
@@ -1808,6 +1979,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      bep20_next_index: { Args: never; Returns: number }
       bind_telegram_to_customer: {
         Args: {
           _auth_user_id: string
