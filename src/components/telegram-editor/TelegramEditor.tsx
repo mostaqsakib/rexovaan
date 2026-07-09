@@ -353,14 +353,14 @@ export function TelegramEditor({
       {/* WYSIWYG editable Telegram-style box */}
       <div className="relative bg-[#0e1621] p-4">
         {isEmpty && (
-          <div className="pointer-events-none absolute left-[26px] top-[26px] text-neutral-400 text-sm select-none">
+          <div className="pointer-events-none absolute left-[26px] top-[26px] text-neutral-500 text-sm select-none">
             {placeholder}
           </div>
         )}
         <div className="flex justify-start">
           <div
             ref={editorRef}
-            className="tge-editable tg-content bg-white text-neutral-900 rounded-[12px] rounded-bl-[4px] shadow-[0_1px_2px_rgba(16,35,47,0.15)] max-w-[480px] px-[14px] py-[10px] text-sm leading-[1.4] break-words outline-none whitespace-pre-wrap"
+            className="tge-editable tg-content tg-bubble-dark bg-[#182533] text-[#e6ebef] rounded-[12px] rounded-bl-[4px] shadow-[0_1px_2px_rgba(0,0,0,0.35)] max-w-[480px] px-[14px] py-[10px] text-[15px] leading-[1.45] break-words outline-none whitespace-pre-wrap"
             style={{ minHeight, minWidth: '160px' }}
             contentEditable
             suppressContentEditableWarning
