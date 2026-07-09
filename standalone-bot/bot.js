@@ -2615,7 +2615,18 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `cryptomus_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
+  } else if (paymentType === "bep20" || methodName.includes("bep20 auto") || methodName.includes("usdt/usdc bep20")) {
+
+    msg += `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n`;
+    msg += `💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n`;
+    msg += `<i>Minimum: 1 USDT</i>\n\n`;
+    msg += `You'll get a <b>unique BSC address</b> just for this deposit. Send USDT or USDC (BEP20) — auto-credited after 3 confirmations (~9 sec).`;
+    const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
+    if (cust) {
+      await supabase.from("bot_customers").update({ pending_action: `bep20_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
+    }
   } else if (methodName.includes("binance") || paymentType === "binance") {
+
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
     msg += binanceId ? `<b>Binance ID:</b>\n<code>${binanceId}</code>\n<i>👆 Tap to copy</i>\n` : `<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   } else if (methodName.includes("bybit") || paymentType === "bybit") {
@@ -2646,7 +2657,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     msg += `💳 <b>Payment Details:</b>\n<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   }
 
-  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus")) {
+  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || methodName.includes("usdt/usdc bep20"))) {
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
     msg += `\n━━━━━━━━━━━━━━━━\nAfter sending, paste your <b>Transaction Hash (TxID)</b> or <b>Order ID</b> here and we'll verify it <b>automatically</b>.`;
   }
@@ -5130,6 +5141,53 @@ async function handleMessage(message, emojiMap) {
     );
     return;
   }
+
+  if (customer.pending_action?.startsWith("bep20_deposit_amount") && text && !text.startsWith("/")) {
+    const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>1 USDT</b>.");
+      return;
+    }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/bep20-reserve-address`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${supabaseServiceKey}` },
+        body: JSON.stringify({ customer_id: customer.id, expected_amount: amountUSD, token: "ANY" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.address) {
+        await sendMessage(chatId, `❌ Could not reserve address: ${escapeHtml(data.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
+        return;
+      }
+      const expiresMin = Math.max(1, Math.round((new Date(data.expires_at).getTime() - Date.now()) / 60000));
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data.address)}`;
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: qrUrl,
+          caption:
+            `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n` +
+            `💵 Amount: <b>${amountUSD.toFixed(2)} USDT/USDC</b>\n` +
+            `⏱ Expires in: <b>${expiresMin} min</b>\n\n` +
+            `📥 <b>Send to this address (BSC / BEP20):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n` +
+            `✅ Any amount will be credited exactly as received.\n` +
+            `✅ USDT or USDC — both accepted on this address.\n` +
+            `⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\n` +
+            `Auto-verified after 3 confirmations (~9 sec).`,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: [[{ text: "◀️ Back to Menu", callback_data: "main_menu" }]] },
+        }),
+      });
+    } catch (e) {
+      await sendMessage(chatId, `❌ Reserve failed: ${escapeHtml(String(e))}`, mainMenuKeyboard(emojiMap));
+    }
+    return;
+  }
+
 
   // ── Customer input collection (purchase pre-checkout) ──
   if (customer.pending_action?.startsWith("collectinput_") && text && !text.startsWith("/")) {
