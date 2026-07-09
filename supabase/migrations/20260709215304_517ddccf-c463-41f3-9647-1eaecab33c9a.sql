@@ -1,0 +1,1 @@
+UPDATE public.evm_chain_state SET chunk_size = 500, last_block = last_block - 800, last_error = NULL WHERE chain = 'polygon';
