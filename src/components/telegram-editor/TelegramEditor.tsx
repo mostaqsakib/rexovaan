@@ -155,16 +155,19 @@ export function TelegramEditor({
         root.render(<TgEmoji id={id} fallback={fb} size="1.2em" />);
         emojiRootsRef.current.set(host, root);
       });
-      // Cleanup roots whose host was removed from DOM
+      // Defer-unmount roots whose host was removed from DOM
+      const orphans: Root[] = [];
       emojiRootsRef.current.forEach((root, host) => {
-        if (!el.contains(host)) { try { root.unmount(); } catch {} emojiRootsRef.current.delete(host); }
+        if (!el.contains(host)) { orphans.push(root); emojiRootsRef.current.delete(host); }
       });
+      if (orphans.length) setTimeout(() => orphans.forEach(r => { try { r.unmount(); } catch {} }), 0);
     };
     mountEmojiRootsRef.current = mountAll;
     mountAll();
     return () => {
-      emojiRootsRef.current.forEach(r => { try { r.unmount(); } catch {} });
+      const all = Array.from(emojiRootsRef.current.values());
       emojiRootsRef.current.clear();
+      setTimeout(() => all.forEach(r => { try { r.unmount(); } catch {} }), 0);
     };
   }, []);
 
