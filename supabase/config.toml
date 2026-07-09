@@ -21,5 +21,9 @@ verify_jwt = false
 [functions.bep20-watcher]
 verify_jwt = false
 
+[functions.bep20-sweep]
+verify_jwt = false
+
+
 
 
