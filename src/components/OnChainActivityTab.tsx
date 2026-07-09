@@ -10,8 +10,9 @@ import {
 import { toast } from 'sonner';
 import {
   Loader2, RefreshCw, Search, ExternalLink, Copy, Link2,
-  ShieldAlert, Wallet, ArrowRight, CheckCircle2, Clock,
+  ShieldAlert, Wallet, ArrowRight, CheckCircle2, Clock, AlertTriangle, Fuel,
 } from 'lucide-react';
+
 
 
 type RegistryRow = {
@@ -90,8 +91,15 @@ const copy = (text: string) => {
   toast.success('Copied');
 };
 
-type GasChain = { chain: string; name: string; native: string; balance?: string; min?: string; ok?: boolean; error?: string };
-type GasStatus = { master: string; destination: string | null; chains: GasChain[] };
+type GasChain = {
+  chain: string; name: string; native: string;
+  balance?: string; min?: string; topUp?: string;
+  usdPrice?: number | null; balanceUsd?: number | null; minUsd?: number | null;
+  sweepsRemaining?: number;
+  ok?: boolean; status?: 'ok' | 'warn' | 'critical'; error?: string;
+};
+type GasStatus = { master: string; destination: string | null; chains: GasChain[]; criticalCount?: number; warnCount?: number };
+
 
 const OnChainActivityTab = () => {
   const [registry, setRegistry] = useState<RegistryRow[]>([]);
@@ -425,17 +433,54 @@ const OnChainActivityTab = () => {
         </CardContent>
       </Card>
 
+      {/* Gas tank emergency alert */}
+      {gas && (gas.criticalCount || 0) > 0 && (
+        <Card className="border-destructive/60 bg-destructive/10">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+            <div className="flex-1 space-y-1">
+              <div className="text-sm font-semibold text-destructive">
+                ⚠️ EMERGENCY: {gas.criticalCount} gas tank{(gas.criticalCount || 0) > 1 ? 's' : ''} depleted — sweeps will fail
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Top up native gas immediately: {gas.chains.filter((c) => c.status === 'critical').map((c) => `${c.native} on ${c.name}`).join(', ')}
+              </div>
+              <div className="mt-2 flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1.5 font-mono text-[11px]">
+                <span className="text-muted-foreground">Send to:</span>
+                <span>{gas.master}</span>
+                <button onClick={() => copy(gas.master)} className="ml-auto text-primary hover:text-primary/80"><Copy className="h-3 w-3" /></button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {gas && (gas.warnCount || 0) > 0 && (gas.criticalCount || 0) === 0 && (
+        <Card className="border-warning/60 bg-warning/10">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+            <div className="flex-1 space-y-0.5">
+              <div className="text-sm font-semibold text-warning">
+                {gas.warnCount} gas tank{(gas.warnCount || 0) > 1 ? 's' : ''} running low
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Top up soon: {gas.chains.filter((c) => c.status === 'warn').map((c) => `${c.native} on ${c.name}`).join(', ')}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Gas tanks */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
-              <Wallet className="h-4 w-4 text-primary" />
-              Gas tanks (master sweep wallet)
+              <Fuel className="h-4 w-4 text-primary" />
+              Gas tanks — native balance per chain
             </CardTitle>
             {gas?.master && (
               <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-                {short(gas.master, 14)}
+                Top-up address: {short(gas.master, 14)}
                 <button onClick={() => copy(gas.master)} className="hover:text-foreground"><Copy className="h-3 w-3" /></button>
               </div>
             )}
@@ -450,44 +495,56 @@ const OnChainActivityTab = () => {
               {gasLoading ? 'Loading…' : 'No data'}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              {gas.chains.map((c) => (
-                <div
-                  key={c.chain}
-                  className={`rounded-lg border p-2.5 ${
-                    c.error
-                      ? 'border-border/60 bg-muted/30'
-                      : c.ok
-                      ? 'border-success/40 bg-success/5'
-                      : 'border-destructive/40 bg-destructive/5'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium">{c.name}</span>
-                    {!c.error && (
-                      <Badge variant={c.ok ? 'default' : 'destructive'} className="h-5 px-1.5 text-[10px]">
-                        {c.ok ? 'OK' : 'LOW'}
-                      </Badge>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {gas.chains.map((c) => {
+                const status = c.status || (c.ok ? 'ok' : 'critical');
+                const border =
+                  c.error ? 'border-border/60 bg-muted/30'
+                  : status === 'critical' ? 'border-destructive/50 bg-destructive/5'
+                  : status === 'warn' ? 'border-warning/50 bg-warning/5'
+                  : 'border-success/40 bg-success/5';
+                const badgeLabel = c.error ? '—' : status === 'critical' ? 'REFILL NOW' : status === 'warn' ? 'LOW' : 'OK';
+                const badgeVariant: any = status === 'critical' ? 'destructive' : status === 'warn' ? 'secondary' : 'default';
+                return (
+                  <div key={c.chain} className={`rounded-lg border p-3 ${border}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-medium">{c.name}</div>
+                        <div className="text-[10px] text-muted-foreground">Gas: {c.native}</div>
+                      </div>
+                      {!c.error && (
+                        <Badge variant={badgeVariant} className="h-5 px-1.5 text-[10px]">
+                          {badgeLabel}
+                        </Badge>
+                      )}
+                    </div>
+                    {c.error ? (
+                      <div className="mt-2 text-[10px] text-muted-foreground">{c.error}</div>
+                    ) : (
+                      <>
+                        <div className="mt-2 font-mono text-base font-semibold">
+                          {Number(c.balance).toFixed(6)}
+                          <span className="ml-1 text-[10px] text-muted-foreground">{c.native}</span>
+                        </div>
+                        {c.balanceUsd !== null && c.balanceUsd !== undefined && (
+                          <div className="text-[11px] text-muted-foreground">
+                            ≈ ${c.balanceUsd.toFixed(2)} USD
+                          </div>
+                        )}
+                        <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-1.5 text-[10px] text-muted-foreground">
+                          <span>~{c.sweepsRemaining ?? 0} sweeps left</span>
+                          <span>min {Number(c.min).toFixed(4)}</span>
+                        </div>
+                      </>
                     )}
                   </div>
-                  {c.error ? (
-                    <div className="mt-1 text-[10px] text-muted-foreground">{c.error}</div>
-                  ) : (
-                    <>
-                      <div className="mt-1 font-mono text-sm font-semibold">
-                        {Number(c.balance).toFixed(6)} <span className="text-[10px] text-muted-foreground">{c.native}</span>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        min {Number(c.min).toFixed(4)} {c.native}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
+
 
       {/* Lookup */}
       <Card>
