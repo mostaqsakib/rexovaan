@@ -127,9 +127,10 @@ export function TelegramEditor({
     const el = editorRef.current;
     if (!el) return;
     if (value === lastValueRef.current) return;
-    // Unmount stale roots before replacing HTML
-    emojiRootsRef.current.forEach(r => { try { r.unmount(); } catch {} });
+    // Defer-unmount stale roots so React finishes its commit before we swap innerHTML
+    const stale = Array.from(emojiRootsRef.current.values());
     emojiRootsRef.current.clear();
+    setTimeout(() => { stale.forEach(r => { try { r.unmount(); } catch {} }); }, 0);
     el.innerHTML = deserialize(value);
     lastValueRef.current = value;
     setIsEmpty(!el.textContent && el.querySelectorAll('.tge-emoji, img').length === 0);
