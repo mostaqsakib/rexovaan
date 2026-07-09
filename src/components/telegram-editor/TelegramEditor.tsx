@@ -168,15 +168,15 @@ export function TelegramEditor({
         onKeyDown={onKeyDown}
         rows={rows}
         placeholder={placeholder}
-        className="rounded-none border-0 font-mono text-sm resize-y focus-visible:ring-0 bg-white text-neutral-900 placeholder:text-neutral-500"
+        className="telegram-editor-textarea rounded-none border-0 font-mono text-sm resize-y focus-visible:ring-0"
       />
 
       {/* Preview */}
       {showPreview && value.trim() && (
-        <div className="border-t bg-[#0e1621] p-4 space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-[#8e9ba8]">Telegram Preview</div>
+        <div className="telegram-preview-panel border-t p-4 space-y-2">
+          <div className="telegram-preview-label text-[10px] uppercase tracking-wider">Telegram Preview</div>
           <div className="flex justify-start">
-            <div className="max-w-[480px] rounded-[12px] rounded-bl-[4px] bg-white px-[14px] py-[10px] text-sm break-words text-neutral-900 shadow-[0_1px_2px_rgba(16,35,47,0.15)]">
+            <div className="telegram-preview-bubble max-w-[480px] px-[14px] py-[10px] text-sm break-words">
               <TelegramRichText html={value} />
             </div>
           </div>
