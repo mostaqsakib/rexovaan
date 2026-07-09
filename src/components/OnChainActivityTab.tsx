@@ -168,6 +168,13 @@ const OnChainActivityTab = () => {
   };
 
   const filteredRegistry = useMemo(() => {
+    const reservedById = new Map(reserved.map((r) => [r.id, r]));
+    const reservedByAddress = new Map<string, ReservedRow>();
+    reserved.forEach((r) => {
+      const key = r.address.toLowerCase();
+      if (!reservedByAddress.has(key)) reservedByAddress.set(key, r);
+    });
+
     const credited: any[] = registry.map((r) => ({
       id: r.id,
       kind: 'credited' as const,
@@ -177,16 +184,24 @@ const OnChainActivityTab = () => {
       tx_hash: r.tx_hash,
       amount: Number(r.amount || 0),
     }));
-    const ignored: any[] = fakes.map((r) => ({
-      id: r.id,
-      kind: 'ignored' as const,
-      date: r.created_at,
-      token: sanitizeSymbol(r.token_symbol),
-      address: r.address,
-      tx_hash: r.tx_hash,
-      amount: Number(r.amount || 0),
-      contract: r.contract,
-    }));
+    const ignored: any[] = fakes.map((r) => {
+      const reservedMatch = r.reserved_address_id
+        ? reservedById.get(r.reserved_address_id)
+        : reservedByAddress.get(r.address.toLowerCase());
+      const depositAmount = Number(reservedMatch?.expected_amount || reservedMatch?.received_amount || 0);
+
+      return {
+        id: r.id,
+        kind: 'ignored' as const,
+        date: r.created_at,
+        token: sanitizeSymbol(r.token_symbol),
+        address: r.address,
+        tx_hash: r.tx_hash,
+        amount: Number(r.amount || 0),
+        depositAmount,
+        contract: r.contract,
+      };
+    });
     const combined = [...credited, ...ignored].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
@@ -200,7 +215,7 @@ const OnChainActivityTab = () => {
         (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, fakes, q, tokenFilter]);
+  }, [registry, fakes, reserved, q, tokenFilter]);
 
 
   const filteredReserved = useMemo(() => {
@@ -325,7 +340,7 @@ const OnChainActivityTab = () => {
       <div className="flex flex-wrap gap-2">
         <TabPill active={tab === 'ledger'} onClick={() => setTab('ledger')}
           icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          label="On-chain log" count={registry.length} />
+          label="On-chain log" count={registry.length + fakes.length} />
         <TabPill active={tab === 'addresses'} onClick={() => setTab('addresses')}
           icon={<Wallet className="h-3.5 w-3.5" />}
           label="Per-order addresses" count={reserved.length} />
@@ -409,6 +424,7 @@ type LedgerRow = {
   address: string;
   tx_hash: string;
   amount: number;
+  depositAmount?: number;
   contract?: string;
 };
 
@@ -479,9 +495,11 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                     {isIgnored ? (
                       <div className="flex flex-col items-end leading-tight">
                         <span className="font-semibold text-warning">
-                          {formatRaw(r.amount)} <span className="text-[10px] font-normal opacity-70">{r.token}</span>
+                          {r.depositAmount && r.depositAmount > 0 ? r.depositAmount.toFixed(2) : '—'} <span className="text-[10px] font-normal opacity-70">USDT</span>
                         </span>
-                        <span className="text-[10px] text-muted-foreground">not credited</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          sent: {formatRaw(r.amount)} {r.token}
+                        </span>
                       </div>
                     ) : (
                       <span className="font-semibold text-success">
