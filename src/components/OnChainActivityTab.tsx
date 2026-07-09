@@ -485,11 +485,12 @@ const FakeTable = ({ rows, customers }: { rows: FakeRow[]; customers: Record<str
     <CardHeader className="pb-2">
       <CardTitle className="flex items-center gap-2 text-sm text-destructive">
         <ShieldAlert className="h-4 w-4" />
-        Fake / Unsupported tokens detected
+        Unsupported / Scam tokens detected
       </CardTitle>
       <p className="text-[11px] text-muted-foreground">
-        These transfers reached a gateway address but the contract is NOT a whitelisted stablecoin.
-        Nothing is credited — listed here for audit only.
+        These transfers reached a gateway address but the contract is NOT a whitelisted stablecoin (USDT/USDC).
+        Usually unsolicited scam-airdrop tokens sent by bots to trick users into interacting with malicious contracts.
+        Nothing is credited — listed here for audit only. <strong>Do not interact with these contracts.</strong>
       </p>
     </CardHeader>
     <CardContent className="p-0">
