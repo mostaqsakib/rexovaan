@@ -1995,6 +1995,54 @@ export type Database = {
         }
         Relationships: []
       }
+      ton_reserved_deposits: {
+        Row: {
+          created_at: string
+          customer_id: string
+          deposit_id: string | null
+          expected_amount: number
+          expires_at: string
+          from_address: string | null
+          id: string
+          memo: string
+          paid_at: string | null
+          received_amount: number
+          status: string
+          tx_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          deposit_id?: string | null
+          expected_amount: number
+          expires_at: string
+          from_address?: string | null
+          id?: string
+          memo: string
+          paid_at?: string | null
+          received_amount?: number
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          deposit_id?: string | null
+          expected_amount?: number
+          expires_at?: string
+          from_address?: string | null
+          id?: string
+          memo?: string
+          paid_at?: string | null
+          received_amount?: number
+          status?: string
+          tx_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_channel_verification: {
         Row: {
           user_id: number
