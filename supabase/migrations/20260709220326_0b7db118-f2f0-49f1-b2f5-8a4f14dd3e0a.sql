@@ -1,0 +1,1 @@
+UPDATE evm_chain_state SET chunk_size = 100 WHERE chain='polygon';
