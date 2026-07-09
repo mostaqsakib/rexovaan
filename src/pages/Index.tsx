@@ -197,6 +197,7 @@ const Index = () => {
             {activeTab === 'groups' && <GroupsKeywordsTab products={products} />}
             {activeTab === 'sources' && <SourcesTab />}
             {activeTab === 'announcements' && <AnnouncementsTab />}
+            {activeTab === 'msg-templates' && <MessageTemplatesTab />}
             {activeTab === 'settings' && <BotSettingsTab />}
           </main>
         </SidebarInset>
