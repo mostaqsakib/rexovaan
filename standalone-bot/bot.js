@@ -2617,10 +2617,9 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     }
   } else if (paymentType === "bep20" || methodName.includes("bep20 auto") || methodName.includes("usdt/usdc bep20")) {
 
-    msg += `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n`;
-    msg += `💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n`;
-    msg += `<i>Minimum: 1 USDT</i>\n\n`;
-    msg += `You'll get a <b>unique BSC address</b> just for this deposit. Send USDT or USDC (BEP20) — auto-credited after 3 confirmations (~9 sec).`;
+    const { data: bepAmtRow } = await supabase.from("bot_settings").select("value").eq("key", "bep20_amount_msg").maybeSingle();
+    const bepAmtMsg = bepAmtRow?.value || `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get a <b>unique BSC address</b> just for this deposit. Send USDT or USDC (BEP20) — auto-credited after 3 confirmations (~9 sec).`;
+    msg += bepAmtMsg + "\n";
     const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `bep20_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
@@ -5163,23 +5162,24 @@ async function handleMessage(message, emojiMap) {
       }
       const expiresMin = Math.max(1, Math.round((new Date(data.expires_at).getTime() - Date.now()) / 60000));
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data.address)}`;
+
+      const { data: bepAddrRow } = await supabase.from("bot_settings").select("value").eq("key", "bep20_address_msg").maybeSingle();
+      const template = bepAddrRow?.value || `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT/USDC</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send to this address (BSC / BEP20):</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted on this address.\n⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\nAuto-verified after 3 confirmations (~9 sec).`;
+      const caption = template
+        .replace(/\{amount\}/g, amountUSD.toFixed(2))
+        .replace(/\{expires_min\}/g, String(expiresMin))
+        .replace(/\{address\}/g, data.address);
+
+      const backBtn = applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "bep20_back_menu", emojiMap);
       await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: chatId,
           photo: qrUrl,
-          caption:
-            `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n` +
-            `💵 Amount: <b>${amountUSD.toFixed(2)} USDT/USDC</b>\n` +
-            `⏱ Expires in: <b>${expiresMin} min</b>\n\n` +
-            `📥 <b>Send to this address (BSC / BEP20):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n` +
-            `✅ Any amount will be credited exactly as received.\n` +
-            `✅ USDT or USDC — both accepted on this address.\n` +
-            `⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\n` +
-            `Auto-verified after 3 confirmations (~9 sec).`,
+          caption,
           parse_mode: "HTML",
-          reply_markup: { inline_keyboard: [[{ text: "◀️ Back to Menu", callback_data: "menu_main" }]] },
+          reply_markup: { inline_keyboard: [[backBtn]] },
         }),
       });
     } catch (e) {

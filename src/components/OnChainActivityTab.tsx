@@ -12,6 +12,7 @@ import {
   Loader2, RefreshCw, Search, ExternalLink, Copy, Link2,
   ShieldAlert, Wallet, ArrowRight, CheckCircle2, Clock,
 } from 'lucide-react';
+import Bep20MessagesCard from '@/components/Bep20MessagesCard';
 
 type RegistryRow = {
   id: string;
@@ -214,6 +215,8 @@ const OnChainActivityTab = () => {
 
   return (
     <div className="space-y-6">
+      <Bep20MessagesCard />
+
       {/* Hero / summary */}
       <Card className="border-border/60 bg-gradient-to-br from-primary/5 via-background to-background">
         <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
