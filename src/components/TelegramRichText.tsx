@@ -117,7 +117,7 @@ export async function preloadCustomEmojis(ids: (string | null | undefined)[]) {
 }
 
 // ---- The emoji component ----
-export function TgEmoji({ id, fallback, size = '1em' }: { id: string; fallback?: string; size?: string | number }) {
+export function TgEmoji({ id, fallback, size = '1.25em' }: { id: string; fallback?: string; size?: string | number }) {
   const [info, setInfo] = useState<EmojiInfo | null>(memCache.get(id) || loadSession(id) || null);
   const [lottieData, setLottieData] = useState<any>(info?.url?.endsWith('.json') ? lottieJsonCache.get(info.url) || null : null);
 
