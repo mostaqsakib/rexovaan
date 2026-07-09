@@ -5179,7 +5179,7 @@ async function handleMessage(message, emojiMap) {
             `⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\n` +
             `Auto-verified after 3 confirmations (~9 sec).`,
           parse_mode: "HTML",
-          reply_markup: { inline_keyboard: [[{ text: "◀️ Back to Menu", callback_data: "main_menu" }]] },
+          reply_markup: { inline_keyboard: [[{ text: "◀️ Back to Menu", callback_data: "menu_main" }]] },
         }),
       });
     } catch (e) {
@@ -8259,8 +8259,13 @@ async function handleCallback(callbackQuery, emojiMap) {
     await editOrSend(chatId, msgId, `✅ <b>Transfer Successful!</b>\n\n💰 Transferred: <b>${refBal.toFixed(2)} USDT</b> to your main wallet.\n💳 New Balance: <b>${newMainBal.toFixed(2)} USDT</b>`, { inline_keyboard: [[applyEmoji({ text: "◀️ Back to Referral", callback_data: "menu_referral" }, "back", emojiMap)]] });
     return;
   }
-  if (data === "menu_main") {
+  if (data === "menu_main" || data === "main_menu") {
     const welcomeMsg = await getWelcomeMsg(customer.first_name || "there");
+    if (callbackQuery.message?.photo && msgId) {
+      await deleteMessage(chatId, msgId);
+      await sendMessage(chatId, welcomeMsg, mainMenuKeyboard(emojiMap));
+      return;
+    }
     await editOrSend(chatId, msgId, welcomeMsg, mainMenuKeyboard(emojiMap));
     return;
   }
