@@ -6,6 +6,16 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
+async function getTonAddress(): Promise<string | null> {
+  const { data } = await supabase
+    .from("bot_settings")
+    .select("value")
+    .eq("key", "usdt_ton_address")
+    .maybeSingle();
+
+  return (data?.value || Deno.env.get("USDT_TON_ADDRESS") || "").trim() || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -17,7 +27,7 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const tonAddress = Deno.env.get("USDT_TON_ADDRESS");
+    const tonAddress = await getTonAddress();
     if (!tonAddress) {
       return new Response(JSON.stringify({ error: "USDT_TON_ADDRESS not configured" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
