@@ -99,13 +99,14 @@ const OnChainActivityTab = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [tab, setTab] = useState<'ledger' | 'addresses' | 'fake'>('ledger');
+  const [tab, setTab] = useState<'ledger' | 'fake'>('ledger');
   const [q, setQ] = useState('');
   const [tokenFilter, setTokenFilter] = useState<'all' | 'USDT' | 'USDC'>('all');
   const [sweepFilter, setSweepFilter] = useState<'all' | 'swept' | 'pending' | 'error'>('all');
   const [lookupHash, setLookupHash] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupResult, setLookupResult] = useState<string | null>(null);
+
 
   const load = async () => {
     setRefreshing(true);
