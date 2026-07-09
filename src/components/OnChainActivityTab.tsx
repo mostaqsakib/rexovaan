@@ -175,33 +175,53 @@ const OnChainActivityTab = () => {
       if (!reservedByAddress.has(key)) reservedByAddress.set(key, r);
     });
 
-    const credited: any[] = registry.map((r) => ({
-      id: r.id,
-      kind: 'credited' as const,
-      date: r.credited_at,
-      token: r.token,
-      address: r.address,
-      tx_hash: r.tx_hash,
-      amount: Number(r.amount || 0),
-    }));
-    const ignored: any[] = fakes.map((r) => {
-      const reservedMatch = r.reserved_address_id
+    const custLabel = (id: string | null | undefined) => {
+      if (!id) return '—';
+      const c = customers[id];
+      if (!c) return '—';
+      return c.username ? `@${c.username}` : c.first_name || `#${c.chat_id ?? '—'}`;
+    };
+
+    const credited: any[] = registry.map((r) => {
+      const match = r.reserved_address_id
         ? reservedById.get(r.reserved_address_id)
         : reservedByAddress.get(r.address.toLowerCase());
-      const depositAmount = Number(reservedMatch?.expected_amount || reservedMatch?.received_amount || 0);
+      const depositAmount = Number(match?.expected_amount || r.amount || 0);
+      return {
+        id: r.id,
+        kind: 'credited' as const,
+        date: r.credited_at,
+        token: r.token,
+        contract: null as string | null,
+        address: r.address,
+        from: null as string | null,
+        tx_hash: r.tx_hash,
+        amount: Number(r.amount || 0),
+        depositAmount,
+        customer: custLabel(match?.customer_id),
+      };
+    });
 
+    const ignored: any[] = fakes.map((r) => {
+      const match = r.reserved_address_id
+        ? reservedById.get(r.reserved_address_id)
+        : reservedByAddress.get(r.address.toLowerCase());
+      const depositAmount = Number(match?.expected_amount || match?.received_amount || 0);
       return {
         id: r.id,
         kind: 'ignored' as const,
         date: r.created_at,
         token: sanitizeSymbol(r.token_symbol),
+        contract: r.contract,
         address: r.address,
+        from: r.from_address,
         tx_hash: r.tx_hash,
         amount: Number(r.amount || 0),
         depositAmount,
-        contract: r.contract,
+        customer: custLabel(r.customer_id || match?.customer_id),
       };
     });
+
     const combined = [...credited, ...ignored].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
@@ -212,10 +232,12 @@ const OnChainActivityTab = () => {
       return (
         r.tx_hash.toLowerCase().includes(n) ||
         r.address.toLowerCase().includes(n) ||
+        (r.from || '').toLowerCase().includes(n) ||
+        (r.customer || '').toLowerCase().includes(n) ||
         (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, fakes, reserved, q, tokenFilter]);
+  }, [registry, fakes, reserved, customers, q, tokenFilter]);
 
 
   const filteredReserved = useMemo(() => {
