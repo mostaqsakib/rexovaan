@@ -24,6 +24,27 @@ async function rpc(url: string, method: string, params: unknown[]): Promise<any>
   return j.result;
 }
 
+async function sendTelegram(method: string, body: Record<string, unknown>) {
+  const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
+  if (!BOT_TOKEN) {
+    console.warn("[BEP20 watcher] BOT_TOKEN missing, skipping Telegram notify");
+    return;
+  }
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.error(`[BEP20 watcher] Telegram ${method} failed [${res.status}]: ${txt}`);
+    }
+  } catch (e) {
+    console.error(`[BEP20 watcher] Telegram ${method} error:`, e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const json = (b: unknown, s = 200) =>
