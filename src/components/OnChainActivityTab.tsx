@@ -66,6 +66,17 @@ const BSCSCAN = 'https://bscscan.com';
 const short = (s: string | null | undefined, len = 10) =>
   !s ? '' : s.length > len + 6 ? `${s.slice(0, len)}…${s.slice(-6)}` : s;
 
+// Fake/scam tokens often have mojibake symbols (UTF-8 read as latin-1).
+// Strip unprintable chars; if nothing usable is left, fall back to "Unknown".
+const sanitizeSymbol = (raw: string | null | undefined): string => {
+  if (!raw) return 'Unknown';
+  // eslint-disable-next-line no-control-regex
+  const cleaned = raw.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  const printable = cleaned.replace(/[^\x20-\x7E]/g, '').trim();
+  if (printable.length >= 2) return printable.slice(0, 12);
+  return 'Unknown';
+};
+
 const copy = (text: string) => {
   navigator.clipboard.writeText(text);
   toast.success('Copied');
