@@ -258,6 +258,11 @@ const OnChainActivityTab = () => {
         tx_hash: r.tx_hash,
         amount: Number(r.amount || 0),
         depositAmount: Number(r.amount || 0),
+        expected: Number(match?.expected_amount || 0),
+        received: Number(match?.received_amount || r.amount || 0),
+        status: match?.status || 'paid',
+        sweep_status: match?.sweep_status || null,
+        sweep_tx_hash: match?.sweep_tx_hash || null,
         customer: custLabel(match?.customer_id),
       };
     });
@@ -284,6 +289,11 @@ const OnChainActivityTab = () => {
           tx_hash: r.tx_hash,
           amount: Number(r.amount || 0),
           depositAmount,
+          expected: Number(match?.expected_amount || 0),
+          received: Number(match?.received_amount || 0),
+          status: match?.status || 'pending',
+          sweep_status: match?.sweep_status || null,
+          sweep_tx_hash: match?.sweep_tx_hash || null,
           customer: custLabel(r.customer_id || match?.customer_id || (r.deposit_id ? deposits[r.deposit_id]?.customer_id : null)),
         };
       });
@@ -293,6 +303,11 @@ const OnChainActivityTab = () => {
     );
     return combined.filter((r) => {
       if (tokenFilter !== 'all' && r.kind === 'credited' && r.token !== tokenFilter) return false;
+      if (sweepFilter !== 'all') {
+        if (sweepFilter === 'swept' && r.sweep_status !== 'swept') return false;
+        if (sweepFilter === 'pending' && r.sweep_status === 'swept') return false;
+        if (sweepFilter === 'error' && r.sweep_status !== 'error') return false;
+      }
       if (!q) return true;
       const n = q.toLowerCase();
       return (
@@ -303,7 +318,8 @@ const OnChainActivityTab = () => {
         (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, fakes, reserved, customers, deposits, q, tokenFilter]);
+  }, [registry, fakes, reserved, customers, deposits, q, tokenFilter, sweepFilter]);
+
 
 
 
