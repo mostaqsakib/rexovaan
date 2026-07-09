@@ -239,14 +239,16 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
     }
   }
 
-  await supabase.from("evm_chain_state").upsert({
-    chain: chain.id,
-    last_block: safeTo,
-    last_run_at: new Date().toISOString(),
-    last_error: null,
-  }, { onConflict: "chain" });
+  if (!override?.skipStateWrite) {
+    await supabase.from("evm_chain_state").upsert({
+      chain: chain.id,
+      last_block: safeTo,
+      last_run_at: new Date().toISOString(),
+      last_error: null,
+    }, { onConflict: "chain" });
+  }
 
-  return { chain: chain.id, scanned, credited, fakes, latest, safeTo };
+  return { chain: chain.id, scanned, credited, fakes, latest, safeTo, fromBlock };
 }
 
 Deno.serve(async (req) => {
@@ -260,6 +262,12 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Optional overrides for manual re-scan: ?chain=polygon&from_block=89952380
+    const url = new URL(req.url);
+    const onlyChain = url.searchParams.get("chain");
+    const fromBlockParam = url.searchParams.get("from_block");
+    const overrideFromBlock = fromBlockParam ? Number(fromBlockParam) : undefined;
+
     const { data: reservations } = await supabase
       .from("bep20_reserved_addresses")
       .select("id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains")
@@ -269,12 +277,16 @@ Deno.serve(async (req) => {
       return json({ ok: true, note: "no reservations" });
     }
 
-    const chains = enabledChains();
-    if (chains.length === 0) return json({ error: "no chains configured (set BSC_RPC_URL / POLYGON_RPC_URL / ARBITRUM_RPC_URL / OPTIMISM_RPC_URL / BASE_RPC_URL / ETH_RPC_URL / AVALANCHE_RPC_URL)" }, 500);
+    let chains = enabledChains();
+    if (onlyChain) chains = chains.filter((c) => c.id === onlyChain);
+    if (chains.length === 0) return json({ error: "no chains matched" }, 400);
+
+    const override = overrideFromBlock !== undefined ? { fromBlock: overrideFromBlock, skipStateWrite: true } : undefined;
 
     // Scan chains in parallel — each has independent watermark
-    const results = await Promise.all(chains.map((c) => scanChain(c, supabase, reservations).catch((e) => ({ chain: c.id, error: (e as Error).message }))));
+    const results = await Promise.all(chains.map((c) => scanChain(c, supabase, reservations, override).catch((e) => ({ chain: c.id, error: (e as Error).message }))));
     return json({ ok: true, chains: results });
+
   } catch (e) {
     console.error("watcher fatal", e);
     return json({ error: (e as Error).message }, 500);
