@@ -243,3 +243,52 @@
   }
   .text-balance { text-wrap: balance; }
 }
+
+/* ---- WYSIWYG Telegram editor ---- */
+.tge-editable:focus { outline: none; }
+.tge-editable .tge-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  padding: 0 2px;
+  margin: 0 1px;
+  border-radius: 4px;
+  background: rgba(36, 129, 204, 0.10);
+  font-size: 1.1em;
+  line-height: 1.2;
+  user-select: none;
+  cursor: default;
+}
+.tge-editable blockquote {
+  border-left: 3px solid #2481cc;
+  padding: 2px 8px;
+  margin: 4px 0;
+  background: rgba(36, 129, 204, 0.06);
+  border-radius: 3px;
+}
+.tge-editable pre {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  margin: 4px 0;
+}
+.tge-editable code {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.tge-editable .tg-spoiler {
+  background: #b0b0b0;
+  color: #b0b0b0;
+  border-radius: 3px;
+  padding: 0 2px;
+  transition: color 0.2s;
+}
+.tge-editable .tg-spoiler:hover { color: inherit; }
+.tge-editable a { color: #2481cc; text-decoration: underline; }
