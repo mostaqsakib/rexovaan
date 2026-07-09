@@ -425,6 +425,70 @@ const OnChainActivityTab = () => {
         </CardContent>
       </Card>
 
+      {/* Gas tanks */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Wallet className="h-4 w-4 text-primary" />
+              Gas tanks (master sweep wallet)
+            </CardTitle>
+            {gas?.master && (
+              <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                {short(gas.master, 14)}
+                <button onClick={() => copy(gas.master)} className="hover:text-foreground"><Copy className="h-3 w-3" /></button>
+              </div>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={loadGas} disabled={gasLoading}>
+            <RefreshCw className={`h-4 w-4 ${gasLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!gas ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">
+              {gasLoading ? 'Loading…' : 'No data'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              {gas.chains.map((c) => (
+                <div
+                  key={c.chain}
+                  className={`rounded-lg border p-2.5 ${
+                    c.error
+                      ? 'border-border/60 bg-muted/30'
+                      : c.ok
+                      ? 'border-success/40 bg-success/5'
+                      : 'border-destructive/40 bg-destructive/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">{c.name}</span>
+                    {!c.error && (
+                      <Badge variant={c.ok ? 'default' : 'destructive'} className="h-5 px-1.5 text-[10px]">
+                        {c.ok ? 'OK' : 'LOW'}
+                      </Badge>
+                    )}
+                  </div>
+                  {c.error ? (
+                    <div className="mt-1 text-[10px] text-muted-foreground">{c.error}</div>
+                  ) : (
+                    <>
+                      <div className="mt-1 font-mono text-sm font-semibold">
+                        {Number(c.balance).toFixed(6)} <span className="text-[10px] text-muted-foreground">{c.native}</span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        min {Number(c.min).toFixed(4)} {c.native}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Lookup */}
       <Card>
         <CardHeader className="pb-3">
