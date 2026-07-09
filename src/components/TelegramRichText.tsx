@@ -22,6 +22,16 @@ function saveSession(id: string, v: EmojiInfo) {
   try { sessionStorage.setItem(`tg-emoji:${id}`, JSON.stringify({ ...v, version: SESSION_CACHE_VERSION })); } catch {}
 }
 
+export function seedCustomEmojiCache(entries: Array<{ id: string; url?: string | null; fallback?: string | null }>) {
+  for (const entry of entries) {
+    if (!entry.id) continue;
+    const info = { url: entry.url ?? null, fallback: entry.fallback ?? null };
+    memCache.set(entry.id, info);
+    saveSession(entry.id, info);
+    warmAsset(info);
+  }
+}
+
 // ---- Lottie JSON cache so identical emojis share data ----
 const lottieJsonCache = new Map<string, any>();
 const lottieJsonPending = new Map<string, Promise<any>>();
@@ -117,15 +127,15 @@ export async function preloadCustomEmojis(ids: (string | null | undefined)[]) {
 }
 
 // ---- The emoji component ----
-export function TgEmoji({ id, fallback, size = '1.25em' }: { id: string; fallback?: string; size?: string | number }) {
+export function TgEmoji({ id, fallback, size = '1.25em', disableRemoteFetch = false }: { id: string; fallback?: string; size?: string | number; disableRemoteFetch?: boolean }) {
   const [info, setInfo] = useState<EmojiInfo | null>(memCache.get(id) || loadSession(id) || null);
   const [lottieData, setLottieData] = useState<any>(info?.url?.endsWith('.json') ? lottieJsonCache.get(info.url) || null : null);
 
   useEffect(() => {
     let cancel = false;
-    if (!info) resolve(id).then(v => { if (!cancel) setInfo(v); });
+    if (!info && !disableRemoteFetch) resolve(id).then(v => { if (!cancel) setInfo(v); });
     return () => { cancel = true; };
-  }, [id, info]);
+  }, [id, info, disableRemoteFetch]);
 
   useEffect(() => {
     let cancel = false;
