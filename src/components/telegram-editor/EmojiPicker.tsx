@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { EMOJI_CATEGORIES, searchEmojis } from './emoji-data';
 import { Input } from '@/components/ui/input';
 import { Search, Clock, Smile, Sticker, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { TgEmoji } from '@/components/TelegramRichText';
+import { TgEmoji, seedCustomEmojiCache } from '@/components/TelegramRichText';
 
 interface CustomEmoji { custom_emoji_id: string; emoji: string; thumb_url: string | null }
 interface StickerSet { set_name: string; title: string; emojis: CustomEmoji[] }
@@ -33,6 +33,7 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
   const [query, setQuery] = useState('');
   const [sets, setSets] = useState<StickerSet[]>([]);
   const [recent, setRecent] = useState(loadRecent());
+  const [assetVersion, setAssetVersion] = useState(0);
 
   useEffect(() => {
     supabase.from('bot_emoji_sticker_sets').select('*').order('title')
@@ -62,6 +63,33 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
   const activeSetData = sets.find((set) => set.set_name === activeSet) || null;
   const activeUnicodeData = EMOJI_CATEGORIES.find((cat) => cat.key === activeUnicode) || EMOJI_CATEGORIES[0];
 
+  useEffect(() => {
+    if (mode !== 'custom') return;
+    let ids: string[] = [];
+    if (query.trim()) {
+      ids = customSearchResults.map((emoji) => emoji.custom_emoji_id);
+    } else if (activeSet === 'recent') {
+      ids = recent.filter((emoji) => emoji.type === 'c').map((emoji) => emoji.v);
+    } else if (activeSetData) {
+      ids = activeSetData.emojis.map((emoji) => emoji.custom_emoji_id);
+    }
+    ids = Array.from(new Set(ids)).slice(0, 300);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    supabase
+      .from('bot_custom_emoji_cache')
+      .select('emoji_id,lottie_url,fallback,status')
+      .in('emoji_id', ids)
+      .then(({ data }) => {
+        if (cancelled || !data?.length) return;
+        seedCustomEmojiCache(data
+          .filter((row) => row.status === 'ready' && row.lottie_url)
+          .map((row) => ({ id: row.emoji_id, url: row.lottie_url, fallback: row.fallback })));
+        setAssetVersion((v) => v + 1);
+      });
+    return () => { cancelled = true; };
+  }, [activeSet, activeSetData, customSearchResults, mode, query, recent]);
+
   const pickU = (e: string) => { saveRecent({ type: 'u', v: e }); setRecent(loadRecent()); onPickUnicode(e); };
   const pickC = (id: string, f: string) => { saveRecent({ type: 'c', v: id, f }); setRecent(loadRecent()); onPickCustom(id, f); };
 
@@ -86,7 +114,7 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
             {mode === 'custom' && customSearchResults.length > 0 && (
               <EmojiSection title="Premium emoji">
                 {customSearchResults.map(e => (
-                  <CustomEmojiButton key={e.custom_emoji_id} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
+                  <CustomEmojiButton key={`${e.custom_emoji_id}:${assetVersion}`} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
                 ))}
               </EmojiSection>
             )}
@@ -103,14 +131,14 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
               <EmojiSection title="Recently used">
                 {recent.map((e, i) => e.type === 'u'
                   ? <UnicodeEmojiButton key={`${e.v}-${i}`} emoji={e.v} onClick={() => pickU(e.v)} />
-                  : <CustomEmojiButton key={`${e.v}-${i}`} id={e.v} fallback={e.f || ''} onClick={() => pickC(e.v, e.f || '')} />
+                  : <CustomEmojiButton key={`${e.v}-${i}:${assetVersion}`} id={e.v} fallback={e.f || ''} onClick={() => pickC(e.v, e.f || '')} />
                 )}
               </EmojiSection>
             )
           ) : activeSetData ? (
             <EmojiSection title={activeSetData.title} subtitle={`${activeSetData.emojis.length} premium emojis`}>
               {activeSetData.emojis.map(e => (
-                <CustomEmojiButton key={e.custom_emoji_id} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
+                <CustomEmojiButton key={`${e.custom_emoji_id}:${assetVersion}`} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
               ))}
             </EmojiSection>
           ) : <EmptyState text="No synced premium emoji packs" />
@@ -129,7 +157,7 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
               const first = set.emojis[0];
               return (
                 <FooterButton key={set.set_name} active={activeSet === set.set_name} onClick={() => setActiveSet(set.set_name)} title={set.title}>
-                  {first ? <TgEmoji id={first.custom_emoji_id} fallback={first.emoji || '⭐'} size={18} /> : <Sticker className="h-4 w-4" />}
+                  {first ? <TgEmoji id={first.custom_emoji_id} fallback={first.emoji || '⭐'} size={18} disableRemoteFetch /> : <Sticker className="h-4 w-4" />}
                 </FooterButton>
               );
             })}
@@ -149,7 +177,7 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
 function CustomEmojiButton({ id, fallback, thumb, onClick }: { id: string; fallback: string; thumb?: string | null; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="telegram-emoji-cell" title={id}>
-      {thumb ? <img src={thumb} alt={fallback || ''} className="h-[26px] w-[26px] object-contain" loading="lazy" /> : <TgEmoji id={id} fallback={fallback || '❓'} size={26} />}
+      {thumb ? <img src={thumb} alt={fallback || ''} className="h-[26px] w-[26px] object-contain" loading="lazy" /> : <TgEmoji id={id} fallback={fallback || '❓'} size={26} disableRemoteFetch />}
     </button>
   );
 }
@@ -158,7 +186,7 @@ function UnicodeEmojiButton({ emoji, onClick }: { emoji: string; onClick: () => 
   return <button type="button" onClick={onClick} className="telegram-emoji-cell text-[25px] leading-none">{emoji}</button>;
 }
 
-function EmojiSection({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function EmojiSection({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <section>
       <div className="telegram-emoji-section-title flex items-center justify-between px-1 pb-1.5 pt-1">
@@ -174,7 +202,7 @@ function EmptyState({ text }: { text: string }) {
   return <p className="telegram-emoji-empty">{text}</p>;
 }
 
-function PickerModeButton({ active, muted, onClick, icon, label }: { active: boolean; muted?: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function PickerModeButton({ active, muted, onClick, icon, label }: { active: boolean; muted?: boolean; onClick: () => void; icon: ReactNode; label: string }) {
   return (
     <button type="button" onClick={onClick} disabled={muted} className={cn('telegram-emoji-mode', active && 'is-active', muted && 'is-muted')}>
       {icon}<span>{label}</span>
@@ -182,7 +210,7 @@ function PickerModeButton({ active, muted, onClick, icon, label }: { active: boo
   );
 }
 
-function FooterButton({ active, onClick, title, children }: { active: boolean; onClick: () => void; title: string; children: React.ReactNode }) {
+function FooterButton({ active, onClick, title, children }: { active: boolean; onClick: () => void; title: string; children: ReactNode }) {
   return (
     <button type="button" onClick={onClick} title={title} className={cn('telegram-emoji-footer-button', active && 'is-active')}>
       {children}
