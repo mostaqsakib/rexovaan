@@ -2623,9 +2623,8 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `bep20_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
-  }
-
   } else if (methodName.includes("binance") || paymentType === "binance") {
+
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
     msg += binanceId ? `<b>Binance ID:</b>\n<code>${binanceId}</code>\n<i>👆 Tap to copy</i>\n` : `<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   } else if (methodName.includes("bybit") || paymentType === "bybit") {
