@@ -119,15 +119,53 @@ export function TelegramEditor({
   const savedSelectionRef = useRef<Range | null>(null);
   const [isEmpty, setIsEmpty] = useState(!value);
 
+  const emojiRootsRef = useRef<Map<HTMLElement, Root>>(new Map());
+  const mountEmojiRootsRef = useRef<() => void>(() => {});
+
   // Sync external value -> editor (only if different from what we produced)
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
     if (value === lastValueRef.current) return;
+    // Unmount stale roots before replacing HTML
+    emojiRootsRef.current.forEach(r => { try { r.unmount(); } catch {} });
+    emojiRootsRef.current.clear();
     el.innerHTML = deserialize(value);
     lastValueRef.current = value;
     setIsEmpty(!el.textContent && el.querySelectorAll('.tge-emoji, img').length === 0);
+    mountEmojiRootsRef.current?.();
   }, [value]);
+
+  // Mount TgEmoji React roots inside .tge-emoji-mount hosts so animated/premium
+  // emojis actually render in the WYSIWYG editor (not just the fallback char).
+  useEffect(() => {
+    const mountAll = () => {
+      const el = editorRef.current;
+      if (!el) return;
+      const hosts = el.querySelectorAll<HTMLElement>('.tge-emoji-mount');
+      hosts.forEach(host => {
+        if (emojiRootsRef.current.has(host)) return;
+        const pill = host.closest('.tge-emoji') as HTMLElement | null;
+        const id = pill?.getAttribute('data-emoji-id');
+        if (!id) return;
+        const fb = host.getAttribute('data-fallback-text') || pill?.getAttribute('data-fallback') || '😀';
+        host.textContent = '';
+        const root = createRoot(host);
+        root.render(<TgEmoji id={id} fallback={fb} size="1.2em" />);
+        emojiRootsRef.current.set(host, root);
+      });
+      // Cleanup roots whose host was removed from DOM
+      emojiRootsRef.current.forEach((root, host) => {
+        if (!el.contains(host)) { try { root.unmount(); } catch {} emojiRootsRef.current.delete(host); }
+      });
+    };
+    mountEmojiRootsRef.current = mountAll;
+    mountAll();
+    return () => {
+      emojiRootsRef.current.forEach(r => { try { r.unmount(); } catch {} });
+      emojiRootsRef.current.clear();
+    };
+  }, []);
 
   const emit = useCallback(() => {
     const el = editorRef.current;
