@@ -77,8 +77,10 @@ Deno.serve(async (req) => {
 
     // BSC RPC limits ~5000 blocks per getLogs — chunk if needed
     const MAX_RANGE = 4000;
-    let credited = 0, scanned = 0;
-    const contracts = Object.values(BEP20_TOKENS).map((t) => t.address);
+    let credited = 0, scanned = 0, fakes = 0;
+    const knownContracts = new Set(
+      Object.values(BEP20_TOKENS).map((t) => t.address.toLowerCase()),
+    );
 
     // Get active pending reservations (limit for perf)
     const { data: reservations } = await supabase
@@ -98,30 +100,94 @@ Deno.serve(async (req) => {
       (a) => "0x" + a.replace(/^0x/, "").padStart(64, "0"),
     );
 
+    // Cache token symbols for unknown contracts (per invocation)
+    const symbolCache = new Map<string, string | null>();
+    async function fetchSymbol(contract: string): Promise<string | null> {
+      if (symbolCache.has(contract)) return symbolCache.get(contract)!;
+      try {
+        const res = await rpc(rpcUrl, "eth_call", [{ to: contract, data: "0x95d89b41" }, "latest"]);
+        if (!res || res === "0x") { symbolCache.set(contract, null); return null; }
+        const hex = res.replace(/^0x/, "");
+        let out: string | null = null;
+        if (hex.length >= 128) {
+          const len = parseInt(hex.slice(64, 128), 16);
+          const chars = hex.slice(128, 128 + len * 2);
+          let sym = "";
+          for (let i = 0; i < chars.length; i += 2) sym += String.fromCharCode(parseInt(chars.slice(i, i + 2), 16));
+          out = sym.replace(/[^\x20-\x7e\u00a0-\uffff]/g, "").trim().slice(0, 32) || null;
+        }
+        if (!out) {
+          let sym2 = "";
+          for (let i = 0; i < 64; i += 2) {
+            const c = parseInt(hex.slice(i, i + 2), 16);
+            if (c > 0) sym2 += String.fromCharCode(c);
+          }
+          out = sym2.replace(/[^\x20-\x7e]/g, "").trim().slice(0, 32) || null;
+        }
+        symbolCache.set(contract, out);
+        return out;
+      } catch {
+        symbolCache.set(contract, null);
+        return null;
+      }
+    }
+
     for (let start = fromBlock; start <= safeTo; start += MAX_RANGE + 1) {
       const end = Math.min(start + MAX_RANGE, safeTo);
+      // Scan ALL ERC20 Transfer events into reserved addresses (no contract filter),
+      // then classify real (whitelisted BEP20) vs. fake/unsupported tokens.
       const logs: any[] = await rpc(rpcUrl, "eth_getLogs", [{
         fromBlock: "0x" + start.toString(16),
         toBlock: "0x" + end.toString(16),
-        address: contracts,
         topics: [TRANSFER_TOPIC, null, toAddrTopics],
       }]);
       scanned += end - start + 1;
 
       for (const log of logs) {
         const contract = log.address.toLowerCase();
-        const tok = tokenByContract(contract);
-        if (!tok) continue;
         const toAddr = topicAddressToHex(log.topics[2]);
         const res = resByAddr.get(toAddr);
         if (!res) continue;
-        if (res.token !== "ANY" && res.token !== tok.symbol) continue;
 
-        const rawAmt = hexToBigInt(log.data);
-        const amt = formatUnits(rawAmt, tok.decimals);
         const txHash = log.transactionHash;
         const logIndex = Number(hexToBigInt(log.logIndex));
         const blockNumber = Number(hexToBigInt(log.blockNumber));
+        const fromAddr = topicAddressToHex(log.topics[1]);
+        const rawAmt = hexToBigInt(log.data);
+
+        // Not a whitelisted stablecoin → log as FAKE and skip credit
+        if (!knownContracts.has(contract)) {
+          const symbol = await fetchSymbol(contract);
+          const amtFake = Number(formatUnits(rawAmt, 18));
+          const { error: fErr } = await supabase.from("bep20_fake_transactions").insert({
+            tx_hash: txHash,
+            log_index: logIndex,
+            address: toAddr,
+            contract,
+            token_symbol: symbol,
+            amount: amtFake,
+            raw_amount: rawAmt.toString(),
+            from_address: fromAddr,
+            block_number: blockNumber,
+            reserved_address_id: res.id,
+            customer_id: res.customer_id,
+            deposit_id: res.deposit_id,
+            reason: "fake_token_detected",
+          });
+          if (fErr && (fErr as any).code !== "23505") {
+            console.error("fake insert err", fErr);
+          } else if (!fErr) {
+            fakes++;
+          }
+          continue;
+        }
+
+        const tok = tokenByContract(contract);
+        if (!tok) continue;
+        if (res.token !== "ANY" && res.token !== tok.symbol) continue;
+
+        const amt = formatUnits(rawAmt, tok.decimals);
+
 
         // Idempotency insert
         const { error: regErr } = await supabase.from("bep20_payment_registry").insert({
