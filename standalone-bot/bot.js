@@ -2632,6 +2632,14 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `polygon_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
+  } else if (paymentType === "ton_auto" || methodName === "usdt ton" || methodName.includes("ton auto")) {
+    const { data: tonAmtRow } = await supabase.from("bot_settings").select("value").eq("key", "ton_amount_msg").maybeSingle();
+    const tonAmtMsg = tonAmtRow?.value || `💎 <b>USDT TON (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get the deposit <b>address + a unique memo/comment</b>. Send USDT (TON Jetton) with the exact memo — auto-credited within ~30 seconds after on-chain confirmation.`;
+    msg += tonAmtMsg + "\n";
+    const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
+    if (cust) {
+      await supabase.from("bot_customers").update({ pending_action: `ton_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
+    }
   } else if (methodName.includes("binance") || paymentType === "binance") {
 
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
