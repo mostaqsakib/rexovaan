@@ -441,54 +441,39 @@ const OnChainActivityTab = () => {
         )}
       </Card>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2">
-        <TabPill active={tab === 'ledger'} onClick={() => setTab('ledger')}
-          icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          label="On-chain log" count={registry.length + fakes.length} />
-        <TabPill active={tab === 'addresses'} onClick={() => setTab('addresses')}
-          icon={<Wallet className="h-3.5 w-3.5" />}
-          label="Per-order addresses" count={reserved.length} />
-      </div>
-
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Search tx, address, contract, deposit id…"
+            placeholder="Search tx, address, customer, token…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        {tab === 'ledger' && (
-          <Select value={tokenFilter} onValueChange={(v: any) => setTokenFilter(v)}>
-            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All tokens</SelectItem>
-              <SelectItem value="USDT">USDT</SelectItem>
-              <SelectItem value="USDC">USDC</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-        {tab === 'addresses' && (
-          <Select value={sweepFilter} onValueChange={(v: any) => setSweepFilter(v)}>
-            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All sweep states</SelectItem>
-              <SelectItem value="swept">Swept</SelectItem>
-              <SelectItem value="pending">Awaiting sweep</SelectItem>
-              <SelectItem value="error">Sweep error</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
+        <Select value={tokenFilter} onValueChange={(v: any) => setTokenFilter(v)}>
+          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All tokens</SelectItem>
+            <SelectItem value="USDT">USDT</SelectItem>
+            <SelectItem value="USDC">USDC</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sweepFilter} onValueChange={(v: any) => setSweepFilter(v)}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sweep states</SelectItem>
+            <SelectItem value="swept">Swept</SelectItem>
+            <SelectItem value="pending">Awaiting sweep</SelectItem>
+            <SelectItem value="error">Sweep error</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Content */}
-      {tab === 'ledger' && <LedgerTable rows={filteredRegistry} />}
-      {tab === 'addresses' && <AddressesTable rows={filteredReserved} customers={customers} />}
-      {tab === 'fake' && <FakeTable rows={filteredFakes} customers={customers} />}
+      <LedgerTable rows={filteredRegistry} />
+
     </div>
   );
 };
