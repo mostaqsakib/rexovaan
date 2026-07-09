@@ -139,7 +139,7 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
 function CustomEmojiButton({ id, fallback, thumb, onClick }: { id: string; fallback: string; thumb?: string | null; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded" title={id}>
-      {thumb ? <img src={thumb} alt={fallback} className="h-6 w-6 object-contain" loading="lazy" /> : <span className="text-xl leading-none">{fallback || '❓'}</span>}
+      <TgEmoji id={id} fallback={fallback || '❓'} size="1.5em" />
     </button>
   );
 }
