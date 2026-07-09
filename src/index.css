@@ -292,3 +292,122 @@
 }
 .tge-editable .tg-spoiler:hover { color: inherit; }
 .tge-editable a { color: #2481cc; text-decoration: underline; }
+
+/* ---- Telegram desktop-style emoji picker ---- */
+.telegram-emoji-picker {
+  background: #ffffff;
+  color: #1f2933;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 7px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.22);
+}
+.telegram-emoji-tabs {
+  height: 42px;
+  border-bottom: 1px solid #e6ebf0;
+  background: #ffffff;
+}
+.telegram-emoji-mode {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #70777f;
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+.telegram-emoji-mode:hover:not(:disabled) { background: #f4f7fa; color: #2a8bdc; }
+.telegram-emoji-mode.is-active { color: #168acd; }
+.telegram-emoji-mode.is-active::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: #168acd;
+}
+.telegram-emoji-mode.is-muted { opacity: 0.55; cursor: default; }
+.telegram-emoji-search { background: #ffffff; color: #8b949e; }
+.telegram-emoji-search-input {
+  border-color: #e1e7ee !important;
+  background: #f6f8fb !important;
+  color: #1f2933 !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
+}
+.telegram-emoji-search-input::placeholder { color: #8b949e; }
+.telegram-emoji-body {
+  background: #ffffff;
+  scrollbar-width: thin;
+  scrollbar-color: #b7c2cc transparent;
+}
+.telegram-emoji-body::-webkit-scrollbar { width: 8px; }
+.telegram-emoji-body::-webkit-scrollbar-thumb {
+  background: #b7c2cc;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+}
+.telegram-emoji-section-title {
+  color: #8a929b;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.telegram-emoji-section-title small {
+  color: #a7afb8;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+}
+.telegram-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 2px;
+}
+.telegram-emoji-cell {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background-color 0.12s ease, transform 0.12s ease;
+}
+.telegram-emoji-cell:hover {
+  background: #eaf3fb;
+  transform: scale(1.05);
+}
+.telegram-emoji-cell .tg-emoji-media,
+.telegram-emoji-cell .tg-emoji-fallback,
+.telegram-emoji-footer-button .tg-emoji-media,
+.telegram-emoji-footer-button .tg-emoji-fallback {
+  filter: none;
+}
+.telegram-emoji-empty {
+  padding: 56px 16px;
+  text-align: center;
+  color: #8b949e;
+  font-size: 12px;
+}
+.telegram-emoji-footer {
+  min-height: 40px;
+  border-top: 1px solid #e6ebf0;
+  background: #f9fbfd;
+}
+.telegram-emoji-footer-button {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: #68737d;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.telegram-emoji-footer-button:hover { background: #eaf3fb; color: #168acd; }
+.telegram-emoji-footer-button.is-active { background: #dff0ff; color: #168acd; }
