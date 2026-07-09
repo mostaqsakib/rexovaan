@@ -516,6 +516,11 @@ type LedgerRow = {
   tx_hash: string;
   amount: number;
   depositAmount?: number;
+  expected?: number;
+  received?: number;
+  status?: string;
+  sweep_status?: string | null;
+  sweep_tx_hash?: string | null;
   contract?: string | null;
   customer?: string;
 };
@@ -529,17 +534,19 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
             <tr>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">Customer</th>
+              <th className="px-3 py-2">Address</th>
               <th className="px-3 py-2">Token</th>
-              <th className="px-3 py-2 text-right">Amount (USDT)</th>
-              <th className="px-3 py-2">Contract</th>
-              <th className="px-3 py-2">To (Gateway)</th>
+              <th className="px-3 py-2 text-right">Expected</th>
+              <th className="px-3 py-2 text-right">Received</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Sweep</th>
               <th className="px-3 py-2">From</th>
               <th className="px-3 py-2">Tx</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No records</td></tr>
+              <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No records</td></tr>
             )}
             {rows.map((r) => {
               const isIgnored = r.kind === 'ignored';
@@ -549,6 +556,12 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                     {new Date(r.date).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">{r.customer || '—'}</td>
+                  <td className="px-3 py-2 font-mono">
+                    <a href={`${BSCSCAN}/address/${r.address}`} target="_blank" rel="noreferrer"
+                       className="text-primary hover:underline" title={r.address}>
+                      {short(r.address, 6)}
+                    </a>
+                  </td>
                   <td className="px-3 py-2">
                     {isIgnored ? (
                       <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">
@@ -560,31 +573,20 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                       </Badge>
                     )}
                   </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">
+                    {r.expected && r.expected > 0 ? r.expected.toFixed(2) : '—'}
+                  </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    {r.depositAmount && r.depositAmount > 0 ? (
+                    {r.received && r.received > 0 ? (
                       <span className={`font-semibold ${isIgnored ? 'text-warning' : 'text-success'}`}>
-                        {r.depositAmount.toFixed(2)}
-                        <span className="ml-1 text-[10px] font-normal opacity-70">USDT</span>
+                        {r.received.toFixed(2)}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 font-mono">
-                    {r.contract ? (
-                      <a href={`${BSCSCAN}/token/${r.contract}`} target="_blank" rel="noreferrer"
-                         className="text-muted-foreground hover:text-primary" title={r.contract}>
-                        {short(r.contract, 6)}
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground/60">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono">
-                    <button onClick={() => copy(r.address)} className="hover:text-primary" title={r.address}>
-                      {short(r.address, 6)}
-                    </button>
-                  </td>
+                  <td className="px-3 py-2"><StatusBadge status={r.status || 'pending'} /></td>
+                  <td className="px-3 py-2"><SweepBadge status={r.sweep_status || null} txHash={r.sweep_tx_hash || null} /></td>
                   <td className="px-3 py-2 font-mono">
                     {r.from ? (
                       <a href={`${BSCSCAN}/address/${r.from}`} target="_blank" rel="noreferrer"
@@ -610,6 +612,7 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
     </CardContent>
   </Card>
 );
+
 
 
 const AddressesTable = ({ rows, customers }: { rows: ReservedRow[]; customers: Record<string, CustomerLite> }) => (
