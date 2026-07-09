@@ -48,6 +48,7 @@ const AppSidebar = ({ activeTab, onChange, pendingCount = 0 }: AppSidebarProps) 
         { id: 'withdrawals', label: 'Withdrawals', icon: ArrowUpCircle },
         { id: 'payments', label: 'Payments', icon: CreditCard },
         { id: 'cryptomus', label: 'Cryptomus', icon: Bitcoin },
+        { id: 'onchain', label: 'On-Chain', icon: Link },
         { id: 'referrals', label: 'Referrals', icon: Gift },
         { id: 'resellers', label: 'Resellers', icon: KeyRound },
       ],
