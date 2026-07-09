@@ -50,9 +50,8 @@ Deno.serve(async (req) => {
       .insert({
         customer_id: customerId,
         amount: expectedAmount,
-        method: "USDT TON",
+        payment_method: "USDT TON",
         status: "pending",
-        payment_details: `TON memo: ${memo}`,
       })
       .select("id")
       .single();
