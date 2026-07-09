@@ -1,4 +1,4 @@
-import { ShoppingCart, Package, PackageCheck, History, Bot, DollarSign, Users, ArrowUpCircle, ArrowDownCircle, CreditCard, Sparkles, Settings, Gift, KeyRound, MessagesSquare, Server, Flame, FormInput, ClipboardList, Zap, LayoutDashboard, Tag, Globe, Megaphone, Link2, Bitcoin } from 'lucide-react';
+import { ShoppingCart, Package, PackageCheck, History, Bot, DollarSign, Users, ArrowUpCircle, ArrowDownCircle, CreditCard, Sparkles, Settings, Gift, KeyRound, MessagesSquare, Server, Flame, FormInput, ClipboardList, Zap, LayoutDashboard, Tag, Globe, Megaphone, Link2, Bitcoin, Link } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
@@ -48,6 +48,7 @@ const AppSidebar = ({ activeTab, onChange, pendingCount = 0 }: AppSidebarProps) 
         { id: 'withdrawals', label: 'Withdrawals', icon: ArrowUpCircle },
         { id: 'payments', label: 'Payments', icon: CreditCard },
         { id: 'cryptomus', label: 'Cryptomus', icon: Bitcoin },
+        { id: 'onchain', label: 'On-Chain', icon: Link },
         { id: 'referrals', label: 'Referrals', icon: Gift },
         { id: 'resellers', label: 'Resellers', icon: KeyRound },
       ],

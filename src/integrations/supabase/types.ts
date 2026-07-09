@@ -50,6 +50,68 @@ export type Database = {
         }
         Relationships: []
       }
+      bep20_fake_transactions: {
+        Row: {
+          address: string
+          amount: number | null
+          block_number: number | null
+          contract: string
+          created_at: string
+          customer_id: string | null
+          deposit_id: string | null
+          from_address: string | null
+          id: string
+          log_index: number
+          raw_amount: string | null
+          reason: string
+          reserved_address_id: string | null
+          token_symbol: string | null
+          tx_hash: string
+        }
+        Insert: {
+          address: string
+          amount?: number | null
+          block_number?: number | null
+          contract: string
+          created_at?: string
+          customer_id?: string | null
+          deposit_id?: string | null
+          from_address?: string | null
+          id?: string
+          log_index: number
+          raw_amount?: string | null
+          reason?: string
+          reserved_address_id?: string | null
+          token_symbol?: string | null
+          tx_hash: string
+        }
+        Update: {
+          address?: string
+          amount?: number | null
+          block_number?: number | null
+          contract?: string
+          created_at?: string
+          customer_id?: string | null
+          deposit_id?: string | null
+          from_address?: string | null
+          id?: string
+          log_index?: number
+          raw_amount?: string | null
+          reason?: string
+          reserved_address_id?: string | null
+          token_symbol?: string | null
+          tx_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bep20_fake_transactions_reserved_address_id_fkey"
+            columns: ["reserved_address_id"]
+            isOneToOne: false
+            referencedRelation: "bep20_reserved_addresses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bep20_payment_registry: {
         Row: {
           address: string
