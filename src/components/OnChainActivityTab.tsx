@@ -201,7 +201,7 @@ const OnChainActivityTab = () => {
     setRefreshing(false);
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); void loadGas(); }, []);
 
   const runScan = async () => {
     setScanning(true);
