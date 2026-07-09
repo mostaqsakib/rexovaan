@@ -360,8 +360,8 @@ export function TelegramEditor({
         <div className="flex justify-start">
           <div
             ref={editorRef}
-            className="tge-editable tg-content tg-bubble-dark bg-[#182533] text-[#e6ebef] rounded-[12px] rounded-bl-[4px] shadow-[0_1px_2px_rgba(0,0,0,0.35)] max-w-[480px] px-[14px] py-[10px] text-[15px] leading-[1.45] break-words outline-none whitespace-pre-wrap"
-            style={{ minHeight, minWidth: '160px' }}
+            className="tge-editable tg-content tg-bubble-dark rounded-[12px] rounded-bl-[4px] shadow-[0_1px_2px_rgba(0,0,0,0.35)] max-w-[480px] px-[14px] py-[10px] text-[15px] leading-[1.45] break-words outline-none whitespace-pre-wrap"
+            style={{ minHeight, minWidth: '160px', background: '#182533', color: '#e6ebef' }}
             contentEditable
             suppressContentEditableWarning
             onInput={emit}
