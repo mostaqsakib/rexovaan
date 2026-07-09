@@ -275,7 +275,7 @@ Deno.serve(async (req) => {
       .eq("status", "pending")
       .lt("expires_at", new Date().toISOString());
 
-    return json({ ok: true, scanned, credited, latest, safeTo, fromBlock });
+    return json({ ok: true, scanned, credited, fakes, latest, safeTo, fromBlock });
   } catch (e) {
     console.error("watcher error", e);
     return json({ error: (e as Error).message }, 500);
