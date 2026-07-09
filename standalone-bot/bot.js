@@ -5127,7 +5127,54 @@ async function handleMessage(message, emojiMap) {
     if (!result.ok || !result.url) {
       await sendMessage(chatId, `❌ Cryptomus checkout could not be created: ${escapeHtml(result.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
       return;
+  }
+
+  if (customer.pending_action?.startsWith("bep20_deposit_amount") && text && !text.startsWith("/")) {
+    const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>1 USDT</b>.");
+      return;
     }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    try {
+      const res = await fetch(`${supabaseUrl}/functions/v1/bep20-reserve-address`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${supabaseServiceKey}` },
+        body: JSON.stringify({ customer_id: customer.id, expected_amount: amountUSD, token: "ANY" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.address) {
+        await sendMessage(chatId, `❌ Could not reserve address: ${escapeHtml(data.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
+        return;
+      }
+      const expiresMin = Math.max(1, Math.round((new Date(data.expires_at).getTime() - Date.now()) / 60000));
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(data.address)}`;
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: qrUrl,
+          caption:
+            `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n` +
+            `💵 Amount: <b>${amountUSD.toFixed(2)} USDT/USDC</b>\n` +
+            `⏱ Expires in: <b>${expiresMin} min</b>\n\n` +
+            `📥 <b>Send to this address (BSC / BEP20):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n` +
+            `✅ Any amount will be credited exactly as received.\n` +
+            `✅ USDT or USDC — both accepted on this address.\n` +
+            `⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\n` +
+            `Auto-verified after 3 confirmations (~9 sec).`,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: [[{ text: "◀️ Back to Menu", callback_data: "main_menu" }]] },
+        }),
+      });
+    } catch (e) {
+      await sendMessage(chatId, `❌ Reserve failed: ${escapeHtml(String(e))}`, mainMenuKeyboard(emojiMap));
+    }
+    return;
+  }
+
 
     await sendMessage(
       chatId,
