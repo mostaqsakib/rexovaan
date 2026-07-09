@@ -99,13 +99,14 @@ const OnChainActivityTab = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [tab, setTab] = useState<'ledger' | 'addresses' | 'fake'>('ledger');
+  const [tab, setTab] = useState<'ledger' | 'fake'>('ledger');
   const [q, setQ] = useState('');
   const [tokenFilter, setTokenFilter] = useState<'all' | 'USDT' | 'USDC'>('all');
   const [sweepFilter, setSweepFilter] = useState<'all' | 'swept' | 'pending' | 'error'>('all');
   const [lookupHash, setLookupHash] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupResult, setLookupResult] = useState<string | null>(null);
+
 
   const load = async () => {
     setRefreshing(true);
@@ -257,6 +258,11 @@ const OnChainActivityTab = () => {
         tx_hash: r.tx_hash,
         amount: Number(r.amount || 0),
         depositAmount: Number(r.amount || 0),
+        expected: Number(match?.expected_amount || 0),
+        received: Number(match?.received_amount || r.amount || 0),
+        status: match?.status || 'paid',
+        sweep_status: match?.sweep_status || null,
+        sweep_tx_hash: match?.sweep_tx_hash || null,
         customer: custLabel(match?.customer_id),
       };
     });
@@ -283,6 +289,11 @@ const OnChainActivityTab = () => {
           tx_hash: r.tx_hash,
           amount: Number(r.amount || 0),
           depositAmount,
+          expected: Number(match?.expected_amount || 0),
+          received: Number(match?.received_amount || 0),
+          status: match?.status || 'pending',
+          sweep_status: match?.sweep_status || null,
+          sweep_tx_hash: match?.sweep_tx_hash || null,
           customer: custLabel(r.customer_id || match?.customer_id || (r.deposit_id ? deposits[r.deposit_id]?.customer_id : null)),
         };
       });
@@ -292,6 +303,11 @@ const OnChainActivityTab = () => {
     );
     return combined.filter((r) => {
       if (tokenFilter !== 'all' && r.kind === 'credited' && r.token !== tokenFilter) return false;
+      if (sweepFilter !== 'all') {
+        if (sweepFilter === 'swept' && r.sweep_status !== 'swept') return false;
+        if (sweepFilter === 'pending' && r.sweep_status === 'swept') return false;
+        if (sweepFilter === 'error' && r.sweep_status !== 'error') return false;
+      }
       if (!q) return true;
       const n = q.toLowerCase();
       return (
@@ -302,7 +318,8 @@ const OnChainActivityTab = () => {
         (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, fakes, reserved, customers, deposits, q, tokenFilter]);
+  }, [registry, fakes, reserved, customers, deposits, q, tokenFilter, sweepFilter]);
+
 
 
 
@@ -424,54 +441,39 @@ const OnChainActivityTab = () => {
         )}
       </Card>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2">
-        <TabPill active={tab === 'ledger'} onClick={() => setTab('ledger')}
-          icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-          label="On-chain log" count={registry.length + fakes.length} />
-        <TabPill active={tab === 'addresses'} onClick={() => setTab('addresses')}
-          icon={<Wallet className="h-3.5 w-3.5" />}
-          label="Per-order addresses" count={reserved.length} />
-      </div>
-
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Search tx, address, contract, deposit id…"
+            placeholder="Search tx, address, customer, token…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        {tab === 'ledger' && (
-          <Select value={tokenFilter} onValueChange={(v: any) => setTokenFilter(v)}>
-            <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All tokens</SelectItem>
-              <SelectItem value="USDT">USDT</SelectItem>
-              <SelectItem value="USDC">USDC</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-        {tab === 'addresses' && (
-          <Select value={sweepFilter} onValueChange={(v: any) => setSweepFilter(v)}>
-            <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All sweep states</SelectItem>
-              <SelectItem value="swept">Swept</SelectItem>
-              <SelectItem value="pending">Awaiting sweep</SelectItem>
-              <SelectItem value="error">Sweep error</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
+        <Select value={tokenFilter} onValueChange={(v: any) => setTokenFilter(v)}>
+          <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All tokens</SelectItem>
+            <SelectItem value="USDT">USDT</SelectItem>
+            <SelectItem value="USDC">USDC</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sweepFilter} onValueChange={(v: any) => setSweepFilter(v)}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sweep states</SelectItem>
+            <SelectItem value="swept">Swept</SelectItem>
+            <SelectItem value="pending">Awaiting sweep</SelectItem>
+            <SelectItem value="error">Sweep error</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Content */}
-      {tab === 'ledger' && <LedgerTable rows={filteredRegistry} />}
-      {tab === 'addresses' && <AddressesTable rows={filteredReserved} customers={customers} />}
-      {tab === 'fake' && <FakeTable rows={filteredFakes} customers={customers} />}
+      <LedgerTable rows={filteredRegistry} />
+
     </div>
   );
 };
@@ -514,6 +516,11 @@ type LedgerRow = {
   tx_hash: string;
   amount: number;
   depositAmount?: number;
+  expected?: number;
+  received?: number;
+  status?: string;
+  sweep_status?: string | null;
+  sweep_tx_hash?: string | null;
   contract?: string | null;
   customer?: string;
 };
@@ -527,17 +534,19 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
             <tr>
               <th className="px-3 py-2">Time</th>
               <th className="px-3 py-2">Customer</th>
+              <th className="px-3 py-2">Address</th>
               <th className="px-3 py-2">Token</th>
-              <th className="px-3 py-2 text-right">Amount (USDT)</th>
-              <th className="px-3 py-2">Contract</th>
-              <th className="px-3 py-2">To (Gateway)</th>
+              <th className="px-3 py-2 text-right">Expected</th>
+              <th className="px-3 py-2 text-right">Received</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Sweep</th>
               <th className="px-3 py-2">From</th>
               <th className="px-3 py-2">Tx</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No records</td></tr>
+              <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No records</td></tr>
             )}
             {rows.map((r) => {
               const isIgnored = r.kind === 'ignored';
@@ -547,6 +556,12 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                     {new Date(r.date).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">{r.customer || '—'}</td>
+                  <td className="px-3 py-2 font-mono">
+                    <a href={`${BSCSCAN}/address/${r.address}`} target="_blank" rel="noreferrer"
+                       className="text-primary hover:underline" title={r.address}>
+                      {short(r.address, 6)}
+                    </a>
+                  </td>
                   <td className="px-3 py-2">
                     {isIgnored ? (
                       <Badge variant="outline" className="border-destructive/40 bg-destructive/10 text-destructive">
@@ -558,31 +573,20 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                       </Badge>
                     )}
                   </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">
+                    {r.expected && r.expected > 0 ? r.expected.toFixed(2) : '—'}
+                  </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
-                    {r.depositAmount && r.depositAmount > 0 ? (
+                    {r.received && r.received > 0 ? (
                       <span className={`font-semibold ${isIgnored ? 'text-warning' : 'text-success'}`}>
-                        {r.depositAmount.toFixed(2)}
-                        <span className="ml-1 text-[10px] font-normal opacity-70">USDT</span>
+                        {r.received.toFixed(2)}
                       </span>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 font-mono">
-                    {r.contract ? (
-                      <a href={`${BSCSCAN}/token/${r.contract}`} target="_blank" rel="noreferrer"
-                         className="text-muted-foreground hover:text-primary" title={r.contract}>
-                        {short(r.contract, 6)}
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground/60">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono">
-                    <button onClick={() => copy(r.address)} className="hover:text-primary" title={r.address}>
-                      {short(r.address, 6)}
-                    </button>
-                  </td>
+                  <td className="px-3 py-2"><StatusBadge status={r.status || 'pending'} /></td>
+                  <td className="px-3 py-2"><SweepBadge status={r.sweep_status || null} txHash={r.sweep_tx_hash || null} /></td>
                   <td className="px-3 py-2 font-mono">
                     {r.from ? (
                       <a href={`${BSCSCAN}/address/${r.from}`} target="_blank" rel="noreferrer"
@@ -608,6 +612,7 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
     </CardContent>
   </Card>
 );
+
 
 
 const AddressesTable = ({ rows, customers }: { rows: ReservedRow[]; customers: Record<string, CustomerLite> }) => (
