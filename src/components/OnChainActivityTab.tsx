@@ -433,13 +433,27 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                     {new Date(r.date).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant="outline" className={
-                      isIgnored
-                        ? "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
-                        : "border-primary/40 bg-primary/5 text-primary"
-                    }>
-                      {r.token} · BEP20
-                    </Badge>
+                    {isIgnored ? (
+                      <div className="flex flex-col gap-0.5">
+                        <Badge variant="outline" className="w-fit border-warning/40 bg-warning/10 text-warning">
+                          {r.token}
+                        </Badge>
+                        {r.contract && (
+                          <a
+                            href={`${BSCSCAN}/token/${r.contract}`}
+                            target="_blank" rel="noreferrer"
+                            className="font-mono text-[10px] text-muted-foreground hover:text-primary"
+                            title={r.contract}
+                          >
+                            {short(r.contract, 6)}
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary">
+                        {r.token} · BEP20
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono">
                     <button onClick={() => copy(r.address)} className="hover:text-primary">
@@ -455,8 +469,19 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                       {short(r.tx_hash, 8)}
                     </a>
                   </td>
-                  <td className={`px-3 py-2 text-right font-semibold ${isIgnored ? 'text-muted-foreground line-through' : 'text-success'}`}>
-                    {Number(r.amount).toFixed(2)}
+                  <td className="px-3 py-2 text-right">
+                    {isIgnored ? (
+                      <div className="flex flex-col items-end leading-tight">
+                        <span className="font-semibold text-warning" title="Raw token units — decimals unknown for unsupported tokens">
+                          {formatRaw(r.amount)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">raw units</span>
+                      </div>
+                    ) : (
+                      <span className="font-semibold text-success">
+                        {Number(r.amount).toFixed(2)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {isIgnored ? (
