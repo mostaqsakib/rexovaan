@@ -1,0 +1,1 @@
+UPDATE public.evm_chain_state SET last_block = 89952380, last_error = NULL WHERE chain = 'polygon';
