@@ -66,6 +66,23 @@ const BSCSCAN = 'https://bscscan.com';
 const short = (s: string | null | undefined, len = 10) =>
   !s ? '' : s.length > len + 6 ? `${s.slice(0, len)}…${s.slice(-6)}` : s;
 
+// Fake/scam tokens often have mojibake symbols (UTF-8 read as latin-1).
+// Strip unprintable chars; if nothing usable is left, fall back to "Unknown".
+const sanitizeSymbol = (raw: string | null | undefined): string => {
+  if (!raw) return 'Unknown';
+  // eslint-disable-next-line no-control-regex
+  const cleaned = raw.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  const printable = cleaned.replace(/[^\x20-\x7E]/g, '').trim();
+  if (printable.length >= 2) return printable.slice(0, 12);
+  return 'Unknown';
+};
+
+const formatRaw = (n: number): string => {
+  if (!isFinite(n)) return '—';
+  if (n >= 1e6) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return n.toLocaleString();
+};
+
 const copy = (text: string) => {
   navigator.clipboard.writeText(text);
   toast.success('Copied');
@@ -164,7 +181,7 @@ const OnChainActivityTab = () => {
       id: r.id,
       kind: 'ignored' as const,
       date: r.created_at,
-      token: r.token_symbol || 'UNKNOWN',
+      token: sanitizeSymbol(r.token_symbol),
       address: r.address,
       tx_hash: r.tx_hash,
       amount: Number(r.amount || 0),
@@ -422,13 +439,27 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                     {new Date(r.date).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant="outline" className={
-                      isIgnored
-                        ? "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
-                        : "border-primary/40 bg-primary/5 text-primary"
-                    }>
-                      {r.token} · BEP20
-                    </Badge>
+                    {isIgnored ? (
+                      <div className="flex flex-col gap-0.5">
+                        <Badge variant="outline" className="w-fit border-warning/40 bg-warning/10 text-warning">
+                          {r.token}
+                        </Badge>
+                        {r.contract && (
+                          <a
+                            href={`${BSCSCAN}/token/${r.contract}`}
+                            target="_blank" rel="noreferrer"
+                            className="font-mono text-[10px] text-muted-foreground hover:text-primary"
+                            title={r.contract}
+                          >
+                            {short(r.contract, 6)}
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary">
+                        {r.token} · BEP20
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono">
                     <button onClick={() => copy(r.address)} className="hover:text-primary">
@@ -444,8 +475,19 @@ const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
                       {short(r.tx_hash, 8)}
                     </a>
                   </td>
-                  <td className={`px-3 py-2 text-right font-semibold ${isIgnored ? 'text-muted-foreground line-through' : 'text-success'}`}>
-                    {Number(r.amount).toFixed(2)}
+                  <td className="px-3 py-2 text-right">
+                    {isIgnored ? (
+                      <div className="flex flex-col items-end leading-tight">
+                        <span className="font-semibold text-warning" title="Raw token units — decimals unknown for unsupported tokens">
+                          {formatRaw(r.amount)}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">raw units</span>
+                      </div>
+                    ) : (
+                      <span className="font-semibold text-success">
+                        {Number(r.amount).toFixed(2)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {isIgnored ? (
