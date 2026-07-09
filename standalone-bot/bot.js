@@ -2614,7 +2614,9 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `cryptomus_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
+    }
   } else if (paymentType === "bep20" || methodName.includes("bep20 auto") || methodName.includes("usdt/usdc bep20")) {
+
     msg += `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n`;
     msg += `💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n`;
     msg += `<i>Minimum: 1 USDT</i>\n\n`;
