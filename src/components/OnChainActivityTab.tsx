@@ -56,11 +56,13 @@ type FakeRow = {
   block_number: number | null;
   reserved_address_id: string | null;
   customer_id: string | null;
+  deposit_id: string | null;
   reason: string;
   created_at: string;
 };
 
 type CustomerLite = { id: string; chat_id: number | null; username: string | null; first_name: string | null };
+type DepositLite = { id: string; amount: number | null; customer_id: string | null };
 
 const BSCSCAN = 'https://bscscan.com';
 const short = (s: string | null | undefined, len = 10) =>
@@ -93,6 +95,7 @@ const OnChainActivityTab = () => {
   const [reserved, setReserved] = useState<ReservedRow[]>([]);
   const [fakes, setFakes] = useState<FakeRow[]>([]);
   const [customers, setCustomers] = useState<Record<string, CustomerLite>>({});
+  const [deposits, setDeposits] = useState<Record<string, DepositLite>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -106,19 +109,66 @@ const OnChainActivityTab = () => {
 
   const load = async () => {
     setRefreshing(true);
-    const [reg, res, fk] = await Promise.all([
+    const [reg, recentRes, fk] = await Promise.all([
       supabase.from('bep20_payment_registry').select('*').order('credited_at', { ascending: false }).limit(500),
       supabase.from('bep20_reserved_addresses').select('*').order('created_at', { ascending: false }).limit(500),
       supabase.from('bep20_fake_transactions').select('*').order('created_at', { ascending: false }).limit(500),
     ]);
     if (reg.error) toast.error(reg.error.message);
-    setRegistry((reg.data || []) as RegistryRow[]);
-    setReserved((res.data || []) as ReservedRow[]);
-    setFakes((fk.data || []) as FakeRow[]);
+    if (recentRes.error) toast.error(recentRes.error.message);
+    if (fk.error) toast.error(fk.error.message);
+
+    const regRows = (reg.data || []) as RegistryRow[];
+    const fakeRows = (fk.data || []) as FakeRow[];
+    const recentReservedRows = (recentRes.data || []) as ReservedRow[];
+
+    const neededReservedIds = new Set<string>();
+    const neededAddresses = new Set<string>();
+    [...regRows, ...fakeRows].forEach((r: any) => {
+      if (r.reserved_address_id) neededReservedIds.add(r.reserved_address_id);
+      if (r.address) neededAddresses.add(String(r.address).toLowerCase());
+    });
+
+    const [byId, byAddress] = await Promise.all([
+      neededReservedIds.size
+        ? supabase.from('bep20_reserved_addresses').select('*').in('id', Array.from(neededReservedIds))
+        : Promise.resolve({ data: [], error: null }),
+      neededAddresses.size
+        ? supabase.from('bep20_reserved_addresses').select('*').in('address', Array.from(neededAddresses))
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (byId.error) toast.error(byId.error.message);
+    if (byAddress.error) toast.error(byAddress.error.message);
+
+    const reservedMap = new Map<string, ReservedRow>();
+    [...recentReservedRows, ...((byId.data || []) as ReservedRow[]), ...((byAddress.data || []) as ReservedRow[])]
+      .forEach((r) => reservedMap.set(r.id, r));
+    const reservedRows = Array.from(reservedMap.values());
+
+    const depositIds = new Set<string>();
+    [...regRows, ...fakeRows, ...reservedRows].forEach((r: any) => {
+      if (r.deposit_id) depositIds.add(r.deposit_id);
+    });
+    if (depositIds.size) {
+      const { data: dData, error: dErr } = await supabase
+        .from('bot_deposits')
+        .select('id, amount, customer_id')
+        .in('id', Array.from(depositIds));
+      if (dErr) toast.error(dErr.message);
+      const dMap: Record<string, DepositLite> = {};
+      (dData || []).forEach((d: any) => { dMap[d.id] = { ...d, amount: Number(d.amount || 0) }; });
+      setDeposits(dMap);
+    } else {
+      setDeposits({});
+    }
+
+    setRegistry(regRows);
+    setReserved(reservedRows);
+    setFakes(fakeRows);
 
     const custIds = new Set<string>();
-    (res.data || []).forEach((r: any) => r.customer_id && custIds.add(r.customer_id));
-    (fk.data || []).forEach((r: any) => r.customer_id && custIds.add(r.customer_id));
+    reservedRows.forEach((r: any) => r.customer_id && custIds.add(r.customer_id));
+    fakeRows.forEach((r: any) => r.customer_id && custIds.add(r.customer_id));
     if (custIds.size) {
       const { data: cData } = await supabase
         .from('bot_customers')
@@ -175,6 +225,16 @@ const OnChainActivityTab = () => {
       if (!reservedByAddress.has(key)) reservedByAddress.set(key, r);
     });
 
+    const getDepositUsd = (match: ReservedRow | undefined, depositId: string | null | undefined, fallback = 0) => {
+      const fromReserved = Number(match?.expected_amount || 0);
+      if (fromReserved > 0) return fromReserved;
+      const fromReceived = Number(match?.received_amount || 0);
+      if (fromReceived > 0) return fromReceived;
+      const fromDeposit = depositId ? Number(deposits[depositId]?.amount || 0) : 0;
+      if (fromDeposit > 0) return fromDeposit;
+      return Number(fallback || 0);
+    };
+
     const custLabel = (id: string | null | undefined) => {
       if (!id) return '—';
       const c = customers[id];
@@ -186,7 +246,7 @@ const OnChainActivityTab = () => {
       const match = r.reserved_address_id
         ? reservedById.get(r.reserved_address_id)
         : reservedByAddress.get(r.address.toLowerCase());
-      const depositAmount = Number(match?.expected_amount || r.amount || 0);
+      const depositAmount = getDepositUsd(match, r.deposit_id, r.amount);
       return {
         id: r.id,
         kind: 'credited' as const,
@@ -206,7 +266,7 @@ const OnChainActivityTab = () => {
       const match = r.reserved_address_id
         ? reservedById.get(r.reserved_address_id)
         : reservedByAddress.get(r.address.toLowerCase());
-      const depositAmount = Number(match?.expected_amount || match?.received_amount || 0);
+      const depositAmount = getDepositUsd(match, r.deposit_id);
       return {
         id: r.id,
         kind: 'ignored' as const,
@@ -218,7 +278,7 @@ const OnChainActivityTab = () => {
         tx_hash: r.tx_hash,
         amount: Number(r.amount || 0),
         depositAmount,
-        customer: custLabel(r.customer_id || match?.customer_id),
+        customer: custLabel(r.customer_id || match?.customer_id || (r.deposit_id ? deposits[r.deposit_id]?.customer_id : null)),
       };
     });
 
@@ -237,7 +297,7 @@ const OnChainActivityTab = () => {
         (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, fakes, reserved, customers, q, tokenFilter]);
+  }, [registry, fakes, reserved, customers, deposits, q, tokenFilter]);
 
 
   const filteredReserved = useMemo(() => {
