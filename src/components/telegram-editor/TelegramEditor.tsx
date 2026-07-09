@@ -210,17 +210,24 @@ export function TelegramEditor({
   };
 
   const insertCustomEmoji = (id: string, fallback: string) => {
+    const fb = fallback || '😀';
     const span = document.createElement('span');
     span.className = 'tge-emoji';
     span.setAttribute('contenteditable', 'false');
     span.setAttribute('data-emoji-id', id);
-    span.setAttribute('data-fallback', fallback || '😀');
-    span.textContent = fallback || '😀';
+    span.setAttribute('data-fallback', fb);
+    const mount = document.createElement('span');
+    mount.className = 'tge-emoji-mount';
+    mount.setAttribute('data-fallback-text', fb);
+    mount.textContent = fb;
+    span.appendChild(mount);
     // Insert with a trailing space so caret sits nicely
     const frag = document.createDocumentFragment();
     frag.appendChild(span);
     frag.appendChild(document.createTextNode('\u00a0'));
     insertNodeAtCursor(frag);
+    // Mount will be picked up by the effect below.
+    setTimeout(() => mountEmojiRootsRef.current?.(), 0);
   };
 
   const insertLinkNode = () => {
