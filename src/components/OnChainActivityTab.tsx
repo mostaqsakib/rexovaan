@@ -90,6 +90,9 @@ const copy = (text: string) => {
   toast.success('Copied');
 };
 
+type GasChain = { chain: string; name: string; native: string; balance?: string; min?: string; ok?: boolean; error?: string };
+type GasStatus = { master: string; destination: string | null; chains: GasChain[] };
+
 const OnChainActivityTab = () => {
   const [registry, setRegistry] = useState<RegistryRow[]>([]);
   const [reserved, setReserved] = useState<ReservedRow[]>([]);
@@ -106,6 +109,21 @@ const OnChainActivityTab = () => {
   const [lookupHash, setLookupHash] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupResult, setLookupResult] = useState<string | null>(null);
+  const [gas, setGas] = useState<GasStatus | null>(null);
+  const [gasLoading, setGasLoading] = useState(false);
+
+  const loadGas = async () => {
+    setGasLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('bep20-gas-status');
+      if (error) throw error;
+      setGas(data as GasStatus);
+    } catch (e: any) {
+      toast.error(e.message ?? 'Gas status failed');
+    } finally {
+      setGasLoading(false);
+    }
+  };
 
 
   const load = async () => {
@@ -183,7 +201,7 @@ const OnChainActivityTab = () => {
     setRefreshing(false);
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); void loadGas(); }, []);
 
   const runScan = async () => {
     setScanning(true);
@@ -404,6 +422,70 @@ const OnChainActivityTab = () => {
           <Stat label="Active addresses" value={String(stats.activeAddrs)} />
           <Stat label="Auto-swept → main" value={`$${stats.swept.toFixed(2)}`} accent="text-primary" />
           <Stat label="Awaiting sweep" value={`$${stats.awaitingSweep.toFixed(2)}`} accent="text-warning" />
+        </CardContent>
+      </Card>
+
+      {/* Gas tanks */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Wallet className="h-4 w-4 text-primary" />
+              Gas tanks (master sweep wallet)
+            </CardTitle>
+            {gas?.master && (
+              <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                {short(gas.master, 14)}
+                <button onClick={() => copy(gas.master)} className="hover:text-foreground"><Copy className="h-3 w-3" /></button>
+              </div>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={loadGas} disabled={gasLoading}>
+            <RefreshCw className={`h-4 w-4 ${gasLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {!gas ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">
+              {gasLoading ? 'Loading…' : 'No data'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              {gas.chains.map((c) => (
+                <div
+                  key={c.chain}
+                  className={`rounded-lg border p-2.5 ${
+                    c.error
+                      ? 'border-border/60 bg-muted/30'
+                      : c.ok
+                      ? 'border-success/40 bg-success/5'
+                      : 'border-destructive/40 bg-destructive/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">{c.name}</span>
+                    {!c.error && (
+                      <Badge variant={c.ok ? 'default' : 'destructive'} className="h-5 px-1.5 text-[10px]">
+                        {c.ok ? 'OK' : 'LOW'}
+                      </Badge>
+                    )}
+                  </div>
+                  {c.error ? (
+                    <div className="mt-1 text-[10px] text-muted-foreground">{c.error}</div>
+                  ) : (
+                    <>
+                      <div className="mt-1 font-mono text-sm font-semibold">
+                        {Number(c.balance).toFixed(6)} <span className="text-[10px] text-muted-foreground">{c.native}</span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">
+                        min {Number(c.min).toFixed(4)} {c.native}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
