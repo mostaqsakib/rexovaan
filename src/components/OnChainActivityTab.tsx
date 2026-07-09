@@ -151,17 +151,40 @@ const OnChainActivityTab = () => {
   };
 
   const filteredRegistry = useMemo(() => {
-    return registry.filter((r) => {
-      if (tokenFilter !== 'all' && r.token !== tokenFilter) return false;
+    const credited: any[] = registry.map((r) => ({
+      id: r.id,
+      kind: 'credited' as const,
+      date: r.credited_at,
+      token: r.token,
+      address: r.address,
+      tx_hash: r.tx_hash,
+      amount: Number(r.amount || 0),
+    }));
+    const ignored: any[] = fakes.map((r) => ({
+      id: r.id,
+      kind: 'ignored' as const,
+      date: r.created_at,
+      token: r.token_symbol || 'UNKNOWN',
+      address: r.address,
+      tx_hash: r.tx_hash,
+      amount: Number(r.amount || 0),
+      contract: r.contract,
+    }));
+    const combined = [...credited, ...ignored].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    return combined.filter((r) => {
+      if (tokenFilter !== 'all' && r.kind === 'credited' && r.token !== tokenFilter) return false;
       if (!q) return true;
       const n = q.toLowerCase();
       return (
         r.tx_hash.toLowerCase().includes(n) ||
         r.address.toLowerCase().includes(n) ||
-        (r.deposit_id || '').toLowerCase().includes(n)
+        (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, q, tokenFilter]);
+  }, [registry, fakes, q, tokenFilter]);
+
 
   const filteredReserved = useMemo(() => {
     return reserved.filter((r) => {
