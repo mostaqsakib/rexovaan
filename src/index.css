@@ -169,15 +169,16 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 0.85em;
     color: inherit;
-    background: hsl(var(--muted));
+    background: rgba(0,0,0,0.08);
     padding: 0.1em 0.4em;
     border-radius: 0.35rem;
-    border: 1px solid hsl(var(--border));
+    border: 1px solid rgba(0,0,0,0.1);
   }
   .tg-content pre {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
+    color: inherit;
+    background: rgba(0,0,0,0.08);
+    border: 1px solid rgba(0,0,0,0.1);
     padding: 0.75rem 1rem;
     border-radius: 0.6rem;
     overflow-x: auto;
@@ -187,13 +188,13 @@
   .tg-content blockquote {
     margin: 0;
     padding: 0.6rem 0.9rem;
-    border-left: 3px solid hsl(var(--primary));
-    background: hsl(var(--primary) / 0.07);
+    border-left: 3px solid #2481cc;
+    background: rgba(36,129,204,0.08);
     border-radius: 0.5rem;
-    color: hsl(var(--foreground) / 0.92);
+    color: inherit;
   }
   .tg-content blockquote + blockquote { margin-top: 0.6rem; }
-  .tg-content blockquote b { color: hsl(var(--foreground)); }
+  .tg-content blockquote b { color: inherit; }
 }
 
 @layer utilities {
