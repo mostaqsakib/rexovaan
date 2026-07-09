@@ -60,11 +60,13 @@ Deno.serve(async (req) => {
     }
 
 
-    // 2) fetch sticker metadata from Telegram (batched, 200 max per docs)
-    const stickers: any[] = await tg('getCustomEmojiStickers', { custom_emoji_ids: missing });
+    // Cap fetch batch to keep storage pressure low; the rest retry on next requests.
+    const toFetch = missing.slice(0, 25);
 
-    // 3) for each, download TGS, gunzip to lottie JSON, upload to storage
-    await Promise.all(stickers.map(async (st) => {
+    // 2) fetch sticker metadata from Telegram (batched, 200 max per docs)
+    const stickers: any[] = await tg('getCustomEmojiStickers', { custom_emoji_ids: toFetch });
+
+    const processOne = async (st: any) => {
       const id = String(st.custom_emoji_id);
       const fallback = st.emoji || null;
       const uploadEmojiFile = async (fileId: string, extension: string, contentType: string) => {
@@ -92,7 +94,6 @@ Deno.serve(async (req) => {
         }
         const fileInfo = await tg('getFile', { file_id: st.file_id });
         const tgsBytes = await downloadFile(fileInfo.file_path);
-        // TGS is usually gzipped Lottie JSON; some gateway responses are already plain JSON.
         const jsonBytes = (tgsBytes[0] === 0x1f && tgsBytes[1] === 0x8b) ? gunzipSync(tgsBytes) : tgsBytes;
         JSON.parse(strFromU8(jsonBytes));
         const path = `${id}.json`;
@@ -105,14 +106,31 @@ Deno.serve(async (req) => {
           emoji_id: id, lottie_url: pub.publicUrl, fallback, status: 'ready', fetched_at: new Date().toISOString(),
         });
         out[id] = { url: pub.publicUrl, fallback };
-      } catch (e) {
-        console.error('emoji fetch failed', id, e);
+      } catch (e: any) {
+        console.error('emoji fetch failed', id, e?.message || e);
+        // Transient (429 / connection) → keep as pending so future requests retry.
+        const isTransient = e?.status === 429 || e?.statusCode === '429' ||
+          /Too many connections|rate|timeout|ECONN/i.test(String(e?.message || ''));
         await supabase.from('bot_custom_emoji_cache').upsert({
-          emoji_id: id, lottie_url: null, fallback, status: 'failed', fetched_at: new Date().toISOString(),
+          emoji_id: id, lottie_url: null, fallback,
+          status: isTransient ? 'pending' : 'failed',
+          fetched_at: new Date().toISOString(),
         });
         out[id] = { url: null, fallback };
       }
-    }));
+    };
+
+    // Small concurrency pool to avoid Supabase Storage 429 (Too many connections).
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    const workers = Array.from({ length: CONCURRENCY }, async () => {
+      while (cursor < stickers.length) {
+        const idx = cursor++;
+        await processOne(stickers[idx]);
+      }
+    });
+    await Promise.all(workers);
+
 
     return new Response(JSON.stringify({ emojis: out }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
