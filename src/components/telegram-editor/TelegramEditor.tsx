@@ -1,9 +1,11 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import EmojiPicker from './EmojiPicker';
+import { TgEmoji } from '@/components/TelegramRichText';
 import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Quote, EyeOff,
   Smile, Lightbulb, Terminal,
@@ -87,7 +89,8 @@ function deserialize(tgHtml: string): string {
     /<tg-emoji\s+emoji-id="([^"]+)"[^>]*>([\s\S]*?)<\/tg-emoji>/gi,
     (_, id, fb) => {
       const safeFb = String(fb || '😀').replace(/</g, '&lt;');
-      return `<span class="tge-emoji" contenteditable="false" data-emoji-id="${id}" data-fallback="${safeFb.replace(/"/g, '&quot;')}">${safeFb}</span>`;
+      const fbAttr = safeFb.replace(/"/g, '&quot;');
+      return `<span class="tge-emoji" contenteditable="false" data-emoji-id="${id}" data-fallback="${fbAttr}"><span class="tge-emoji-mount" data-fallback-text="${fbAttr}">${safeFb}</span></span>`;
     },
   );
   // tg-spoiler -> span.tg-spoiler
@@ -116,15 +119,53 @@ export function TelegramEditor({
   const savedSelectionRef = useRef<Range | null>(null);
   const [isEmpty, setIsEmpty] = useState(!value);
 
+  const emojiRootsRef = useRef<Map<HTMLElement, Root>>(new Map());
+  const mountEmojiRootsRef = useRef<() => void>(() => {});
+
   // Sync external value -> editor (only if different from what we produced)
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
     if (value === lastValueRef.current) return;
+    // Unmount stale roots before replacing HTML
+    emojiRootsRef.current.forEach(r => { try { r.unmount(); } catch {} });
+    emojiRootsRef.current.clear();
     el.innerHTML = deserialize(value);
     lastValueRef.current = value;
     setIsEmpty(!el.textContent && el.querySelectorAll('.tge-emoji, img').length === 0);
+    mountEmojiRootsRef.current?.();
   }, [value]);
+
+  // Mount TgEmoji React roots inside .tge-emoji-mount hosts so animated/premium
+  // emojis actually render in the WYSIWYG editor (not just the fallback char).
+  useEffect(() => {
+    const mountAll = () => {
+      const el = editorRef.current;
+      if (!el) return;
+      const hosts = el.querySelectorAll<HTMLElement>('.tge-emoji-mount');
+      hosts.forEach(host => {
+        if (emojiRootsRef.current.has(host)) return;
+        const pill = host.closest('.tge-emoji') as HTMLElement | null;
+        const id = pill?.getAttribute('data-emoji-id');
+        if (!id) return;
+        const fb = host.getAttribute('data-fallback-text') || pill?.getAttribute('data-fallback') || '😀';
+        host.textContent = '';
+        const root = createRoot(host);
+        root.render(<TgEmoji id={id} fallback={fb} size="1.2em" />);
+        emojiRootsRef.current.set(host, root);
+      });
+      // Cleanup roots whose host was removed from DOM
+      emojiRootsRef.current.forEach((root, host) => {
+        if (!el.contains(host)) { try { root.unmount(); } catch {} emojiRootsRef.current.delete(host); }
+      });
+    };
+    mountEmojiRootsRef.current = mountAll;
+    mountAll();
+    return () => {
+      emojiRootsRef.current.forEach(r => { try { r.unmount(); } catch {} });
+      emojiRootsRef.current.clear();
+    };
+  }, []);
 
   const emit = useCallback(() => {
     const el = editorRef.current;
@@ -132,6 +173,7 @@ export function TelegramEditor({
     const s = serialize(el);
     lastValueRef.current = s;
     setIsEmpty(!el.textContent && el.querySelectorAll('.tge-emoji, img').length === 0);
+    mountEmojiRootsRef.current?.();
     onChange(s);
   }, [onChange]);
 
@@ -207,17 +249,24 @@ export function TelegramEditor({
   };
 
   const insertCustomEmoji = (id: string, fallback: string) => {
+    const fb = fallback || '😀';
     const span = document.createElement('span');
     span.className = 'tge-emoji';
     span.setAttribute('contenteditable', 'false');
     span.setAttribute('data-emoji-id', id);
-    span.setAttribute('data-fallback', fallback || '😀');
-    span.textContent = fallback || '😀';
+    span.setAttribute('data-fallback', fb);
+    const mount = document.createElement('span');
+    mount.className = 'tge-emoji-mount';
+    mount.setAttribute('data-fallback-text', fb);
+    mount.textContent = fb;
+    span.appendChild(mount);
     // Insert with a trailing space so caret sits nicely
     const frag = document.createDocumentFragment();
     frag.appendChild(span);
     frag.appendChild(document.createTextNode('\u00a0'));
     insertNodeAtCursor(frag);
+    // Mount will be picked up by the effect below.
+    setTimeout(() => mountEmojiRootsRef.current?.(), 0);
   };
 
   const insertLinkNode = () => {
