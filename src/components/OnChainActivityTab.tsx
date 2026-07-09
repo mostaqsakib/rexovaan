@@ -90,6 +90,9 @@ const copy = (text: string) => {
   toast.success('Copied');
 };
 
+type GasChain = { chain: string; name: string; native: string; balance?: string; min?: string; ok?: boolean; error?: string };
+type GasStatus = { master: string; destination: string | null; chains: GasChain[] };
+
 const OnChainActivityTab = () => {
   const [registry, setRegistry] = useState<RegistryRow[]>([]);
   const [reserved, setReserved] = useState<ReservedRow[]>([]);
@@ -106,6 +109,21 @@ const OnChainActivityTab = () => {
   const [lookupHash, setLookupHash] = useState('');
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupResult, setLookupResult] = useState<string | null>(null);
+  const [gas, setGas] = useState<GasStatus | null>(null);
+  const [gasLoading, setGasLoading] = useState(false);
+
+  const loadGas = async () => {
+    setGasLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('bep20-gas-status');
+      if (error) throw error;
+      setGas(data as GasStatus);
+    } catch (e: any) {
+      toast.error(e.message ?? 'Gas status failed');
+    } finally {
+      setGasLoading(false);
+    }
+  };
 
 
   const load = async () => {
