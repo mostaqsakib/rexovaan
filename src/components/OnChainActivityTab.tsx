@@ -291,7 +291,7 @@ const OnChainActivityTab = () => {
           label="Per-order addresses" count={reserved.length} />
         <TabPill active={tab === 'fake'} onClick={() => setTab('fake')}
           icon={<ShieldAlert className="h-3.5 w-3.5" />}
-          label="Fake transactions" count={fakes.length}
+          label="Unsupported / Scam tokens" count={fakes.length}
           tone={fakes.length > 0 ? 'destructive' : undefined} />
       </div>
 
