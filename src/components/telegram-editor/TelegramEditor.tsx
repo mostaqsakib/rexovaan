@@ -1,9 +1,11 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import EmojiPicker from './EmojiPicker';
+import { TgEmoji } from '@/components/TelegramRichText';
 import {
   Bold, Italic, Underline, Strikethrough, Code, Link2, Quote, EyeOff,
   Smile, Lightbulb, Terminal,
