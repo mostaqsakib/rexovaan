@@ -5151,9 +5151,9 @@ async function handleMessage(message, emojiMap) {
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
 
     try {
-      const res = await fetch(`${supabaseUrl}/functions/v1/bep20-reserve-address`, {
+      const res = await fetch(`${process.env.SUPABASE_URL}/functions/v1/bep20-reserve-address`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${supabaseServiceKey}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
         body: JSON.stringify({ customer_id: customer.id, expected_amount: amountUSD, token: "ANY" }),
       });
       const data = await res.json();
