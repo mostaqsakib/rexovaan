@@ -143,7 +143,7 @@ const OnChainActivityTab = () => {
       const known = registry.find((r) => r.tx_hash.toLowerCase() === h.toLowerCase());
       const fake = fakes.find((r) => r.tx_hash.toLowerCase() === h.toLowerCase());
       if (known) setLookupResult(`✅ Credited: ${known.amount} ${known.token} → ${short(known.address)}`);
-      else if (fake) setLookupResult(`⚠️ Fake / unsupported token detected: ${fake.token_symbol || fake.contract}`);
+      else if (fake) setLookupResult(`⚠️ Unsupported / scam token detected: ${fake.token_symbol || fake.contract}`);
       else setLookupResult('No local record. Open on BscScan for on-chain details.');
     } finally {
       setLookupBusy(false);
@@ -291,7 +291,7 @@ const OnChainActivityTab = () => {
           label="Per-order addresses" count={reserved.length} />
         <TabPill active={tab === 'fake'} onClick={() => setTab('fake')}
           icon={<ShieldAlert className="h-3.5 w-3.5" />}
-          label="Fake transactions" count={fakes.length}
+          label="Unsupported / Scam tokens" count={fakes.length}
           tone={fakes.length > 0 ? 'destructive' : undefined} />
       </div>
 
@@ -485,11 +485,12 @@ const FakeTable = ({ rows, customers }: { rows: FakeRow[]; customers: Record<str
     <CardHeader className="pb-2">
       <CardTitle className="flex items-center gap-2 text-sm text-destructive">
         <ShieldAlert className="h-4 w-4" />
-        Fake / Unsupported tokens detected
+        Unsupported / Scam tokens detected
       </CardTitle>
       <p className="text-[11px] text-muted-foreground">
-        These transfers reached a gateway address but the contract is NOT a whitelisted stablecoin.
-        Nothing is credited — listed here for audit only.
+        These transfers reached a gateway address but the contract is NOT a whitelisted stablecoin (USDT/USDC).
+        Usually unsolicited scam-airdrop tokens sent by bots to trick users into interacting with malicious contracts.
+        Nothing is credited — listed here for audit only. <strong>Do not interact with these contracts.</strong>
       </p>
     </CardHeader>
     <CardContent className="p-0">
@@ -510,7 +511,7 @@ const FakeTable = ({ rows, customers }: { rows: FakeRow[]; customers: Record<str
           <tbody>
             {rows.length === 0 && (
               <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
-                No fake transactions detected 🎉
+                No unsupported/scam tokens detected 🎉
               </td></tr>
             )}
             {rows.map((r) => {
