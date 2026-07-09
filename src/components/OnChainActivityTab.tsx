@@ -511,7 +511,7 @@ const FakeTable = ({ rows, customers }: { rows: FakeRow[]; customers: Record<str
           <tbody>
             {rows.length === 0 && (
               <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
-                No fake transactions detected 🎉
+                No unsupported/scam tokens detected 🎉
               </td></tr>
             )}
             {rows.map((r) => {
