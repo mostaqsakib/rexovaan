@@ -145,7 +145,7 @@ export function TgEmoji({ id, fallback, size = '1.25em' }: { id: string; fallbac
       if (lottieData) {
         return (
           <Suspense fallback={<span className="tg-emoji-fallback" aria-label={text}>{text}</span>}>
-            <span style={style} aria-label={text}>
+            <span className="tg-emoji-media" style={style} aria-label={text}>
               <Lottie animationData={lottieData} loop autoplay style={{ width: '100%', height: '100%' }} />
             </span>
           </Suspense>
@@ -157,11 +157,12 @@ export function TgEmoji({ id, fallback, size = '1.25em' }: { id: string; fallbac
           src={info.url}
           autoPlay loop muted playsInline
           aria-label={text}
+          className="tg-emoji-media"
           style={style}
         />
       );
     } else {
-      return <img src={info.url} alt={text} style={style} loading="eager" decoding="async" />;
+      return <img className="tg-emoji-media" src={info.url} alt={text} style={style} loading="eager" decoding="async" />;
     }
   }
   return <span className="tg-emoji-fallback" aria-label={text}>{text}</span>;

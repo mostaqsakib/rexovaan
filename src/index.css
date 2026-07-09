@@ -163,22 +163,22 @@
   .tg-content i, .tg-content em { font-style: italic; }
   .tg-content u { text-decoration: underline; }
   .tg-content s, .tg-content strike, .tg-content del { text-decoration: line-through; opacity: 0.75; }
-  .tg-content a { color: #2481cc; text-decoration: underline; text-underline-offset: 2px; }
+  .tg-content a { color: var(--tg-link, #2481cc); text-decoration: underline; text-underline-offset: 2px; }
   .tg-content a:hover { opacity: 0.85; }
   .tg-content code {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 0.85em;
     color: inherit;
-    background: rgba(0,0,0,0.08);
+    background: var(--tg-code-bg, rgba(0,0,0,0.08));
     padding: 0.1em 0.4em;
     border-radius: 0.35rem;
-    border: 1px solid rgba(0,0,0,0.1);
+    border: 1px solid var(--tg-code-border, rgba(0,0,0,0.1));
   }
   .tg-content pre {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     color: inherit;
-    background: rgba(0,0,0,0.08);
-    border: 1px solid rgba(0,0,0,0.1);
+    background: var(--tg-code-bg, rgba(0,0,0,0.08));
+    border: 1px solid var(--tg-code-border, rgba(0,0,0,0.1));
     padding: 0.75rem 1rem;
     border-radius: 0.6rem;
     overflow-x: auto;
@@ -188,13 +188,49 @@
   .tg-content blockquote {
     margin: 0;
     padding: 0.6rem 0.9rem;
-    border-left: 3px solid #2481cc;
-    background: rgba(36,129,204,0.08);
+    border-left: 3px solid var(--tg-link, #2481cc);
+    background: var(--tg-quote-bg, rgba(36,129,204,0.08));
     border-radius: 0.5rem;
     color: inherit;
   }
   .tg-content blockquote + blockquote { margin-top: 0.6rem; }
   .tg-content blockquote b { color: inherit; }
+  .tg-emoji-media,
+  .tg-emoji-fallback {
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  }
+
+  .telegram-editor-textarea {
+    background: #17212b;
+    color: #eef4fb;
+  }
+  .telegram-editor-textarea::placeholder { color: #7d8b99; }
+  .telegram-preview-panel {
+    background: #0e1621;
+    border-color: rgba(255,255,255,0.08);
+  }
+  .telegram-preview-label { color: #8e9ba8; }
+  .telegram-preview-bubble {
+    position: relative;
+    border-radius: 12px 12px 12px 4px;
+    background: #1f2c39;
+    color: #eef4fb;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.035);
+    --tg-link: #66b9ff;
+    --tg-code-bg: rgba(255,255,255,0.10);
+    --tg-code-border: rgba(255,255,255,0.14);
+    --tg-quote-bg: rgba(102,185,255,0.10);
+  }
+  .telegram-preview-bubble::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    bottom: 0;
+    width: 12px;
+    height: 14px;
+    background: #1f2c39;
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  }
 }
 
 @layer utilities {
