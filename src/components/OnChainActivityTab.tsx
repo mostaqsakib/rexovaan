@@ -215,7 +215,7 @@ const OnChainActivityTab = () => {
 
   return (
     <div className="space-y-6">
-      <Bep20MessagesCard />
+
 
       {/* Hero / summary */}
       <Card className="border-border/60 bg-gradient-to-br from-primary/5 via-background to-background">
