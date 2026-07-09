@@ -18,8 +18,9 @@ Deno.serve(async (req) => {
     const t = String(token).toUpperCase();
     if (!["USDT", "USDC", "ANY"].includes(t)) return json({ error: "token must be USDT|USDC|ANY" }, 400);
 
-    const xpub = Deno.env.get("BSC_XPUB");
-    if (!xpub) return json({ error: "BSC_XPUB not configured" }, 500);
+    const xpub = Deno.env.get("BSC_SWEEP_XPUB") || Deno.env.get("BSC_XPUB");
+    if (!xpub) return json({ error: "BSC_SWEEP_XPUB not configured" }, 500);
+
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
