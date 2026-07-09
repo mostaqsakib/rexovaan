@@ -57,7 +57,7 @@ export const CHAINS: Record<ChainId, ChainCfg> = {
     rpcEnvKey: "POLYGON_RPC_URL",
     defaultRpc: "https://polygon-rpc.com",
     confirmations: 20,
-    chunkSize: 3500,
+    chunkSize: 500,
     minGasNativeWei: 500_000_000_000_000_000n, // 0.5 MATIC
     gasTopUpWei:     200_000_000_000_000_000n, // 0.2 MATIC
     explorerTx: (h) => `https://polygonscan.com/tx/${h}`,
