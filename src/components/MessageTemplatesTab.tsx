@@ -7,8 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Loader2, Save, MessageSquare, Info, RotateCcw } from 'lucide-react';
+import { Loader2, Save, MessageSquare, Info, RotateCcw, Sparkles, X } from 'lucide-react';
 import { TelegramEditor } from '@/components/telegram-editor';
+import EmojiPicker from '@/components/telegram-editor/EmojiPicker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TgEmoji } from '@/components/TelegramRichText';
 
 // ---- Template registry (matches standalone-bot/bot.js) ----
 type Section = {
@@ -185,12 +188,32 @@ function ButtonEditor({ row, onChanged }: { row: ButtonRow; onChanged: () => voi
         <Badge variant="outline" className="shrink-0 font-mono text-[10px]">{row.button_key}</Badge>
         <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Button label" className="h-8 text-sm" />
       </div>
-      <Input
-        value={emojiId}
-        onChange={(e) => setEmojiId(e.target.value.trim())}
-        placeholder="Premium emoji ID (optional)"
-        className="h-8 text-sm font-mono"
-      />
+      <div className="flex items-center gap-1.5">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="outline" size="sm" className="h-8 w-8 p-0 shrink-0" title="Pick premium emoji">
+              {emojiId ? <TgEmoji id={emojiId} size="1.1em" /> : <Sparkles className="h-3.5 w-3.5 text-primary" />}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="start" className="p-0 w-auto border-0 bg-transparent shadow-none">
+            <EmojiPicker
+              onPickUnicode={() => { /* premium only for buttons */ }}
+              onPickCustom={(id) => setEmojiId(id)}
+            />
+          </PopoverContent>
+        </Popover>
+        <Input
+          value={emojiId}
+          onChange={(e) => setEmojiId(e.target.value.trim())}
+          placeholder="Premium emoji ID"
+          className="h-8 text-sm font-mono flex-1 min-w-0"
+        />
+        {emojiId && (
+          <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => setEmojiId('')} title="Clear">
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
       <Button size="sm" variant={dirty ? 'default' : 'outline'} disabled={!dirty || saving} onClick={save} className="h-8 gap-1.5">
         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
         Save
