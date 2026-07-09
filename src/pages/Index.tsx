@@ -22,6 +22,7 @@ import SpecialPricingTab from '@/components/SpecialPricingTab';
 import PaymentMethodsTab from '@/components/PaymentMethodsTab';
 import ButtonEmojisTab from '@/components/ButtonEmojisTab';
 import BotSettingsTab from '@/components/BotSettingsTab';
+import MessageTemplatesTab from '@/components/MessageTemplatesTab';
 import ReferralStatsTab from '@/components/ReferralStatsTab';
 import ResellersTab from '@/components/ResellersTab';
 import GroupsKeywordsTab from '@/components/GroupsKeywordsTab';
@@ -196,6 +197,7 @@ const Index = () => {
             {activeTab === 'groups' && <GroupsKeywordsTab products={products} />}
             {activeTab === 'sources' && <SourcesTab />}
             {activeTab === 'announcements' && <AnnouncementsTab />}
+            {activeTab === 'msg-templates' && <MessageTemplatesTab />}
             {activeTab === 'settings' && <BotSettingsTab />}
           </main>
         </SidebarInset>

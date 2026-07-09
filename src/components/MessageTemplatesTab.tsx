@@ -1,0 +1,361 @@
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+import { Loader2, Save, MessageSquare, Info, RotateCcw } from 'lucide-react';
+import { TelegramEditor } from '@/components/telegram-editor';
+
+// ---- Template registry (matches standalone-bot/bot.js) ----
+type Section = {
+  group: string;
+  key: string;
+  title: string;
+  desc?: string;
+  default: string;
+  placeholders?: string; // hint text
+  buttons?: string[];    // button_key list in bot_button_emojis
+};
+
+const SECTIONS: Section[] = [
+  // ─── Main Flow ───
+  {
+    group: 'Main Flow', key: 'welcome_message', title: '1. Welcome / Main Menu',
+    desc: 'User /start dile ei msg + main menu buttons ashe.',
+    default: `✨ <b>Welcome to Rexovaan Shop!</b> ✨\n\n🛒 <b>Shop</b> — Browse & buy products\n💳 <b>Deposit</b> — Add funds to your wallet\n👤 <b>My Profile</b> — Balance, orders & settings\n🆘 <b>Support</b> — Get help\n🎁 <b>Refer & Earn</b> — Invite friends & earn rewards`,
+    placeholders: '{name} — User first name',
+    buttons: ['menu_shop', 'menu_deposit', 'menu_balance', 'menu_profile', 'menu_orders', 'menu_referral', 'menu_support', 'menu_withdraw', 'admin_panel'],
+  },
+  {
+    group: 'Main Flow', key: 'msg_shop', title: '2. Shop — Product List',
+    default: `🛒 <b>Available Products:</b>`,
+    buttons: ['product_item', 'back'],
+  },
+  {
+    group: 'Main Flow', key: 'msg_balance', title: '3. Balance',
+    default: `💰 <b>Your Balance:</b> {balance} USDT`,
+    placeholders: '{balance} — Current balance',
+    buttons: ['top_up_wallet', 'back'],
+  },
+  {
+    group: 'Main Flow', key: 'msg_profile', title: '4. Profile',
+    default: `👤 <b>User Profile</b>\n\n🆔 <b>ID:</b> {id}\n💰 <b>Balance:</b> {balance} USDT\n📅 <b>Joined:</b> {joined}`,
+    placeholders: '{id} • {balance} • {joined}',
+    buttons: ['profile_orders', 'profile_notifications', 'profile_stats', 'back'],
+  },
+  {
+    group: 'Main Flow', key: 'msg_notifications', title: '5. Notification Preferences',
+    default: `🔔 <b>Notifications</b>\n\nCustomize your notification preferences:`,
+    buttons: ['notif_stock', 'notif_info', 'notif_referral', 'back'],
+  },
+  {
+    group: 'Main Flow', key: 'msg_referral', title: '6. Referral',
+    default: `🎁 <b>Refer & Earn</b>\n\n👥 Referred (24h): {ref_24h}\n👥 Referred (7d): {ref_7d}\n👥 Referred (Total): {ref_total}\n\n💰 Total Earned: <b>{earned} USDT</b>\n💵 Available: <b>{available} USDT</b>\n🔄 Transferred: <b>{transferred} USDT</b>\n\n<b>Your Referral Link:</b>\n<code>{link}</code>`,
+    placeholders: '{link} {ref_24h} {ref_7d} {ref_total} {earned} {available} {transferred} {commission} {bonus}',
+    buttons: ['ref_copy', 'share_link', 'ref_transfer', 'back'],
+  },
+  {
+    group: 'Main Flow', key: 'msg_support', title: '7. Support',
+    default: `🆘 <b>Need Help?</b>\n\nContact our support team directly:`,
+    buttons: ['contact_support', 'back'],
+  },
+
+  // ─── Deposit Flow ───
+  {
+    group: 'Deposit Flow', key: 'msg_deposit', title: '8. Deposit — Method Chooser',
+    default: `💳 <b>Deposit USDT</b>\n\n💡 You can send <b>any amount</b> — it will be added to your balance.\n\nSelect a payment method below:`,
+    placeholders: '{balance}',
+    buttons: ['bkash', 'cryptomus_pay', 'deposit_method', 'back'],
+  },
+  {
+    group: 'Deposit Flow', key: 'bep20_amount_msg', title: '9. BEP20 — Amount Prompt',
+    default: `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get a <b>unique BSC address</b> just for this deposit.`,
+    buttons: ['bep20_back_menu', 'custom_amount'],
+  },
+  {
+    group: 'Deposit Flow', key: 'bep20_address_msg', title: '10. BEP20 — Address / QR Page',
+    default: `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT/USDC</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send to this address (BSC / BEP20):</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n✅ USDT or USDC — both accepted.\n⚠️ <b>BEP20 only.</b> Wrong network = lost funds.`,
+    placeholders: '{amount} {address} {expires_min}',
+    buttons: ['bep20_check_status', 'bep20_back_menu'],
+  },
+
+  // ─── Order Flow ───
+  {
+    group: 'Order Flow', key: 'msg_order_summary', title: '11. Order Summary',
+    default: `📋 <b>Order Summary</b>\n\n{product}\n🔢 Qty: <b>{quantity}</b>\n💵 Price: <b>\${price}</b> each\n💰 Total: <b>\${total} {currency}</b>{balance_section}{payment_hint}{pay_later_section}`,
+    placeholders: '{product} {quantity} {price} {total} {currency} {balance_section} {payment_hint} {pay_later_section}',
+    buttons: ['confirm_payment', 'change_quantity', 'cancel_order', 'pay_later'],
+  },
+  {
+    group: 'Order Flow', key: 'msg_pay_balance_confirm', title: '12. Pay with Balance — Confirm',
+    default: `💰 <b>Pay with Balance</b>\n\n{product}\n🔢 Quantity: <b>{quantity}</b>\n🧾 Subtotal: <b>{subtotal} {currency}</b>\n💵 Final: <b>{final} {currency}</b>\n\n💰 Balance: <b>{balance}</b>\n📊 After: <b>{after}</b>\n\n<b>Confirm balance deduction?</b>`,
+    placeholders: '{product} {quantity} {subtotal} {final} {balance} {after} {currency} {price}',
+    buttons: ['pay_balance_confirm', 'pay_balance_cancel'],
+  },
+  {
+    group: 'Order Flow', key: 'msg_withdraw', title: '13. Withdraw',
+    default: `💸 <b>Withdraw Funds</b>\n\nYour Balance: <b>{balance} USDT</b>\n\nEnter the amount you want to withdraw:`,
+    placeholders: '{balance}',
+    buttons: ['back'],
+  },
+
+  // ─── Auto Broadcasts ───
+  {
+    group: 'Auto Broadcasts', key: 'msg_keyword_reply', title: '14. Keyword Reply (Groups)',
+    default: `✅ <b>Available now!</b> Tap below to buy:`,
+    placeholders: '{product} {products} {count}',
+    buttons: ['buy_now'],
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_stock_alert', title: '15. Stock Alert',
+    default: `📢 <b>{added} new stock added for {product}!</b>\n\n📊 Available: <b>{stock}</b> items\n💰 Price: <b>{price} USDT</b>{bulk_pricing}`,
+    placeholders: '{product} {added} {stock} {price} {bulk_pricing}',
+    buttons: ['buy_now', 'stock_alert'],
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_new_product', title: '16. New Product Alert',
+    default: `🆕 <b>New Product Available!</b>\n\n📦 <b>{product}</b>\n💰 Price: <b>{price} USDT</b>\n📊 Stock: <b>{stock}</b>`,
+    placeholders: '{product} {price} {stock} {description}',
+    buttons: ['buy_now', 'new_product'],
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_price_up', title: '17. Price Increased',
+    default: `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>{old_price} USDT</s>\n💎 New: <b>{new_price} USDT</b>{bulk_pricing}`,
+    placeholders: '{product} {old_price} {new_price} {bulk_pricing}',
+    buttons: ['buy_now'],
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_price_down', title: '18. Price Drop',
+    default: `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>{old_price} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>{bulk_pricing}`,
+    placeholders: '{product} {old_price} {new_price} {bulk_pricing}',
+    buttons: ['buy_now'],
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_flash_sale', title: '19. Flash Sale',
+    default: `🔥 <b>FLASH SALE — LIMITED TIME!</b>\n\n{product}\n\n💰 Sale Price: <b>\${price}</b>\n<s>Regular: \${original}</s> — Save \${savings}\n\n⏳ Ends in: <b><code>{countdown}</code></b>`,
+    placeholders: '{product} {price} {original} {savings} {countdown}',
+    buttons: ['buy_now'],
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_flash_sale_ended', title: '20. Flash Sale Ended',
+    default: `⏰ <b>FLASH SALE ENDED</b>\n\n{product}\n\n<i>This limited-time offer has expired.</i>`,
+    placeholders: '{product}',
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_recent_sale', title: '21. Recent Sale — Bot',
+    default: `🛒 Someone just bought <b>{quantity}× {product}</b>`,
+    placeholders: '{product} {quantity}',
+  },
+  {
+    group: 'Auto Broadcasts', key: 'msg_recent_sale_web', title: '22. Recent Sale — Web',
+    default: `🛍️ Someone just bought <b>{quantity}× {product}</b> from the website`,
+    placeholders: '{product} {quantity}',
+  },
+];
+
+const GROUPS = ['Main Flow', 'Deposit Flow', 'Order Flow', 'Auto Broadcasts'];
+
+// ---- Button row (label + emoji ID) ----
+type ButtonRow = { id: string; button_key: string; button_label: string; custom_emoji_id: string | null };
+
+function ButtonEditor({ row, onChanged }: { row: ButtonRow; onChanged: () => void }) {
+  const [label, setLabel] = useState(row.button_label);
+  const [emojiId, setEmojiId] = useState(row.custom_emoji_id || '');
+  const [saving, setSaving] = useState(false);
+  const dirty = label !== row.button_label || (emojiId || null) !== (row.custom_emoji_id || null);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase
+      .from('bot_button_emojis')
+      .update({ button_label: label, custom_emoji_id: emojiId || null })
+      .eq('id', row.id);
+    setSaving(false);
+    if (error) toast.error('Button save failed');
+    else { toast.success('Button updated'); onChanged(); }
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <Badge variant="outline" className="shrink-0 font-mono text-[10px]">{row.button_key}</Badge>
+        <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Button label" className="h-8 text-sm" />
+      </div>
+      <Input
+        value={emojiId}
+        onChange={(e) => setEmojiId(e.target.value.trim())}
+        placeholder="Premium emoji ID (optional)"
+        className="h-8 text-sm font-mono"
+      />
+      <Button size="sm" variant={dirty ? 'default' : 'outline'} disabled={!dirty || saving} onClick={save} className="h-8 gap-1.5">
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+        Save
+      </Button>
+    </div>
+  );
+}
+
+// ---- Section card ----
+function SectionCard({
+  section, initialValue, buttons, onMessageSaved, onButtonsChanged,
+}: {
+  section: Section;
+  initialValue: string;
+  buttons: ButtonRow[];
+  onMessageSaved: (key: string, value: string) => void;
+  onButtonsChanged: () => void;
+}) {
+  const [value, setValue] = useState(initialValue);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setValue(initialValue); }, [initialValue]);
+
+  const dirty = value !== initialValue;
+
+  const save = async () => {
+    setSaving(true);
+    const { data: existing } = await supabase.from('bot_settings').select('id').eq('key', section.key).maybeSingle();
+    const q = existing
+      ? supabase.from('bot_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', section.key)
+      : supabase.from('bot_settings').insert({ key: section.key, value });
+    const { error } = await q;
+    setSaving(false);
+    if (error) toast.error('Message save failed');
+    else { toast.success(`${section.title.replace(/^\d+\.\s*/, '')} saved`); onMessageSaved(section.key, value); }
+  };
+
+  const reset = () => setValue(section.default);
+
+  return (
+    <AccordionItem value={section.key} className="border-b border-border/60">
+      <AccordionTrigger className="hover:no-underline">
+        <div className="flex items-center gap-2 text-left">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          <span className="font-medium">{section.title}</span>
+          <code className="text-[10px] text-muted-foreground/70 font-mono">{section.key}</code>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="pt-2 space-y-4">
+        {section.desc && (
+          <p className="text-xs text-muted-foreground flex items-start gap-1.5"><Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />{section.desc}</p>
+        )}
+
+        <div className="space-y-2">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Message</Label>
+          <TelegramEditor value={value} onChange={setValue} rows={7} placeholder="Message..." />
+          {section.placeholders && (
+            <p className="text-[11px] text-muted-foreground">
+              <span className="font-medium">Variables:</span> <span className="font-mono">{section.placeholders}</span>
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={reset} className="gap-1.5 text-muted-foreground">
+              <RotateCcw className="h-3.5 w-3.5" /> Default
+            </Button>
+            <Button size="sm" onClick={save} disabled={!dirty || saving} className="gap-1.5">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Message
+            </Button>
+          </div>
+        </div>
+
+        {section.buttons && section.buttons.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-dashed border-border/60 p-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Buttons on this screen</Label>
+              <Badge variant="secondary" className="text-[10px]">{buttons.length} / {section.buttons.length}</Badge>
+            </div>
+            {buttons.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No matching buttons found in <code>bot_button_emojis</code>.</p>
+            ) : (
+              <div className="space-y-2">
+                {buttons.map((b) => <ButtonEditor key={b.id} row={b} onChanged={onButtonsChanged} />)}
+              </div>
+            )}
+          </div>
+        )}
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+// ---- Main tab ----
+export default function MessageTemplatesTab() {
+  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState<Record<string, string>>({});
+  const [buttons, setButtons] = useState<Record<string, ButtonRow>>({});
+
+  const load = async () => {
+    const keys = SECTIONS.map((s) => s.key);
+    const allButtonKeys = Array.from(new Set(SECTIONS.flatMap((s) => s.buttons || [])));
+    const [{ data: settings }, { data: btns }] = await Promise.all([
+      supabase.from('bot_settings').select('key,value').in('key', keys),
+      supabase.from('bot_button_emojis').select('id,button_key,button_label,custom_emoji_id').in('button_key', allButtonKeys),
+    ]);
+    const msgMap: Record<string, string> = {};
+    for (const s of SECTIONS) msgMap[s.key] = s.default;
+    for (const r of settings || []) if (r.value) msgMap[r.key] = r.value as string;
+    setMessages(msgMap);
+    const btnMap: Record<string, ButtonRow> = {};
+    for (const b of btns || []) btnMap[b.button_key] = b as ButtonRow;
+    setButtons(btnMap);
+    setLoading(false);
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, Section[]>();
+    for (const g of GROUPS) map.set(g, []);
+    for (const s of SECTIONS) map.get(s.group)!.push(s);
+    return map;
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-primary" />
+            Message Templates
+          </CardTitle>
+          <CardDescription>
+            Bot er sob screen er msg + buttons ekhan theke edit koro. Serial e user ja dekhe sevabe sajano. Save korlei bot e sathe sathe update hobe (60s cache)।
+          </CardDescription>
+        </CardHeader>
+      </Card>
+
+      {GROUPS.map((group) => (
+        <Card key={group} className="border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">{group}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Accordion type="multiple" className="w-full">
+              {grouped.get(group)!.map((section) => (
+                <SectionCard
+                  key={section.key}
+                  section={section}
+                  initialValue={messages[section.key] ?? section.default}
+                  buttons={(section.buttons || []).map((k) => buttons[k]).filter(Boolean)}
+                  onMessageSaved={(k, v) => setMessages((prev) => ({ ...prev, [k]: v }))}
+                  onButtonsChanged={() => void load()}
+                />
+              ))}
+            </Accordion>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
