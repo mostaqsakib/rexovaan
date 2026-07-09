@@ -5127,6 +5127,17 @@ async function handleMessage(message, emojiMap) {
     if (!result.ok || !result.url) {
       await sendMessage(chatId, `❌ Cryptomus checkout could not be created: ${escapeHtml(result.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
       return;
+    }
+
+    await sendMessage(
+      chatId,
+      `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Checkout Ready</b>\n\nAmount: <b>${amountUSD.toFixed(2)} USDT</b>\nOrder: <code>${escapeHtml(result.orderId || "")}</code>\n\n⚠️ <b>Important:</b> Pay the <b>exact</b> invoice amount.\n• Overpay → full amount credited ✅\n• Underpay → will <b>not</b> be verified ❌\n\nTap the button below to complete payment. Your balance will be updated automatically after payment.`,
+      { inline_keyboard: [
+        [applyEmoji({ text: "🪙 Pay with Crypto", url: result.url }, "cryptomus_pay", emojiMap)],
+        [applyEmoji({ text: "◀️ Back", callback_data: "menu_deposit" }, "back", emojiMap)],
+      ] }
+    );
+    return;
   }
 
   if (customer.pending_action?.startsWith("bep20_deposit_amount") && text && !text.startsWith("/")) {
@@ -5175,17 +5186,6 @@ async function handleMessage(message, emojiMap) {
     return;
   }
 
-
-    await sendMessage(
-      chatId,
-      `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Checkout Ready</b>\n\nAmount: <b>${amountUSD.toFixed(2)} USDT</b>\nOrder: <code>${escapeHtml(result.orderId || "")}</code>\n\n⚠️ <b>Important:</b> Pay the <b>exact</b> invoice amount.\n• Overpay → full amount credited ✅\n• Underpay → will <b>not</b> be verified ❌\n\nTap the button below to complete payment. Your balance will be updated automatically after payment.`,
-      { inline_keyboard: [
-        [applyEmoji({ text: "🪙 Pay with Crypto", url: result.url }, "cryptomus_pay", emojiMap)],
-        [applyEmoji({ text: "◀️ Back", callback_data: "menu_deposit" }, "back", emojiMap)],
-      ] }
-    );
-    return;
-  }
 
   // ── Customer input collection (purchase pre-checkout) ──
   if (customer.pending_action?.startsWith("collectinput_") && text && !text.startsWith("/")) {
