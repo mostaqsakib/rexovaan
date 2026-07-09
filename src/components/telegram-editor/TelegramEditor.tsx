@@ -89,7 +89,8 @@ function deserialize(tgHtml: string): string {
     /<tg-emoji\s+emoji-id="([^"]+)"[^>]*>([\s\S]*?)<\/tg-emoji>/gi,
     (_, id, fb) => {
       const safeFb = String(fb || '😀').replace(/</g, '&lt;');
-      return `<span class="tge-emoji" contenteditable="false" data-emoji-id="${id}" data-fallback="${safeFb.replace(/"/g, '&quot;')}">${safeFb}</span>`;
+      const fbAttr = safeFb.replace(/"/g, '&quot;');
+      return `<span class="tge-emoji" contenteditable="false" data-emoji-id="${id}" data-fallback="${fbAttr}"><span class="tge-emoji-mount" data-fallback-text="${fbAttr}">${safeFb}</span></span>`;
     },
   );
   // tg-spoiler -> span.tg-spoiler
