@@ -57,6 +57,7 @@ const AppSidebar = ({ activeTab, onChange, pendingCount = 0 }: AppSidebarProps) 
       label: 'Bot & System',
       items: [
         { id: 'announcements', label: 'Site Notices', icon: Megaphone },
+        { id: 'msg-templates', label: 'Message Templates', icon: MessageSquare },
         { id: 'emojis', label: 'Emojis', icon: Sparkles },
         { id: 'groups', label: 'Groups', icon: MessagesSquare },
         { id: 'sources', label: 'Sources', icon: Server },
