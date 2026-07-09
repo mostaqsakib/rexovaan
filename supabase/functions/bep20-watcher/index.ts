@@ -24,6 +24,27 @@ async function rpc(url: string, method: string, params: unknown[]): Promise<any>
   return j.result;
 }
 
+async function sendTelegram(method: string, body: Record<string, unknown>) {
+  const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
+  if (!BOT_TOKEN) {
+    console.warn("[BEP20 watcher] BOT_TOKEN missing, skipping Telegram notify");
+    return;
+  }
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      console.error(`[BEP20 watcher] Telegram ${method} failed [${res.status}]: ${txt}`);
+    }
+  } catch (e) {
+    console.error(`[BEP20 watcher] Telegram ${method} error:`, e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const json = (b: unknown, s = 200) =>
@@ -120,8 +141,9 @@ Deno.serve(async (req) => {
         }
 
         // Credit the customer
+        let creditResult: { newBalance: number; paidPayLater: number } | null = null;
         try {
-          await applyDepositCredit(supabase, res.customer_id, amt);
+          creditResult = await applyDepositCredit(supabase, res.customer_id, amt);
         } catch (e) {
           console.error("applyDepositCredit err", e);
         }
@@ -143,6 +165,37 @@ Deno.serve(async (req) => {
           tx_hash: txHash,
           received_amount: newReceived,
         }).eq("id", res.id);
+
+        // Notify customer + admin
+        try {
+          const { data: customer } = await supabase
+            .from("bot_customers")
+            .select("chat_id")
+            .eq("id", res.customer_id)
+            .maybeSingle();
+          const shortTx = `${txHash.slice(0, 10)}…${txHash.slice(-8)}`;
+          if (customer?.chat_id) {
+            const plLine = creditResult && creditResult.paidPayLater > 0
+              ? `\n🏷️ Pay-Later Cleared: <b>$${creditResult.paidPayLater.toFixed(2)}</b>` : "";
+            const balLine = creditResult
+              ? `\n💳 New Balance: <b>$${creditResult.newBalance.toFixed(2)} USDT</b>` : "";
+            await sendTelegram("sendMessage", {
+              chat_id: customer.chat_id,
+              text: `✅ <b>BEP20 Deposit Verified!</b>\n\n💵 Credited: <b>${amt.toFixed(2)} ${tok.symbol}</b>${plLine}${balLine}\n🔗 Tx: <code>${shortTx}</code>`,
+              parse_mode: "HTML",
+            });
+          }
+          const adminChatId = Deno.env.get("ADMIN_CHAT_ID");
+          if (adminChatId) {
+            await sendTelegram("sendMessage", {
+              chat_id: adminChatId,
+              text: `💰 <b>BEP20 Deposit Received</b>\n\nCustomer: <code>${customer?.chat_id || res.customer_id}</code>\nAmount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\nAddress: <code>${toAddr}</code>\nTx: <code>${txHash}</code>`,
+              parse_mode: "HTML",
+            });
+          }
+        } catch (e) {
+          console.error("notify err", e);
+        }
 
         credited++;
       }
