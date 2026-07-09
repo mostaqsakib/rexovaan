@@ -246,7 +246,6 @@ const OnChainActivityTab = () => {
       const match = r.reserved_address_id
         ? reservedById.get(r.reserved_address_id)
         : reservedByAddress.get(r.address.toLowerCase());
-      const depositAmount = getDepositUsd(match, r.deposit_id, r.amount);
       return {
         id: r.id,
         kind: 'credited' as const,
@@ -257,30 +256,36 @@ const OnChainActivityTab = () => {
         from: null as string | null,
         tx_hash: r.tx_hash,
         amount: Number(r.amount || 0),
-        depositAmount,
+        depositAmount: Number(r.amount || 0),
         customer: custLabel(match?.customer_id),
       };
     });
 
-    const ignored: any[] = fakes.map((r) => {
-      const match = r.reserved_address_id
-        ? reservedById.get(r.reserved_address_id)
-        : reservedByAddress.get(r.address.toLowerCase());
-      const depositAmount = getDepositUsd(match, r.deposit_id);
-      return {
-        id: r.id,
-        kind: 'ignored' as const,
-        date: r.created_at,
-        token: sanitizeSymbol(r.token_symbol),
-        contract: r.contract,
-        address: r.address,
-        from: r.from_address,
-        tx_hash: r.tx_hash,
-        amount: Number(r.amount || 0),
-        depositAmount,
-        customer: custLabel(r.customer_id || match?.customer_id || (r.deposit_id ? deposits[r.deposit_id]?.customer_id : null)),
-      };
-    });
+    // Only surface scam/ignored rows here if they hit an address that has
+    // NO credited row — otherwise we double every real deposit with its
+    // airdropped spam token. Real credited txs are the primary log.
+    const creditedAddrs = new Set(registry.map((r) => r.address.toLowerCase()));
+    const ignored: any[] = fakes
+      .filter((r) => !creditedAddrs.has(r.address.toLowerCase()))
+      .map((r) => {
+        const match = r.reserved_address_id
+          ? reservedById.get(r.reserved_address_id)
+          : reservedByAddress.get(r.address.toLowerCase());
+        const depositAmount = getDepositUsd(match, r.deposit_id);
+        return {
+          id: r.id,
+          kind: 'ignored' as const,
+          date: r.created_at,
+          token: sanitizeSymbol(r.token_symbol),
+          contract: r.contract,
+          address: r.address,
+          from: r.from_address,
+          tx_hash: r.tx_hash,
+          amount: Number(r.amount || 0),
+          depositAmount,
+          customer: custLabel(r.customer_id || match?.customer_id || (r.deposit_id ? deposits[r.deposit_id]?.customer_id : null)),
+        };
+      });
 
     const combined = [...credited, ...ignored].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -298,6 +303,7 @@ const OnChainActivityTab = () => {
       );
     });
   }, [registry, fakes, reserved, customers, deposits, q, tokenFilter]);
+
 
 
   const filteredReserved = useMemo(() => {
