@@ -151,17 +151,40 @@ const OnChainActivityTab = () => {
   };
 
   const filteredRegistry = useMemo(() => {
-    return registry.filter((r) => {
-      if (tokenFilter !== 'all' && r.token !== tokenFilter) return false;
+    const credited: any[] = registry.map((r) => ({
+      id: r.id,
+      kind: 'credited' as const,
+      date: r.credited_at,
+      token: r.token,
+      address: r.address,
+      tx_hash: r.tx_hash,
+      amount: Number(r.amount || 0),
+    }));
+    const ignored: any[] = fakes.map((r) => ({
+      id: r.id,
+      kind: 'ignored' as const,
+      date: r.created_at,
+      token: r.token_symbol || 'UNKNOWN',
+      address: r.address,
+      tx_hash: r.tx_hash,
+      amount: Number(r.amount || 0),
+      contract: r.contract,
+    }));
+    const combined = [...credited, ...ignored].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    return combined.filter((r) => {
+      if (tokenFilter !== 'all' && r.kind === 'credited' && r.token !== tokenFilter) return false;
       if (!q) return true;
       const n = q.toLowerCase();
       return (
         r.tx_hash.toLowerCase().includes(n) ||
         r.address.toLowerCase().includes(n) ||
-        (r.deposit_id || '').toLowerCase().includes(n)
+        (r.token || '').toLowerCase().includes(n)
       );
     });
-  }, [registry, q, tokenFilter]);
+  }, [registry, fakes, q, tokenFilter]);
+
 
   const filteredReserved = useMemo(() => {
     return reserved.filter((r) => {
@@ -361,7 +384,18 @@ const TabPill = ({
   </button>
 );
 
-const LedgerTable = ({ rows }: { rows: RegistryRow[] }) => (
+type LedgerRow = {
+  id: string;
+  kind: 'credited' | 'ignored';
+  date: string;
+  token: string;
+  address: string;
+  tx_hash: string;
+  amount: number;
+  contract?: string;
+};
+
+const LedgerTable = ({ rows }: { rows: LedgerRow[] }) => (
   <Card>
     <CardContent className="p-0">
       <div className="overflow-x-auto">
@@ -380,44 +414,58 @@ const LedgerTable = ({ rows }: { rows: RegistryRow[] }) => (
             {rows.length === 0 && (
               <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No records</td></tr>
             )}
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-border/40 hover:bg-muted/30">
-                <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                  {new Date(r.credited_at).toLocaleString()}
-                </td>
-                <td className="px-3 py-2">
-                  <Badge variant="outline" className="border-primary/40 bg-primary/5 text-primary">
-                    {r.token} · BEP20
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 font-mono">
-                  <button onClick={() => copy(r.address)} className="hover:text-primary">
-                    {short(r.address, 8)} <Copy className="ml-1 inline h-3 w-3" />
-                  </button>
-                </td>
-                <td className="px-3 py-2 font-mono">
-                  <a
-                    href={`${BSCSCAN}/tx/${r.tx_hash}`}
-                    target="_blank" rel="noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    {short(r.tx_hash, 8)}
-                  </a>
-                </td>
-                <td className="px-3 py-2 text-right font-semibold text-success">
-                  {Number(r.amount).toFixed(2)}
-                </td>
-                <td className="px-3 py-2">
-                  <Badge className="bg-success/10 text-success ring-1 ring-success/30">credited</Badge>
-                </td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const isIgnored = r.kind === 'ignored';
+              return (
+                <tr key={`${r.kind}-${r.id}`} className="border-b border-border/40 hover:bg-muted/30">
+                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                    {new Date(r.date).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Badge variant="outline" className={
+                      isIgnored
+                        ? "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
+                        : "border-primary/40 bg-primary/5 text-primary"
+                    }>
+                      {r.token} · BEP20
+                    </Badge>
+                  </td>
+                  <td className="px-3 py-2 font-mono">
+                    <button onClick={() => copy(r.address)} className="hover:text-primary">
+                      {short(r.address, 8)} <Copy className="ml-1 inline h-3 w-3" />
+                    </button>
+                  </td>
+                  <td className="px-3 py-2 font-mono">
+                    <a
+                      href={`${BSCSCAN}/tx/${r.tx_hash}`}
+                      target="_blank" rel="noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {short(r.tx_hash, 8)}
+                    </a>
+                  </td>
+                  <td className={`px-3 py-2 text-right font-semibold ${isIgnored ? 'text-muted-foreground line-through' : 'text-success'}`}>
+                    {Number(r.amount).toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {isIgnored ? (
+                      <Badge variant="outline" className="border-muted-foreground/30 bg-muted/30 text-muted-foreground">
+                        spam · ignored
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-success/10 text-success ring-1 ring-success/30">credited</Badge>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
     </CardContent>
   </Card>
 );
+
 
 const AddressesTable = ({ rows, customers }: { rows: ReservedRow[]; customers: Record<string, CustomerLite> }) => (
   <Card>
