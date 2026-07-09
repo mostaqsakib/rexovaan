@@ -2632,6 +2632,14 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `polygon_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
+  } else if (paymentType === "ton_auto" || methodName === "usdt ton" || methodName.includes("ton auto")) {
+    const { data: tonAmtRow } = await supabase.from("bot_settings").select("value").eq("key", "ton_amount_msg").maybeSingle();
+    const tonAmtMsg = tonAmtRow?.value || `💎 <b>USDT TON (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get the deposit <b>address + a unique memo/comment</b>. Send USDT (TON Jetton) with the exact memo — auto-credited within ~30 seconds after on-chain confirmation.`;
+    msg += tonAmtMsg + "\n";
+    const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
+    if (cust) {
+      await supabase.from("bot_customers").update({ pending_action: `ton_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
+    }
   } else if (methodName.includes("binance") || paymentType === "binance") {
 
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
@@ -2664,7 +2672,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     msg += `💳 <b>Payment Details:</b>\n<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   }
 
-  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || paymentType === "polygon" || methodName.includes("usdt/usdc bep20") || methodName.includes("usdt polygon"))) {
+  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || paymentType === "polygon" || paymentType === "ton_auto" || methodName.includes("usdt/usdc bep20") || methodName.includes("usdt polygon") || methodName === "usdt ton")) {
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
     msg += `\n━━━━━━━━━━━━━━━━\nAfter sending, paste your <b>Transaction Hash (TxID)</b> or <b>Order ID</b> here and we'll verify it <b>automatically</b>.`;
   }
@@ -5242,6 +5250,56 @@ async function handleMessage(message, emojiMap) {
     }
     return;
   }
+
+  if (customer.pending_action?.startsWith("ton_deposit_amount") && text && !text.startsWith("/")) {
+    const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>1 USDT</b>.");
+      return;
+    }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    try {
+      const res = await fetch(`${process.env.SUPABASE_URL}/functions/v1/ton-reserve-memo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
+        body: JSON.stringify({ customer_id: customer.id, expected_amount: amountUSD }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.address || !data.memo) {
+        await sendMessage(chatId, `❌ Could not reserve TON memo: ${escapeHtml(data.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
+        return;
+      }
+      const expiresMin = Math.max(1, Math.round((new Date(data.expires_at).getTime() - Date.now()) / 60000));
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`ton://transfer/${data.address}?text=${data.memo}`)}`;
+
+      const { data: tonAddrRow } = await supabase.from("bot_settings").select("value").eq("key", "ton_address_msg").maybeSingle();
+      const template = tonAddrRow?.value || `💎 <b>USDT TON — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send USDT (TON Jetton) to:</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n🆔 <b>Memo / Comment (REQUIRED):</b>\n<code>{memo}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Must include the exact memo</b>, otherwise the deposit won't be matched.\n⚠️ <b>TON network only</b> — send USDT Jetton (not TRC20/BEP20).\n\nAuto-verified within ~30 seconds after confirmation.`;
+      const caption = template
+        .replace(/\{amount\}/g, amountUSD.toFixed(2))
+        .replace(/\{expires_min\}/g, String(expiresMin))
+        .replace(/\{address\}/g, data.address)
+        .replace(/\{memo\}/g, data.memo);
+
+      const backBtn = applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "ton_back_menu", emojiMap);
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: qrUrl,
+          caption,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: [[backBtn]] },
+        }),
+      });
+    } catch (e) {
+      await sendMessage(chatId, `❌ Reserve failed: ${escapeHtml(String(e))}`, mainMenuKeyboard(emojiMap));
+    }
+    return;
+  }
+
+
 
 
   // ── Customer input collection (purchase pre-checkout) ──

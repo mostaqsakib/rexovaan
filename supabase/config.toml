@@ -24,6 +24,13 @@ verify_jwt = false
 [functions.bep20-sweep]
 verify_jwt = false
 
+[functions.ton-watcher]
+verify_jwt = false
+
+[functions.ton-reserve-memo]
+verify_jwt = false
+
+
 
 
 
