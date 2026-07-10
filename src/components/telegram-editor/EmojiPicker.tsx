@@ -118,6 +118,19 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
   const pickU = (e: string) => { saveRecent({ type: 'u', v: e }); setRecent(loadRecent()); onPickUnicode(e); };
   const pickC = (id: string, f: string) => { saveRecent({ type: 'c', v: id, f }); setRecent(loadRecent()); onPickCustom(id, f); };
 
+  // Reset the incremental window whenever the visible list changes.
+  useEffect(() => {
+    setVisibleCount(96);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [mode, activeSet, activeUnicode, query]);
+
+  const onBodyScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
+      setVisibleCount((c) => c + 96);
+    }
+  };
+
   return (
     <div className="telegram-emoji-picker w-[360px] h-[520px] flex flex-col overflow-hidden">
       <div className="telegram-emoji-tabs grid grid-cols-3">
@@ -133,13 +146,13 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
         </div>
       </div>
 
-      <div className="telegram-emoji-body flex-1 overflow-y-auto px-2 pb-2">
+      <div ref={scrollRef} onScroll={onBodyScroll} className="telegram-emoji-body flex-1 overflow-y-auto px-2 pb-2">
         {query ? (
           <div className="space-y-3">
             {mode === 'custom' && customSearchResults.length > 0 && (
               <EmojiSection title="Premium emoji">
-                {customSearchResults.map(e => (
-                  <CustomEmojiButton key={`${e.custom_emoji_id}:${assetVersion}`} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
+                {customSearchResults.slice(0, visibleCount).map(e => (
+                  <CustomEmojiButton key={e.custom_emoji_id} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
                 ))}
               </EmojiSection>
             )}
@@ -154,25 +167,26 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
           activeSet === 'recent' ? (
             recent.length === 0 ? <EmptyState text="Pick emojis to see them here" /> : (
               <EmojiSection title="Recently used">
-                {recent.map((e, i) => e.type === 'u'
+                {recent.slice(0, visibleCount).map((e, i) => e.type === 'u'
                   ? <UnicodeEmojiButton key={`${e.v}-${i}`} emoji={e.v} onClick={() => pickU(e.v)} />
-                  : <CustomEmojiButton key={`${e.v}-${i}:${assetVersion}`} id={e.v} fallback={e.f || ''} onClick={() => pickC(e.v, e.f || '')} />
+                  : <CustomEmojiButton key={`${e.v}-${i}`} id={e.v} fallback={e.f || ''} onClick={() => pickC(e.v, e.f || '')} />
                 )}
               </EmojiSection>
             )
           ) : activeSetData ? (
             <EmojiSection title={activeSetData.title} subtitle={`${activeSetData.emojis.length} premium emojis`}>
-              {activeSetData.emojis.map(e => (
-                <CustomEmojiButton key={`${e.custom_emoji_id}:${assetVersion}`} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
+              {activeSetData.emojis.slice(0, visibleCount).map(e => (
+                <CustomEmojiButton key={e.custom_emoji_id} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
               ))}
             </EmojiSection>
           ) : <EmptyState text="No synced premium emoji packs" />
         ) : (
           <EmojiSection title={activeUnicodeData.label}>
-            {activeUnicodeData.emojis.map((e, i) => <UnicodeEmojiButton key={`${e}-${i}`} emoji={e} onClick={() => pickU(e)} />)}
+            {activeUnicodeData.emojis.slice(0, visibleCount).map((e, i) => <UnicodeEmojiButton key={`${e}-${i}`} emoji={e} onClick={() => pickU(e)} />)}
           </EmojiSection>
         )}
       </div>
+
 
       <div className="telegram-emoji-footer flex items-center gap-1 overflow-x-auto px-2 py-1.5 scrollbar-hide">
         {mode === 'custom' ? (
