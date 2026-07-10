@@ -1945,6 +1945,12 @@ export type Database = {
           paid_at: string | null
           paid_tx_hash: string | null
           status: string
+          sweep_attempts: number
+          sweep_error: string | null
+          sweep_status: string | null
+          sweep_tx_hash: string | null
+          swept_amount_ltc: number | null
+          swept_at: string | null
           updated_at: string
         }
         Insert: {
@@ -1963,6 +1969,12 @@ export type Database = {
           paid_at?: string | null
           paid_tx_hash?: string | null
           status?: string
+          sweep_attempts?: number
+          sweep_error?: string | null
+          sweep_status?: string | null
+          sweep_tx_hash?: string | null
+          swept_amount_ltc?: number | null
+          swept_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -1981,6 +1993,12 @@ export type Database = {
           paid_at?: string | null
           paid_tx_hash?: string | null
           status?: string
+          sweep_attempts?: number
+          sweep_error?: string | null
+          sweep_status?: string | null
+          sweep_tx_hash?: string | null
+          swept_amount_ltc?: number | null
+          swept_at?: string | null
           updated_at?: string
         }
         Relationships: []
