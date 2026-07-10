@@ -6731,8 +6731,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthISO = monthStart.toISOString();
 
-    const [custRes, wdRes, newCustTodayRes, newCustWeekRes, newCustMonthRes, statsRpc] = await Promise.all([
-      supabase.from("bot_customers").select("id", { count: "exact", head: true }),
+    const [wdRes, newCustTodayRes, newCustWeekRes, newCustMonthRes, statsRpc] = await Promise.all([
       supabase.from("bot_withdrawals").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("bot_customers").select("id", { count: "exact", head: true }).gte("created_at", todayISO),
       supabase.from("bot_customers").select("id", { count: "exact", head: true }).gte("created_at", weekISO),
