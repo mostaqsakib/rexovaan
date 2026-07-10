@@ -1,0 +1,1 @@
+UPDATE bot_payment_methods SET sort_order = 20 WHERE name = 'bKash';
