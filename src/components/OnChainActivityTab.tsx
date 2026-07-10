@@ -580,6 +580,11 @@ const OnChainActivityTab = () => {
         )}
       </Card>
 
+      {/* Litecoin gateway */}
+      <LtcActivityCard />
+
+
+
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
         <div className="relative flex-1 min-w-[220px]">
