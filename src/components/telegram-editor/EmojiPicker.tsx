@@ -88,7 +88,6 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
       const readyRows = rows.filter((row) => row.status === 'ready' && row.lottie_url);
       if (readyRows.length) {
         seedCustomEmojiCache(readyRows.map((row) => ({ id: row.emoji_id, url: row.lottie_url, fallback: row.fallback })));
-        setAssetVersion((v) => v + 1);
       }
       // Resolve any missing / pending emojis via the edge function so premium
       // packs light up instead of showing only the small colored thumb.
