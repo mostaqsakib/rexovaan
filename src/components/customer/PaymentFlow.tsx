@@ -83,7 +83,7 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact, contex
 
   useEffect(() => {
     Promise.all([
-      supabase.functions.invoke<{ methods: PaymentMethod[] }>('resolve-payment-methods', { body: { context: 'purchase' } }),
+      supabase.functions.invoke<{ methods: PaymentMethod[] }>('resolve-payment-methods', { body: { context } }),
       supabase.from('bot_settings').select('value').eq('key', 'dollar_rate_bdt').maybeSingle(),
     ]).then(([res, rate]) => {
       if (res.error) throw res.error;
