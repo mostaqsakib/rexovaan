@@ -1423,15 +1423,25 @@ const BUTTON_EMOJI_TEXT_FALLBACKS = {};
 async function loadButtonEmojis() {
   const now = Date.now();
   if (_emojiCache && now - _emojiCacheTime < 60000) return _emojiCache;
-  const { data } = await supabase.from("bot_button_emojis").select("button_key, custom_emoji_id, style");
+  const { data } = await supabase.from("bot_button_emojis").select("button_key, button_label, custom_emoji_id, style");
   const map = {};
   if (data) for (const row of data) {
-    map[row.button_key] = { emoji: row.custom_emoji_id || null, style: row.style || null };
+    map[row.button_key] = { label: row.button_label || null, emoji: row.custom_emoji_id || null, style: row.style || null };
   }
   _emojiCache = map;
   _emojiCacheTime = now;
   return map;
 }
+
+const DYNAMIC_BUTTON_LABEL_KEYS = new Set([
+  "buy_now",
+  "product_item",
+  "deposit_method",
+  "notif_stock",
+  "notif_info",
+  "notif_referral",
+  "profile_stats",
+]);
 
 function applyEmoji(button, emojiKey, emojiMap) {
   // Try exact key first, then fallback without "menu_" prefix
@@ -1441,8 +1451,11 @@ function applyEmoji(button, emojiKey, emojiMap) {
   }
   if (config) {
     const result = { ...button };
+    if (config.label && !DYNAMIC_BUTTON_LABEL_KEYS.has(emojiKey)) {
+      result.text = config.label;
+    }
     if (config.emoji) {
-      const originalText = String(button.text || "");
+      const originalText = String(result.text || button.text || "");
       const cleanedText = stripEmojiGlyphs(stripCustomEmojiMarkup(stripHtmlTags(originalText))) || originalText;
       const textFallback = BUTTON_EMOJI_TEXT_FALLBACKS[emojiKey];
       result.text = textFallback && !cleanedText.startsWith(textFallback) ? `${textFallback} ${cleanedText}` : cleanedText;
