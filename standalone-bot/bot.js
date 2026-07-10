@@ -2640,6 +2640,15 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `ton_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
+  } else if (paymentType === "ltc_auto" || methodName === "litecoin (ltc)" || methodName.includes("ltc auto")) {
+    const { data: ltcAmtRow } = await supabase.from("bot_settings").select("value").eq("key", "ltc_amount_msg").maybeSingle();
+    const ltcAmtMsg = ltcAmtRow?.value || `Ł <b>Litecoin (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USD</b> (example: <code>10</code>).\n<i>Minimum: $1</i>\n\nYou'll get a <b>unique LTC address</b> just for this deposit + the exact LTC amount at current rate. Auto-credited after 2 confirmations (~5 min).`;
+    msg += ltcAmtMsg + "\n";
+    const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
+    if (cust) {
+      await supabase.from("bot_customers").update({ pending_action: `ltc_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
+    }
+
   } else if (methodName.includes("binance") || paymentType === "binance") {
 
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
@@ -2672,7 +2681,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     msg += `💳 <b>Payment Details:</b>\n<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   }
 
-  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || paymentType === "polygon" || paymentType === "ton_auto" || methodName.includes("usdt/usdc bep20") || methodName.includes("usdt polygon") || methodName === "usdt ton")) {
+  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || paymentType === "polygon" || paymentType === "ton_auto" || paymentType === "ltc_auto" || methodName.includes("usdt/usdc bep20") || methodName.includes("usdt polygon") || methodName === "usdt ton" || methodName === "litecoin (ltc)")) {
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
     msg += `\n━━━━━━━━━━━━━━━━\nAfter sending, paste your <b>Transaction Hash (TxID)</b> or <b>Order ID</b> here and we'll verify it <b>automatically</b>.`;
   }
@@ -5298,6 +5307,59 @@ async function handleMessage(message, emojiMap) {
     }
     return;
   }
+
+  if (customer.pending_action?.startsWith("ltc_deposit_amount") && text && !text.startsWith("/")) {
+    const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>$1</b>.");
+      return;
+    }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    try {
+      const res = await fetch(`${process.env.SUPABASE_URL}/functions/v1/ltc-reserve-address`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
+        body: JSON.stringify({ customer_id: customer.id, expected_amount: amountUSD }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.address) {
+        await sendMessage(chatId, `❌ Could not reserve LTC address: ${escapeHtml(data.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
+        return;
+      }
+      const expiresMin = Math.max(1, Math.round((new Date(data.expires_at).getTime() - Date.now()) / 60000));
+      const qrData = `litecoin:${data.address}?amount=${data.amount_ltc}`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+
+      const { data: ltcAddrRow } = await supabase.from("bot_settings").select("value").eq("key", "ltc_address_msg").maybeSingle();
+      const template = ltcAddrRow?.value || `Ł <b>Litecoin — Auto-Verify</b>\n\n💵 Amount: <b>{amount_ltc} LTC</b> (~$ {amount_usd})\n📊 Rate: 1 LTC = $ {rate}\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send this EXACT LTC amount to:</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Send exactly {amount_ltc} LTC.</b> Underpay = not credited.\n⚠️ <b>Litecoin network only.</b>\n\nAuto-verified after 2 confirmations (~5 min).`;
+      const caption = template
+        .replace(/\{amount_ltc\}/g, data.amount_ltc.toString())
+        .replace(/\{amount_usd\}/g, amountUSD.toFixed(2))
+        .replace(/\{rate\}/g, Number(data.rate).toFixed(2))
+        .replace(/\{expires_min\}/g, String(expiresMin))
+        .replace(/\{address\}/g, data.address);
+
+      const backBtn = applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "ltc_back_menu", emojiMap);
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: qrUrl,
+          caption,
+          parse_mode: "HTML",
+          reply_markup: { inline_keyboard: [[backBtn]] },
+        }),
+      });
+    } catch (e) {
+      await sendMessage(chatId, `❌ Reserve failed: ${escapeHtml(String(e))}`, mainMenuKeyboard(emojiMap));
+    }
+    return;
+  }
+
+
+
 
 
 
