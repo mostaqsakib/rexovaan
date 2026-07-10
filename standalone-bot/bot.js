@@ -6986,6 +6986,15 @@ async function handleCallback(callbackQuery, emojiMap) {
       msg_flash_sale_ended: `⏰ <b>FLASH SALE ENDED</b>\n\n{product}\n\n<i>This limited-time offer has expired. Regular pricing is back.</i>`,
       msg_recent_sale: `🛒 Someone just bought <b>{quantity}× {product}</b>`,
       msg_recent_sale_web: `🛍️ Someone just bought <b>{quantity}× {product}</b> from the website`,
+      channel_join_message: `🔒 <b>Join Our Channel</b>\n\nPlease join our channel to use the bot.`,
+      bep20_amount_msg: `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get a <b>unique BSC address</b> just for this deposit. Send USDT or USDC (BEP20) — auto-credited after 3 confirmations (~9 sec).`,
+      bep20_address_msg: `🟡 <b>USDT/USDC BEP20 Deposit</b>\n\nSend exactly <b>{amount} USDT/USDC</b> on <b>BEP20 (BSC)</b> to:\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⏱ Expires in {ttl_min} min. Auto-credited after 3 confirmations.`,
+      polygon_amount_msg: `🟣 <b>USDT/USDC Polygon (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get a <b>unique Polygon address</b> just for this deposit.`,
+      polygon_address_msg: `🟣 <b>USDT/USDC Polygon Deposit</b>\n\nSend exactly <b>{amount} USDT/USDC</b> on <b>Polygon (MATIC)</b> to:\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⏱ Expires in {ttl_min} min.`,
+      ton_amount_msg: `💎 <b>USDT TON (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get the deposit address + a unique memo.`,
+      ton_address_msg: `💎 <b>USDT TON Deposit</b>\n\nSend exactly <b>{amount} USDT</b> (Jetton) to:\n<code>{address}</code>\n\n⚠️ <b>Memo/Comment (required):</b>\n<code>{memo}</code>\n<i>👆 Both fields must match exactly.</i>`,
+      ltc_amount_msg: `Ł <b>Litecoin (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USD</b> (example: <code>10</code>).\n<i>Minimum: $1</i>\n\nYou'll get a <b>unique LTC address</b> + exact LTC amount at current rate.`,
+      ltc_address_msg: `🪙 <b>LTC Deposit</b>\n\nSend exactly <b>{ltc_amount} LTC</b> (≈ \${usd_amount} USD) to:\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⏱ Auto-credited after 2 confirmations (~5 min).`,
     };
     const currentMsg = normalizeTelegramHtml(cachedPageMsgs[msgKey] || defaultMsgs[msgKey] || "(no message)");
     const isCustom = !!cachedPageMsgs[msgKey];
