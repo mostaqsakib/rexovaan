@@ -38,6 +38,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const customer_id: string | undefined = body.customer_id;
     const expected_amount_usd = Number(body.expected_amount ?? body.expected_usd);
+    const pending_product_id: string | null = body.pending_product_id || null;
+    const pending_quantity: number | null = body.pending_quantity || null;
     if (!customer_id || !(expected_amount_usd > 0)) {
       return json({ error: "customer_id and positive expected_amount required" }, 400);
     }
