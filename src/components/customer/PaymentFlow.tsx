@@ -48,9 +48,12 @@ export interface PaymentFlowProps {
   onVerified?: (info: { amount: number; via?: string; newBalance?: number }) => void;
   /** Show compact mode (used inside checkout). */
   compact?: boolean;
+  /** Payment methods context filter — 'purchase' (default) or 'deposit'. */
+  context?: 'purchase' | 'deposit';
 }
 
-export default function PaymentFlow({ prefillAmount, onVerified, compact }: PaymentFlowProps) {
+export default function PaymentFlow({ prefillAmount, onVerified, compact, context = 'purchase' }: PaymentFlowProps) {
+
   const { customer, refreshCustomer } = useCustomerAuth();
   const { format } = useCurrency();
 
@@ -80,7 +83,7 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
 
   useEffect(() => {
     Promise.all([
-      supabase.functions.invoke<{ methods: PaymentMethod[] }>('resolve-payment-methods', { body: { context: 'purchase' } }),
+      supabase.functions.invoke<{ methods: PaymentMethod[] }>('resolve-payment-methods', { body: { context } }),
       supabase.from('bot_settings').select('value').eq('key', 'dollar_rate_bdt').maybeSingle(),
     ]).then(([res, rate]) => {
       if (res.error) throw res.error;
@@ -94,7 +97,7 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
       setMethods([]);
       setLoading(false);
     });
-  }, []);
+  }, [context]);
 
   useEffect(() => {
     if (vState !== 'verifying') return;
