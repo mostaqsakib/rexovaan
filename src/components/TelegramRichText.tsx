@@ -22,6 +22,19 @@ function saveSession(id: string, v: EmojiInfo) {
   try { sessionStorage.setItem(`tg-emoji:${id}`, JSON.stringify({ ...v, version: SESSION_CACHE_VERSION })); } catch {}
 }
 
+// ---- Pub/sub so mounted <TgEmoji> instances re-render when cache is seeded ----
+const listeners = new Map<string, Set<(v: EmojiInfo) => void>>();
+function subscribeEmoji(id: string, cb: (v: EmojiInfo) => void) {
+  let set = listeners.get(id);
+  if (!set) { set = new Set(); listeners.set(id, set); }
+  set.add(cb);
+  return () => { set!.delete(cb); if (set!.size === 0) listeners.delete(id); };
+}
+function notifyEmoji(id: string, v: EmojiInfo) {
+  const set = listeners.get(id);
+  if (set) set.forEach((cb) => cb(v));
+}
+
 export function seedCustomEmojiCache(entries: Array<{ id: string; url?: string | null; fallback?: string | null }>) {
   for (const entry of entries) {
     if (!entry.id) continue;
@@ -29,6 +42,7 @@ export function seedCustomEmojiCache(entries: Array<{ id: string; url?: string |
     memCache.set(entry.id, info);
     saveSession(entry.id, info);
     warmAsset(info);
+    notifyEmoji(entry.id, info);
   }
 }
 
@@ -136,6 +150,15 @@ export function TgEmoji({ id, fallback, size = '1.25em', disableRemoteFetch = fa
     if (!info && !disableRemoteFetch) resolve(id).then(v => { if (!cancel) setInfo(v); });
     return () => { cancel = true; };
   }, [id, info, disableRemoteFetch]);
+
+  // Subscribe to seedCustomEmojiCache updates — critical for the emoji picker
+  // where TgEmoji is created with disableRemoteFetch=true and previously
+  // required remount (via key busting) to reflect cache seeds.
+  useEffect(() => {
+    if (info?.url) return; // already resolved
+    return subscribeEmoji(id, (v) => setInfo(v));
+  }, [id, info?.url]);
+
 
   useEffect(() => {
     let cancel = false;

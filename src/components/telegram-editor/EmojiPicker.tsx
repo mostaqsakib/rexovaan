@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { EMOJI_CATEGORIES, searchEmojis } from './emoji-data';
 import { Input } from '@/components/ui/input';
@@ -33,7 +33,8 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
   const [query, setQuery] = useState('');
   const [sets, setSets] = useState<StickerSet[]>([]);
   const [recent, setRecent] = useState(loadRecent());
-  const [assetVersion, setAssetVersion] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(96);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     supabase.from('bot_emoji_sticker_sets').select('*').order('title')
@@ -87,7 +88,6 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
       const readyRows = rows.filter((row) => row.status === 'ready' && row.lottie_url);
       if (readyRows.length) {
         seedCustomEmojiCache(readyRows.map((row) => ({ id: row.emoji_id, url: row.lottie_url, fallback: row.fallback })));
-        setAssetVersion((v) => v + 1);
       }
       // Resolve any missing / pending emojis via the edge function so premium
       // packs light up instead of showing only the small colored thumb.
@@ -107,7 +107,6 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
             .map(([id, v]: any) => ({ id, url: v.url, fallback: v.fallback }));
           if (entries.length) {
             seedCustomEmojiCache(entries);
-            setAssetVersion((v) => v + 1);
           }
         } catch { /* ignore, retry on next open */ }
       }
@@ -118,6 +117,19 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
 
   const pickU = (e: string) => { saveRecent({ type: 'u', v: e }); setRecent(loadRecent()); onPickUnicode(e); };
   const pickC = (id: string, f: string) => { saveRecent({ type: 'c', v: id, f }); setRecent(loadRecent()); onPickCustom(id, f); };
+
+  // Reset the incremental window whenever the visible list changes.
+  useEffect(() => {
+    setVisibleCount(96);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [mode, activeSet, activeUnicode, query]);
+
+  const onBodyScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) {
+      setVisibleCount((c) => c + 96);
+    }
+  };
 
   return (
     <div className="telegram-emoji-picker w-[360px] h-[520px] flex flex-col overflow-hidden">
@@ -134,13 +146,13 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
         </div>
       </div>
 
-      <div className="telegram-emoji-body flex-1 overflow-y-auto px-2 pb-2">
+      <div ref={scrollRef} onScroll={onBodyScroll} className="telegram-emoji-body flex-1 overflow-y-auto px-2 pb-2">
         {query ? (
           <div className="space-y-3">
             {mode === 'custom' && customSearchResults.length > 0 && (
               <EmojiSection title="Premium emoji">
-                {customSearchResults.map(e => (
-                  <CustomEmojiButton key={`${e.custom_emoji_id}:${assetVersion}`} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
+                {customSearchResults.slice(0, visibleCount).map(e => (
+                  <CustomEmojiButton key={e.custom_emoji_id} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
                 ))}
               </EmojiSection>
             )}
@@ -155,25 +167,26 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
           activeSet === 'recent' ? (
             recent.length === 0 ? <EmptyState text="Pick emojis to see them here" /> : (
               <EmojiSection title="Recently used">
-                {recent.map((e, i) => e.type === 'u'
+                {recent.slice(0, visibleCount).map((e, i) => e.type === 'u'
                   ? <UnicodeEmojiButton key={`${e.v}-${i}`} emoji={e.v} onClick={() => pickU(e.v)} />
-                  : <CustomEmojiButton key={`${e.v}-${i}:${assetVersion}`} id={e.v} fallback={e.f || ''} onClick={() => pickC(e.v, e.f || '')} />
+                  : <CustomEmojiButton key={`${e.v}-${i}`} id={e.v} fallback={e.f || ''} onClick={() => pickC(e.v, e.f || '')} />
                 )}
               </EmojiSection>
             )
           ) : activeSetData ? (
             <EmojiSection title={activeSetData.title} subtitle={`${activeSetData.emojis.length} premium emojis`}>
-              {activeSetData.emojis.map(e => (
-                <CustomEmojiButton key={`${e.custom_emoji_id}:${assetVersion}`} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
+              {activeSetData.emojis.slice(0, visibleCount).map(e => (
+                <CustomEmojiButton key={e.custom_emoji_id} id={e.custom_emoji_id} fallback={e.emoji} thumb={e.thumb_url} onClick={() => pickC(e.custom_emoji_id, e.emoji)} />
               ))}
             </EmojiSection>
           ) : <EmptyState text="No synced premium emoji packs" />
         ) : (
           <EmojiSection title={activeUnicodeData.label}>
-            {activeUnicodeData.emojis.map((e, i) => <UnicodeEmojiButton key={`${e}-${i}`} emoji={e} onClick={() => pickU(e)} />)}
+            {activeUnicodeData.emojis.slice(0, visibleCount).map((e, i) => <UnicodeEmojiButton key={`${e}-${i}`} emoji={e} onClick={() => pickU(e)} />)}
           </EmojiSection>
         )}
       </div>
+
 
       <div className="telegram-emoji-footer flex items-center gap-1 overflow-x-auto px-2 py-1.5 scrollbar-hide">
         {mode === 'custom' ? (
