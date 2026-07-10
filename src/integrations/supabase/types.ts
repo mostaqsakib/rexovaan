@@ -616,6 +616,8 @@ export type Database = {
           created_at: string
           customer_id: string
           id: string
+          ltc_address: string | null
+          ltc_tx_hash: string | null
           payment_method: string | null
           pending_product_id: string | null
           pending_quantity: number | null
@@ -633,6 +635,8 @@ export type Database = {
           created_at?: string
           customer_id: string
           id?: string
+          ltc_address?: string | null
+          ltc_tx_hash?: string | null
           payment_method?: string | null
           pending_product_id?: string | null
           pending_quantity?: number | null
@@ -650,6 +654,8 @@ export type Database = {
           created_at?: string
           customer_id?: string
           id?: string
+          ltc_address?: string | null
+          ltc_tx_hash?: string | null
           payment_method?: string | null
           pending_product_id?: string | null
           pending_quantity?: number | null
@@ -1875,6 +1881,146 @@ export type Database = {
           },
         ]
       }
+      ltc_payment_registry: {
+        Row: {
+          address: string
+          amount_ltc: number
+          block_height: number | null
+          confirmations: number | null
+          credited_at: string
+          deposit_id: string | null
+          id: string
+          reserved_address_id: string | null
+          tx_hash: string
+          vout: number
+        }
+        Insert: {
+          address: string
+          amount_ltc: number
+          block_height?: number | null
+          confirmations?: number | null
+          credited_at?: string
+          deposit_id?: string | null
+          id?: string
+          reserved_address_id?: string | null
+          tx_hash: string
+          vout: number
+        }
+        Update: {
+          address?: string
+          amount_ltc?: number
+          block_height?: number | null
+          confirmations?: number | null
+          credited_at?: string
+          deposit_id?: string | null
+          id?: string
+          reserved_address_id?: string | null
+          tx_hash?: string
+          vout?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ltc_payment_registry_reserved_address_id_fkey"
+            columns: ["reserved_address_id"]
+            isOneToOne: false
+            referencedRelation: "ltc_reserved_addresses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ltc_reserved_addresses: {
+        Row: {
+          address: string
+          created_at: string
+          customer_telegram_id: number | null
+          deposit_id: string | null
+          derivation_index: number
+          expected_amount_ltc: number
+          expected_amount_usd: number
+          expires_at: string
+          id: string
+          ltc_usd_rate: number
+          order_id: string | null
+          paid_amount_ltc: number | null
+          paid_at: string | null
+          paid_tx_hash: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          customer_telegram_id?: number | null
+          deposit_id?: string | null
+          derivation_index: number
+          expected_amount_ltc: number
+          expected_amount_usd: number
+          expires_at: string
+          id?: string
+          ltc_usd_rate: number
+          order_id?: string | null
+          paid_amount_ltc?: number | null
+          paid_at?: string | null
+          paid_tx_hash?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          customer_telegram_id?: number | null
+          deposit_id?: string | null
+          derivation_index?: number
+          expected_amount_ltc?: number
+          expected_amount_usd?: number
+          expires_at?: string
+          id?: string
+          ltc_usd_rate?: number
+          order_id?: string | null
+          paid_amount_ltc?: number | null
+          paid_at?: string | null
+          paid_tx_hash?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ltc_settings: {
+        Row: {
+          created_at: string
+          id: string
+          min_confirmations: number
+          next_index: number
+          script_type: string
+          singleton: boolean
+          updated_at: string
+          watcher_last_height: number
+          xpub: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          min_confirmations?: number
+          next_index?: number
+          script_type?: string
+          singleton?: boolean
+          updated_at?: string
+          watcher_last_height?: number
+          xpub?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          min_confirmations?: number
+          next_index?: number
+          script_type?: string
+          singleton?: boolean
+          updated_at?: string
+          watcher_last_height?: number
+          xpub?: string | null
+        }
+        Relationships: []
+      }
       site_announcements: {
         Row: {
           body: string | null
@@ -2287,6 +2433,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      ltc_next_index: { Args: never; Returns: number }
       mark_link_check_result: {
         Args: { _item_id: string; _reason: string; _result: string }
         Returns: undefined
