@@ -50,9 +50,13 @@ export interface PaymentFlowProps {
   compact?: boolean;
   /** Payment methods context filter — 'purchase' (default) or 'deposit'. */
   context?: 'purchase' | 'deposit';
+  /** Direct-purchase product id — enables background auto-fulfillment for on-chain reservations even if the user closes the tab. */
+  pendingProductId?: string | null;
+  /** Quantity for the pending product (defaults to 1). */
+  pendingQuantity?: number | null;
 }
 
-export default function PaymentFlow({ prefillAmount, onVerified, compact, context = 'purchase' }: PaymentFlowProps) {
+export default function PaymentFlow({ prefillAmount, onVerified, compact, context = 'purchase', pendingProductId, pendingQuantity }: PaymentFlowProps) {
 
   const { customer, refreshCustomer } = useCustomerAuth();
   const { format } = useCurrency();
