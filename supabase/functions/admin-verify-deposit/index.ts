@@ -134,6 +134,17 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Already verified" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Only allow manual admin verification for ID-based off-chain rails.
+    // On-chain rails (BEP20 / Polygon / TON / LTC / Cryptomus) must auto-verify;
+    // legacy manual TxID submissions (old Binance BEP20 / TRC20 / etc.) are blocked.
+    const ALLOWED_MANUAL = new Set(["Binance Pay", "Bybit Pay", "bKash"]);
+    const pm = (deposit.payment_method || "").trim();
+    if (!ALLOWED_MANUAL.has(pm)) {
+      return new Response(JSON.stringify({
+        error: `Manual verification disabled for "${pm || 'unknown'}". Only Binance Pay, Bybit Pay & bKash can be manually approved. On-chain deposits (BEP20/Polygon/TON/LTC/Cryptomus) auto-verify only.`
+      }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // Get customer
     const { data: customer } = await supabase.from("bot_customers").select("*").eq("id", deposit.customer_id).single();
     if (!customer) {
