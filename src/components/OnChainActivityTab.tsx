@@ -641,6 +641,54 @@ const OnChainActivityTab = () => {
       </Card>
 
 
+      {/* Late Payments */}
+      {latePayments.length > 0 && (
+        <Card className="border-warning/60 bg-warning/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm text-warning">
+              <Clock className="h-4 w-4" />
+              Late Payments — arrived after checkout window ({latePayments.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 p-4 pt-0">
+            <p className="text-xs text-muted-foreground">
+              These payments hit expired reservations. Review and one-click credit.
+            </p>
+            {latePayments.map((lp) => {
+              const c = lp._customer;
+              const label = c ? (c.first_name || c.username || `#${c.chat_id}`) : lp.customer_id?.slice(0, 8);
+              const tx = lp.txn_hash || lp.bep20_tx_hash || lp.ltc_tx_hash;
+              return (
+                <div key={lp.id} className="flex flex-col gap-2 rounded-md border border-warning/40 bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">{lp.payment_method || 'on-chain'}</Badge>
+                      <span className="font-medium">${Number(lp.amount || 0).toFixed(2)}</span>
+                      <span className="text-muted-foreground">→ {label}</span>
+                    </div>
+                    {tx && (
+                      <code className="truncate font-mono text-[10px] text-muted-foreground">{short(tx, 14)}</code>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => creditLatePayment(lp.id)}
+                      disabled={creditingId === lp.id}
+                    >
+                      {creditingId === lp.id
+                        ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Crediting…</>
+                        : <><CheckCircle2 className="mr-1 h-3 w-3" />Credit Now</>}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lookup */}
       <Card>
         <CardHeader className="pb-3">
