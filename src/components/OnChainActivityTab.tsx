@@ -434,42 +434,53 @@ const OnChainActivityTab = () => {
         </CardContent>
       </Card>
 
-      {/* Gas tank emergency alert */}
-      {gas && (gas.criticalCount || 0) > 0 && (
-        <Card className="border-destructive/60 bg-destructive/10">
-          <CardContent className="flex items-start gap-3 p-4">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
-            <div className="flex-1 space-y-1">
-              <div className="text-sm font-semibold text-destructive">
-                ⚠️ EMERGENCY: {gas.criticalCount} gas tank{(gas.criticalCount || 0) > 1 ? 's' : ''} depleted — sweeps will fail
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Top up native gas immediately: {gas.chains.filter((c) => c.status === 'critical').map((c) => `${c.native} on ${c.name}`).join(', ')}
-              </div>
-              <div className="mt-2 flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1.5 font-mono text-[11px]">
-                <span className="text-muted-foreground">Send to:</span>
-                <span>{gas.master}</span>
-                <button onClick={() => copy(gas.master)} className="ml-auto text-primary hover:text-primary/80"><Copy className="h-3 w-3" /></button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      {gas && (gas.warnCount || 0) > 0 && (gas.criticalCount || 0) === 0 && (
-        <Card className="border-warning/60 bg-warning/10">
-          <CardContent className="flex items-start gap-3 p-4">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
-            <div className="flex-1 space-y-0.5">
-              <div className="text-sm font-semibold text-warning">
-                {gas.warnCount} gas tank{(gas.warnCount || 0) > 1 ? 's' : ''} running low
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Top up soon: {gas.chains.filter((c) => c.status === 'warn').map((c) => `${c.native} on ${c.name}`).join(', ')}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Gas tank emergency alert (only for visible chains) */}
+      {(() => {
+        if (!gas) return null;
+        const visible = gas.chains.filter((c) => ['bsc','polygon','ethereum'].includes(c.chain));
+        const crit = visible.filter((c) => (c.status || (c.ok ? 'ok' : 'critical')) === 'critical');
+        const warn = visible.filter((c) => c.status === 'warn');
+        return (
+          <>
+            {crit.length > 0 && (
+              <Card className="border-destructive/60 bg-destructive/10">
+                <CardContent className="flex items-start gap-3 p-4">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+                  <div className="flex-1 space-y-1">
+                    <div className="text-sm font-semibold text-destructive">
+                      ⚠️ EMERGENCY: {crit.length} gas tank{crit.length > 1 ? 's' : ''} depleted — sweeps will fail
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Top up native gas immediately: {crit.map((c) => `${c.native} on ${c.name}`).join(', ')}
+                    </div>
+                    <div className="mt-2 flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1.5 font-mono text-[11px]">
+                      <span className="text-muted-foreground">Send to:</span>
+                      <span>{gas.master}</span>
+                      <button onClick={() => copy(gas.master)} className="ml-auto text-primary hover:text-primary/80"><Copy className="h-3 w-3" /></button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {warn.length > 0 && crit.length === 0 && (
+              <Card className="border-warning/60 bg-warning/10">
+                <CardContent className="flex items-start gap-3 p-4">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+                  <div className="flex-1 space-y-0.5">
+                    <div className="text-sm font-semibold text-warning">
+                      {warn.length} gas tank{warn.length > 1 ? 's' : ''} running low
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Top up soon: {warn.map((c) => `${c.native} on ${c.name}`).join(', ')}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        );
+      })()}
+
 
       {/* Gas tanks */}
       <Card>
