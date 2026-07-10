@@ -4355,8 +4355,8 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
       [applyEmoji({ text: "❌ Cancel Order", callback_data: "cancel_order" }, "cancel_order", emojiMap)],
     ] };
 
-    if (effectiveAmountToPay < 0.5) {
-      msg += `\n⚠️ Amount too small for on-chain auto-verify. Please add balance first or use another method.`;
+    if (effectiveAmountToPay < 0.01) {
+      msg += `\n⚠️ Amount too small. Minimum is $0.01.`;
       if (editMessageId) await editMessageText(chatId, editMessageId, msg, backBtnRow);
       else await sendMessage(chatId, msg, backBtnRow);
       return;
