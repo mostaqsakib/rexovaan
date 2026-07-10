@@ -120,19 +120,29 @@ const OnChainActivityTab = () => {
   const [lookupResult, setLookupResult] = useState<string | null>(null);
   const [gas, setGas] = useState<GasStatus | null>(null);
   const [gasLoading, setGasLoading] = useState(false);
+  const [ltcGas, setLtcGas] = useState<GasChain & { master?: string } | null>(null);
 
   const loadGas = async () => {
     setGasLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('bep20-gas-status');
+      const [{ data, error }, ltcRes] = await Promise.all([
+        supabase.functions.invoke('bep20-gas-status'),
+        supabase.functions.invoke('ltc-gas-status'),
+      ]);
       if (error) throw error;
       setGas(data as GasStatus);
+      if (!ltcRes.error && ltcRes.data && (ltcRes.data as any).ok !== false) {
+        setLtcGas(ltcRes.data as any);
+      } else {
+        setLtcGas(null);
+      }
     } catch (e: any) {
       toast.error(e.message ?? 'Gas status failed');
     } finally {
       setGasLoading(false);
     }
   };
+
 
 
   const load = async () => {
@@ -552,6 +562,41 @@ const OnChainActivityTab = () => {
                   </div>
                 );
               })}
+              {ltcGas && (() => {
+                const c = ltcGas;
+                const status = c.status || 'ok';
+                const border =
+                  status === 'critical' ? 'border-destructive/50 bg-destructive/5'
+                  : status === 'warn' ? 'border-warning/50 bg-warning/5'
+                  : 'border-success/40 bg-success/5';
+                const badgeLabel = status === 'critical' ? 'REFILL NOW' : status === 'warn' ? 'LOW' : 'OK';
+                const badgeVariant: any = status === 'critical' ? 'destructive' : status === 'warn' ? 'secondary' : 'default';
+                return (
+                  <div key="litecoin" className={`rounded-lg border p-3 ${border}`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-medium">Litecoin</div>
+                        <div className="text-[10px] text-muted-foreground">Gas: LTC (sweep dest)</div>
+                      </div>
+                      <Badge variant={badgeVariant} className="h-5 px-1.5 text-[10px]">{badgeLabel}</Badge>
+                    </div>
+                    <div className="mt-2 font-mono text-base font-semibold">
+                      {Number(c.balance).toFixed(6)}
+                      <span className="ml-1 text-[10px] text-muted-foreground">LTC</span>
+                    </div>
+                    {c.balanceUsd !== null && c.balanceUsd !== undefined && (
+                      <div className="text-[11px] text-muted-foreground">≈ ${c.balanceUsd.toFixed(2)} USD</div>
+                    )}
+                    <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-1.5 text-[10px] text-muted-foreground">
+                      <span>~{c.sweepsRemaining ?? 0} sweeps left</span>
+                      <span>min {Number(c.min).toFixed(4)}</span>
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted-foreground italic">
+                      Note: balance = deposits + fee reserve
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </CardContent>
