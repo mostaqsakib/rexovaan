@@ -2413,6 +2413,7 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      expire_stale_onchain_deposits: { Args: never; Returns: number }
       find_stock_duplicates: {
         Args: { p_product_id: string; p_values: string[] }
         Returns: {
