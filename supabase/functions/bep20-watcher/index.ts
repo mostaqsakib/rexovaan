@@ -298,10 +298,12 @@ Deno.serve(async (req) => {
     const fromBlockParam = url.searchParams.get("from_block");
     const overrideFromBlock = fromBlockParam ? Number(fromBlockParam) : undefined;
 
+    const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: reservations } = await supabase
       .from("bep20_reserved_addresses")
       .select("id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains")
-      .in("status", ["pending", "paid"])
+      .in("status", ["pending", "paid", "expired", "rejected"])
+      .gte("created_at", cutoffIso)
       .limit(500);
     if (!reservations || reservations.length === 0) {
       return json({ ok: true, note: "no reservations" });
