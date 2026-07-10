@@ -6802,7 +6802,7 @@ async function handleCallback(callbackQuery, emojiMap) {
 
     const statsMsg = `📊 <b>Quick Stats</b>\n\n` +
       `🚀 Bot Started: <b>${botStartedStr}</b>\n` +
-      `👥 Total Customers: <b>${custRes.count || 0}</b>\n` +
+      `👥 Total Customers: <b>${stats.rev.total_customers || 0}</b>\n` +
       `📦 Total Orders: <b>${ordRes.count || 0}</b>\n` +
       `💰 Total Revenue: <b>${totalRevenue.toFixed(2)} USDT</b>\n\n` +
       `━━━━━━━━━━━━━━━\n` +
