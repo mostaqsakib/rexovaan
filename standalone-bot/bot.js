@@ -4338,6 +4338,81 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
       msg += `\n\n⚠️ Could not load your customer record for bKash checkout.`;
     }
     msg += `\n\n⚠️ bKash auto-payment could not be initialized. Please try again.`;
+  } else if (
+    paymentType === "bep20" || methodName.includes("usdt/usdc bep20") || methodName.includes("bep20 auto") ||
+    paymentType === "polygon" || methodName.includes("usdt polygon") ||
+    paymentType === "ton_auto" || methodName === "usdt ton" || methodName.includes("ton auto") ||
+    paymentType === "ltc_auto" || methodName === "litecoin (ltc)" || methodName.includes("ltc auto")
+  ) {
+    // Auto-verify on-chain purchase: reserve a unique address / memo just like the deposit flow.
+    const isTON = paymentType === "ton_auto" || methodName === "usdt ton" || methodName.includes("ton auto");
+    const isLTC = paymentType === "ltc_auto" || methodName === "litecoin (ltc)" || methodName.includes("ltc auto");
+    const isPolygon = paymentType === "polygon" || methodName.includes("usdt polygon");
+    const netLabel = isTON ? "TON" : isLTC ? "Litecoin" : isPolygon ? "Polygon" : "BSC / BEP20";
+    const shortProdIdA = productId.slice(0, 8);
+    const backBtnRow = { inline_keyboard: [
+      [applyEmoji({ text: "◀️ Back", callback_data: `backpay_${shortProdIdA}_qty_${qty}` }, "back", emojiMap)],
+      [applyEmoji({ text: "❌ Cancel Order", callback_data: "cancel_order" }, "cancel_order", emojiMap)],
+    ] };
+
+    if (effectiveAmountToPay < 0.5) {
+      msg += `\n⚠️ Amount too small for on-chain auto-verify. Please add balance first or use another method.`;
+      if (editMessageId) await editMessageText(chatId, editMessageId, msg, backBtnRow);
+      else await sendMessage(chatId, msg, backBtnRow);
+      return;
+    }
+
+    try {
+      const endpoint = isTON ? "ton-reserve-memo" : isLTC ? "ltc-reserve-address" : "bep20-reserve-address";
+      const body = isLTC || isTON
+        ? { customer_id: fresh?.id, expected_amount: effectiveAmountToPay }
+        : { customer_id: fresh?.id, expected_amount: effectiveAmountToPay, token: "ANY" };
+      const res = await fetch(`${process.env.SUPABASE_URL}/functions/v1/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.address) {
+        msg += `\n❌ Could not reserve ${netLabel} address: ${escapeHtml(data.error || "Unknown error")}`;
+        if (editMessageId) await editMessageText(chatId, editMessageId, msg, backBtnRow);
+        else await sendMessage(chatId, msg, backBtnRow);
+        return;
+      }
+      const expiresMin = Math.max(1, Math.round((new Date(data.expires_at).getTime() - Date.now()) / 60000));
+
+      let body2 = "";
+      let qrData = data.address;
+      if (isTON) {
+        qrData = `ton://transfer/${data.address}?text=${data.memo}`;
+        body2 = `💎 <b>USDT TON — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send USDT (TON Jetton) to:</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n🆔 <b>Memo / Comment (REQUIRED):</b>\n<code>${data.memo}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Must include the exact memo</b>, otherwise the deposit won't be matched.\n⚠️ <b>TON network only</b> — USDT Jetton (not TRC20/BEP20).\n\nAuto-verified within ~30 seconds after confirmation. Balance is credited automatically — then complete this order from your balance.`;
+      } else if (isLTC) {
+        qrData = `litecoin:${data.address}?amount=${data.amount_ltc}`;
+        body2 = `Ł <b>Litecoin — Auto-Verify</b>\n\n💵 Amount: <b>${data.amount_ltc} LTC</b> (~$${effectiveAmountToPay.toFixed(2)})\n📊 Rate: 1 LTC = $${Number(data.rate).toFixed(2)}\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send this EXACT LTC amount to:</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Send exactly ${data.amount_ltc} LTC.</b> Underpay = not credited.\n⚠️ <b>Litecoin network only.</b>\n\nAuto-verified after 2 confirmations (~5 min). Balance is credited automatically — then complete this order from your balance.`;
+      } else if (isPolygon) {
+        body2 = `🟣 <b>USDT/USDC Polygon — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT/USDC</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send to this address (Polygon / MATIC):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted.\n⚠️ <b>Polygon network only.</b> Wrong network = lost funds.\n\nAuto-verified after ~20 confirmations (~40 sec). Balance is credited automatically — then complete this order from your balance.`;
+      } else {
+        body2 = `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT/USDC</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send to this address (BSC / BEP20):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted.\n⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\nAuto-verified after 3 confirmations (~9 sec). Balance is credited automatically — then complete this order from your balance.`;
+      }
+
+      const caption = `${methodEmojiTag} <b>${method.name}</b>\n\n━━━━━━━━━━━━━━━━\n${pdProductEmoji} Product: <b>${product.name}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>$${total.toFixed(2)} USDT</b>\n${balanceUsed > 0 ? `💰 Balance Deduction: <b>-$${balanceUsed.toFixed(2)} USDT</b>\n💳 Amount to Pay: <b>$${effectiveAmountToPay.toFixed(2)} USDT</b>\n` : ""}━━━━━━━━━━━━━━━━\n\n${body2}`;
+
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+      // Delete the previous text message (if any) since photo replaces it
+      if (editMessageId) {
+        try { await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, message_id: editMessageId }) }); } catch {}
+      }
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, photo: qrUrl, caption, parse_mode: "HTML", reply_markup: backBtnRow }),
+      });
+    } catch (e) {
+      msg += `\n❌ Reserve failed: ${escapeHtml(String(e))}`;
+      if (editMessageId) await editMessageText(chatId, editMessageId, msg, backBtnRow);
+      else await sendMessage(chatId, msg, backBtnRow);
+    }
+    return;
   } else if (methodName.includes("binance") || paymentType === "binance") {
     msg += `🏦 <b>Binance Pay / Internal Transfer</b>\n\n`;
     msg += binanceId ? `<b>Binance ID:</b>\n<code>${binanceId}</code>\n<i>👆 Tap to copy</i>\n` : `<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
