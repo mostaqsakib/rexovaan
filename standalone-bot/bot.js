@@ -2649,8 +2649,8 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     }
   } else if (paymentType === "ltc_auto" || methodName === "litecoin (ltc)" || methodName.includes("ltc auto")) {
     const { data: ltcAmtRow } = await supabase.from("bot_settings").select("value").eq("key", "ltc_amount_msg").maybeSingle();
-    const ltcAmtMsg = ltcAmtRow?.value || `Ł <b>Litecoin (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USD</b> (example: <code>10</code>).\n<i>Minimum: $1</i>\n\nYou'll get a <b>unique LTC address</b> just for this deposit + the exact LTC amount at current rate. Auto-credited after 2 confirmations (~5 min).`;
-    msg += ltcAmtMsg + "\n";
+    const ltcAmtMsg = ltcAmtRow?.value || ONCHAIN_AMOUNT_DEFAULTS.ltc_amount_msg;
+    msg = `${ltcAmtMsg}\n`;
     const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `ltc_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
@@ -4404,7 +4404,18 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
         body2 = `💎 <b>USDT TON — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send USDT (TON Jetton) to:</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n🆔 <b>Memo / Comment (REQUIRED):</b>\n<code>${data.memo}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Must include the exact memo</b>, otherwise the deposit won't be matched.\n⚠️ <b>TON network only</b> — USDT Jetton (not TRC20/BEP20).\n\nAuto-verified within ~30 seconds after confirmation. Balance is credited automatically — then complete this order from your balance.`;
       } else if (isLTC) {
         qrData = `litecoin:${data.address}?amount=${data.amount_ltc}`;
-        body2 = `Ł <b>Litecoin — Auto-Verify</b>\n\n💵 Amount: <b>${data.amount_ltc} LTC</b> (~$${effectiveAmountToPay.toFixed(2)})\n📊 Rate: 1 LTC = $${Number(data.rate).toFixed(2)}\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send this EXACT LTC amount to:</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Send exactly ${data.amount_ltc} LTC.</b> Underpay = not credited.\n⚠️ <b>Litecoin network only.</b>\n\nAuto-verified after 2 confirmations (~5 min). Balance is credited automatically — then complete this order from your balance.`;
+        const { data: ltcAddrRow } = await supabase.from("bot_settings").select("value").eq("key", "ltc_address_msg").maybeSingle();
+        const template = ltcAddrRow?.value || `Ł <b>Litecoin — Auto-Verify</b>\n\n💵 Amount: <b>{amount_ltc} LTC</b> (~${"$"}{amount_usd})\n📊 Rate: 1 LTC = ${"$"}{rate}\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send this EXACT LTC amount to:</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Send exactly {amount_ltc} LTC.</b> Underpay = not credited.\n⚠️ <b>Litecoin network only.</b>\n\nAuto-verified after 2 confirmations (~5 min). Balance is credited automatically — then complete this order from your balance.`;
+        body2 = replacePlaceholders(template, {
+          amount_ltc: data.amount_ltc.toString(),
+          ltc_amount: data.amount_ltc.toString(),
+          amount_usd: effectiveAmountToPay.toFixed(2),
+          usd_amount: effectiveAmountToPay.toFixed(2),
+          rate: Number(data.rate).toFixed(2),
+          expires_min: String(expiresMin),
+          ttl_min: String(expiresMin),
+          address: data.address,
+        });
       } else if (isPolygon) {
         body2 = `🟣 <b>USDT/USDC Polygon — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT/USDC</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send to this address (Polygon / MATIC):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted.\n⚠️ <b>Polygon network only.</b> Wrong network = lost funds.\n\nAuto-verified after ~20 confirmations (~40 sec). Balance is credited automatically — then complete this order from your balance.`;
       } else {
