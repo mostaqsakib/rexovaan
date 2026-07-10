@@ -7021,6 +7021,15 @@ async function handleCallback(callbackQuery, emojiMap) {
       msg_flash_sale_ended: `<code>{product}</code> — Product (with emoji + name)`,
       msg_recent_sale: `<code>{product}</code> — Product (with emoji + name)\n<code>{quantity}</code> — Quantity bought`,
       msg_recent_sale_web: `<code>{product}</code> — Product (with emoji + name)\n<code>{quantity}</code> — Quantity bought`,
+      channel_join_message: `No placeholders — static message shown before join verification`,
+      bep20_amount_msg: `No placeholders — shown before user enters amount`,
+      bep20_address_msg: `<code>{amount}</code> — Amount in USDT\n<code>{address}</code> — Unique BSC address\n<code>{ttl_min}</code> — Minutes until expiry`,
+      polygon_amount_msg: `No placeholders — shown before user enters amount`,
+      polygon_address_msg: `<code>{amount}</code> — Amount in USDT\n<code>{address}</code> — Unique Polygon address\n<code>{ttl_min}</code> — Minutes until expiry`,
+      ton_amount_msg: `No placeholders — shown before user enters amount`,
+      ton_address_msg: `<code>{amount}</code> — Amount in USDT\n<code>{address}</code> — TON address\n<code>{memo}</code> — Unique memo/comment`,
+      ltc_amount_msg: `No placeholders — shown before user enters amount`,
+      ltc_address_msg: `<code>{ltc_amount}</code> — Amount in LTC\n<code>{usd_amount}</code> — Amount in USD\n<code>{address}</code> — Unique LTC address`,
     };
     const placeholderInfo = placeholderMap[msgKey] || "No placeholders";
 
