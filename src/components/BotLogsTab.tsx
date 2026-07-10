@@ -169,29 +169,39 @@ const BotLogsTab = () => {
                         {dep.txn_hash}
                       </code>
                     )}
-                    {dep.status === 'pending' && (
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 text-xs border-green-500/50 text-green-400 hover:bg-green-500/10"
-                          onClick={() => { setVerifyDialog(dep); setVerifyAmount(''); }}
-                        >
-                          <CheckCircle className="h-3 w-3" />
-                          Verify
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
-                          onClick={() => handleReject(dep)}
-                          disabled={rejecting === dep.id}
-                        >
-                          {rejecting === dep.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
-                          Reject
-                        </Button>
-                      </div>
-                    )}
+                    {dep.status === 'pending' && (() => {
+                      const ALLOWED_MANUAL = new Set(['Binance Pay', 'Bybit Pay', 'bKash']);
+                      const canVerify = ALLOWED_MANUAL.has((dep.payment_method || '').trim());
+                      return (
+                        <div className="flex gap-1">
+                          {canVerify ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-xs border-green-500/50 text-green-400 hover:bg-green-500/10"
+                              onClick={() => { setVerifyDialog(dep); setVerifyAmount(''); }}
+                            >
+                              <CheckCircle className="h-3 w-3" />
+                              Verify
+                            </Button>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">
+                              🔒 Auto-verify only
+                            </Badge>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
+                            onClick={() => handleReject(dep)}
+                            disabled={rejecting === dep.id}
+                          >
+                            {rejecting === dep.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                            Reject
+                          </Button>
+                        </div>
+                      );
+                    })()}
                     <span className="ml-auto text-sm text-muted-foreground">{formatDate(dep.created_at)}</span>
                   </div>
                 </div>
