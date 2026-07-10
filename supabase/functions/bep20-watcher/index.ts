@@ -178,27 +178,39 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
         continue;
       }
 
-      let creditResult: { newBalance: number; paidPayLater: number } | null = null;
-      try {
-        creditResult = await applyDepositCredit(supabase, res.customer_id, amt);
-      } catch (e) {
-        console.error(`[${chain.id}] applyDepositCredit err`, e);
-      }
+      const isLate = res.status === "expired" || res.status === "rejected";
 
-      await supabase.from("bot_deposits").update({
-        status: "verified",
-        verified_at: new Date().toISOString(),
-        bep20_tx_hash: txHash,
-        bep20_token: tok.symbol,
-        txn_hash: txHash,
-      } as any).eq("id", res.deposit_id);
+      let creditResult: { newBalance: number; paidPayLater: number } | null = null;
+      if (!isLate) {
+        try {
+          creditResult = await applyDepositCredit(supabase, res.customer_id, amt);
+        } catch (e) {
+          console.error(`[${chain.id}] applyDepositCredit err`, e);
+        }
+
+        await supabase.from("bot_deposits").update({
+          status: "verified",
+          verified_at: new Date().toISOString(),
+          bep20_tx_hash: txHash,
+          bep20_token: tok.symbol,
+          txn_hash: txHash,
+        } as any).eq("id", res.deposit_id);
+      } else {
+        // Late payment — arrived after reservation expired. Flag for admin review, no auto-credit.
+        await supabase.from("bot_deposits").update({
+          status: "late_pending",
+          bep20_tx_hash: txHash,
+          bep20_token: tok.symbol,
+          txn_hash: txHash,
+        } as any).eq("id", res.deposit_id);
+      }
 
       // Merge chain into received_chains
       const rcSet = new Set<string>(res.received_chains ?? []);
       rcSet.add(chain.id);
       const newReceived = Number(res.received_amount || 0) + amt;
       await supabase.from("bep20_reserved_addresses").update({
-        status: "paid",
+        status: isLate ? "late_paid" : "paid",
         paid_at: new Date().toISOString(),
         tx_hash: txHash,
         received_amount: newReceived,
@@ -215,25 +227,43 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
         const shortTx = `${txHash.slice(0, 10)}…${txHash.slice(-8)}`;
         const wrongNet = res.token !== "ANY" && !res.received_chains?.includes("bsc") && chain.id !== "bsc";
         const chainLabel = chain.name;
-        if (customer?.chat_id) {
-          const plLine = creditResult && creditResult.paidPayLater > 0
-            ? `\n🏷️ Pay-Later Cleared: <b>$${creditResult.paidPayLater.toFixed(2)}</b>` : "";
-          const balLine = creditResult
-            ? `\n💳 New Balance: <b>$${creditResult.newBalance.toFixed(2)} USDT</b>` : "";
-          const netLine = `\n🌐 Network: <b>${chainLabel}</b>${wrongNet ? " ⚠️ (recovered)" : ""}`;
-          await sendTelegram("sendMessage", {
-            chat_id: customer.chat_id,
-            text: `✅ <b>Deposit Verified!</b>\n\n💵 Credited: <b>${amt.toFixed(2)} ${tok.symbol}</b>${netLine}${plLine}${balLine}\n🔗 <a href="${chain.explorerTx(txHash)}">Tx: ${shortTx}</a>`,
-            parse_mode: "HTML",
-          });
-        }
         const adminChatId = Deno.env.get("ADMIN_CHAT_ID");
-        if (adminChatId) {
-          await sendTelegram("sendMessage", {
-            chat_id: adminChatId,
-            text: `💰 <b>Deposit Received (${chainLabel})</b>${wrongNet ? "\n⚠️ WRONG NETWORK RECOVERY" : ""}\n\nCustomer: <code>${customer?.chat_id || res.customer_id}</code>\nAmount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\nAddress: <code>${toAddr}</code>\n<a href="${chain.explorerTx(txHash)}">Tx: ${txHash}</a>`,
-            parse_mode: "HTML",
-          });
+
+        if (isLate) {
+          if (customer?.chat_id) {
+            await sendTelegram("sendMessage", {
+              chat_id: customer.chat_id,
+              text: `⏰ <b>Late Payment Detected</b>\n\n💵 Amount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\n🌐 Network: <b>${chainLabel}</b>\n\nYour payment arrived after the checkout window expired. Our team has been notified and will credit your account shortly.\n\n🔗 <a href="${chain.explorerTx(txHash)}">Tx: ${shortTx}</a>`,
+              parse_mode: "HTML",
+            });
+          }
+          if (adminChatId) {
+            await sendTelegram("sendMessage", {
+              chat_id: adminChatId,
+              text: `⏰ <b>LATE PAYMENT (${chainLabel})</b>\n⚠️ Needs manual credit in admin panel.\n\nCustomer: <code>${customer?.chat_id || res.customer_id}</code>\nAmount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\nAddress: <code>${toAddr}</code>\nDeposit: <code>${res.deposit_id}</code>\n<a href="${chain.explorerTx(txHash)}">Tx: ${txHash}</a>`,
+              parse_mode: "HTML",
+            });
+          }
+        } else {
+          if (customer?.chat_id) {
+            const plLine = creditResult && creditResult.paidPayLater > 0
+              ? `\n🏷️ Pay-Later Cleared: <b>$${creditResult.paidPayLater.toFixed(2)}</b>` : "";
+            const balLine = creditResult
+              ? `\n💳 New Balance: <b>$${creditResult.newBalance.toFixed(2)} USDT</b>` : "";
+            const netLine = `\n🌐 Network: <b>${chainLabel}</b>${wrongNet ? " ⚠️ (recovered)" : ""}`;
+            await sendTelegram("sendMessage", {
+              chat_id: customer.chat_id,
+              text: `✅ <b>Deposit Verified!</b>\n\n💵 Credited: <b>${amt.toFixed(2)} ${tok.symbol}</b>${netLine}${plLine}${balLine}\n🔗 <a href="${chain.explorerTx(txHash)}">Tx: ${shortTx}</a>`,
+              parse_mode: "HTML",
+            });
+          }
+          if (adminChatId) {
+            await sendTelegram("sendMessage", {
+              chat_id: adminChatId,
+              text: `💰 <b>Deposit Received (${chainLabel})</b>${wrongNet ? "\n⚠️ WRONG NETWORK RECOVERY" : ""}\n\nCustomer: <code>${customer?.chat_id || res.customer_id}</code>\nAmount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\nAddress: <code>${toAddr}</code>\n<a href="${chain.explorerTx(txHash)}">Tx: ${txHash}</a>`,
+              parse_mode: "HTML",
+            });
+          }
         }
       } catch (e) { console.error("notify err", e); }
     }
@@ -268,10 +298,12 @@ Deno.serve(async (req) => {
     const fromBlockParam = url.searchParams.get("from_block");
     const overrideFromBlock = fromBlockParam ? Number(fromBlockParam) : undefined;
 
+    const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: reservations } = await supabase
       .from("bep20_reserved_addresses")
       .select("id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains")
-      .in("status", ["pending", "paid"])
+      .in("status", ["pending", "paid", "expired", "rejected"])
+      .gte("created_at", cutoffIso)
       .limit(500);
     if (!reservations || reservations.length === 0) {
       return json({ ok: true, note: "no reservations" });

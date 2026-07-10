@@ -49,8 +49,12 @@ Deno.serve(async (req) => {
     const { data: settings } = await admin.from("ltc_settings").select("*").eq("singleton", true).single();
     const minConf = Number(settings?.min_confirmations ?? 2);
 
+    const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: reserved } = await admin
-      .from("ltc_reserved_addresses").select("*").eq("status", "pending").limit(200);
+      .from("ltc_reserved_addresses").select("*")
+      .in("status", ["pending", "expired", "rejected"])
+      .gte("created_at", cutoffIso)
+      .limit(200);
 
     if (!reserved || reserved.length === 0) {
       return new Response(JSON.stringify({ ok: true, ...summary, note: "no pending" }), {
@@ -91,6 +95,7 @@ Deno.serve(async (req) => {
             }
 
             const usdCredited = Number((amountLtc * Number(row.ltc_usd_rate)).toFixed(4));
+            const isLate = row.status === "expired" || row.status === "rejected";
             let customerChatId: number | null = null;
             let creditResult: { newBalance: number; paidPayLater: number } | null = null;
 
@@ -98,14 +103,21 @@ Deno.serve(async (req) => {
               const { data: dep } = await admin.from("bot_deposits")
                 .select("customer_id").eq("id", row.deposit_id).maybeSingle();
               if (dep?.customer_id) {
-                try {
-                  creditResult = await applyDepositCredit(admin, dep.customer_id, usdCredited);
-                } catch (e) { console.error("credit err", e); }
+                if (!isLate) {
+                  try {
+                    creditResult = await applyDepositCredit(admin, dep.customer_id, usdCredited);
+                  } catch (e) { console.error("credit err", e); }
 
-                await admin.from("bot_deposits").update({
-                  status: "verified", verified_at: new Date().toISOString(),
-                  ltc_address: row.address, ltc_tx_hash: tx.txid, txn_hash: tx.txid,
-                }).eq("id", row.deposit_id);
+                  await admin.from("bot_deposits").update({
+                    status: "verified", verified_at: new Date().toISOString(),
+                    ltc_address: row.address, ltc_tx_hash: tx.txid, txn_hash: tx.txid,
+                  }).eq("id", row.deposit_id);
+                } else {
+                  await admin.from("bot_deposits").update({
+                    status: "late_pending",
+                    ltc_address: row.address, ltc_tx_hash: tx.txid, txn_hash: tx.txid,
+                  }).eq("id", row.deposit_id);
+                }
 
                 const { data: cust } = await admin.from("bot_customers")
                   .select("chat_id").eq("id", dep.customer_id).maybeSingle();
@@ -120,31 +132,48 @@ Deno.serve(async (req) => {
             });
 
             await admin.from("ltc_reserved_addresses").update({
-              status: "paid", paid_tx_hash: tx.txid, paid_amount_ltc: amountLtc,
+              status: isLate ? "late_paid" : "paid", paid_tx_hash: tx.txid, paid_amount_ltc: amountLtc,
               paid_at: new Date().toISOString(),
             }).eq("id", row.id);
 
             summary.credited++;
 
-            if (customerChatId) {
-              const shortTx = `${tx.txid.slice(0, 10)}…${tx.txid.slice(-8)}`;
-              const plLine = creditResult && creditResult.paidPayLater > 0
-                ? `\n🏷️ Pay-Later Cleared: <b>$${creditResult.paidPayLater.toFixed(2)}</b>` : "";
-              const balLine = creditResult
-                ? `\n💳 New Balance: <b>$${creditResult.newBalance.toFixed(2)}</b>` : "";
-              await sendTelegram("sendMessage", {
-                chat_id: customerChatId,
-                text: `✅ <b>LTC Deposit Verified!</b>\n\n💵 Received: <b>${amountLtc.toFixed(8)} LTC</b>\n💰 Credited: <b>$${usdCredited.toFixed(2)}</b>${plLine}${balLine}\n🔗 <a href="https://litecoinspace.org/tx/${tx.txid}">Tx: ${shortTx}</a>`,
-                parse_mode: "HTML",
-              });
-            }
+            const shortTx = `${tx.txid.slice(0, 10)}…${tx.txid.slice(-8)}`;
             const adminChat = Deno.env.get("ADMIN_CHAT_ID");
-            if (adminChat) {
-              await sendTelegram("sendMessage", {
-                chat_id: adminChat,
-                text: `💰 <b>LTC Deposit</b>\n\nAmount: <b>${amountLtc.toFixed(8)} LTC</b> ($${usdCredited.toFixed(2)})\nAddress: <code>${row.address}</code>\n<a href="https://litecoinspace.org/tx/${tx.txid}">Tx</a>`,
-                parse_mode: "HTML",
-              });
+            if (isLate) {
+              if (customerChatId) {
+                await sendTelegram("sendMessage", {
+                  chat_id: customerChatId,
+                  text: `⏰ <b>Late LTC Payment Detected</b>\n\n💵 Amount: <b>${amountLtc.toFixed(8)} LTC</b> ($${usdCredited.toFixed(2)})\n\nYour payment arrived after the checkout window expired. Our team will credit your account shortly.\n\n🔗 <a href="https://litecoinspace.org/tx/${tx.txid}">Tx: ${shortTx}</a>`,
+                  parse_mode: "HTML",
+                });
+              }
+              if (adminChat) {
+                await sendTelegram("sendMessage", {
+                  chat_id: adminChat,
+                  text: `⏰ <b>LATE LTC PAYMENT</b>\n⚠️ Needs manual credit.\n\nAmount: <b>${amountLtc.toFixed(8)} LTC</b> ($${usdCredited.toFixed(2)})\nAddress: <code>${row.address}</code>\nDeposit: <code>${row.deposit_id}</code>\n<a href="https://litecoinspace.org/tx/${tx.txid}">Tx</a>`,
+                  parse_mode: "HTML",
+                });
+              }
+            } else {
+              if (customerChatId) {
+                const plLine = creditResult && creditResult.paidPayLater > 0
+                  ? `\n🏷️ Pay-Later Cleared: <b>$${creditResult.paidPayLater.toFixed(2)}</b>` : "";
+                const balLine = creditResult
+                  ? `\n💳 New Balance: <b>$${creditResult.newBalance.toFixed(2)}</b>` : "";
+                await sendTelegram("sendMessage", {
+                  chat_id: customerChatId,
+                  text: `✅ <b>LTC Deposit Verified!</b>\n\n💵 Received: <b>${amountLtc.toFixed(8)} LTC</b>\n💰 Credited: <b>$${usdCredited.toFixed(2)}</b>${plLine}${balLine}\n🔗 <a href="https://litecoinspace.org/tx/${tx.txid}">Tx: ${shortTx}</a>`,
+                  parse_mode: "HTML",
+                });
+              }
+              if (adminChat) {
+                await sendTelegram("sendMessage", {
+                  chat_id: adminChat,
+                  text: `💰 <b>LTC Deposit</b>\n\nAmount: <b>${amountLtc.toFixed(8)} LTC</b> ($${usdCredited.toFixed(2)})\nAddress: <code>${row.address}</code>\n<a href="https://litecoinspace.org/tx/${tx.txid}">Tx</a>`,
+                  parse_mode: "HTML",
+                });
+              }
             }
           }
         }

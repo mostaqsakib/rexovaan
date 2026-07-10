@@ -121,6 +121,44 @@ const OnChainActivityTab = () => {
   const [gas, setGas] = useState<GasStatus | null>(null);
   const [gasLoading, setGasLoading] = useState(false);
   const [ltcGas, setLtcGas] = useState<GasChain & { master?: string } | null>(null);
+  const [latePayments, setLatePayments] = useState<any[]>([]);
+  const [creditingId, setCreditingId] = useState<string | null>(null);
+
+  const loadLatePayments = async () => {
+    const { data } = await supabase
+      .from('bot_deposits')
+      .select('id, customer_id, amount, payment_method, txn_hash, bep20_tx_hash, bep20_token, ltc_tx_hash, created_at, updated_at')
+      .eq('status', 'late_pending')
+      .order('updated_at', { ascending: false })
+      .limit(50);
+    const rows = data || [];
+    const custIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
+    let custMap: Record<string, any> = {};
+    if (custIds.length) {
+      const { data: cd } = await supabase.from('bot_customers')
+        .select('id, chat_id, username, first_name').in('id', custIds);
+      (cd || []).forEach((c: any) => { custMap[c.id] = c; });
+    }
+    setLatePayments(rows.map((r: any) => ({ ...r, _customer: custMap[r.customer_id] })));
+  };
+
+  const creditLatePayment = async (depositId: string) => {
+    setCreditingId(depositId);
+    try {
+      const { data, error } = await supabase.functions.invoke('credit-late-deposit', {
+        body: { deposit_id: depositId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Credited $${Number((data as any)?.credited || 0).toFixed(2)}`);
+      await loadLatePayments();
+    } catch (e: any) {
+      toast.error(e.message ?? 'Credit failed');
+    } finally {
+      setCreditingId(null);
+    }
+  };
+
 
   const loadGas = async () => {
     setGasLoading(true);
@@ -220,7 +258,7 @@ const OnChainActivityTab = () => {
     setRefreshing(false);
   };
 
-  useEffect(() => { void load(); void loadGas(); }, []);
+  useEffect(() => { void load(); void loadGas(); void loadLatePayments(); }, []);
 
   const runScan = async () => {
     setScanning(true);
@@ -602,6 +640,54 @@ const OnChainActivityTab = () => {
         </CardContent>
       </Card>
 
+
+      {/* Late Payments */}
+      {latePayments.length > 0 && (
+        <Card className="border-warning/60 bg-warning/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm text-warning">
+              <Clock className="h-4 w-4" />
+              Late Payments — arrived after checkout window ({latePayments.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 p-4 pt-0">
+            <p className="text-xs text-muted-foreground">
+              These payments hit expired reservations. Review and one-click credit.
+            </p>
+            {latePayments.map((lp) => {
+              const c = lp._customer;
+              const label = c ? (c.first_name || c.username || `#${c.chat_id}`) : lp.customer_id?.slice(0, 8);
+              const tx = lp.txn_hash || lp.bep20_tx_hash || lp.ltc_tx_hash;
+              return (
+                <div key={lp.id} className="flex flex-col gap-2 rounded-md border border-warning/40 bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">{lp.payment_method || 'on-chain'}</Badge>
+                      <span className="font-medium">${Number(lp.amount || 0).toFixed(2)}</span>
+                      <span className="text-muted-foreground">→ {label}</span>
+                    </div>
+                    {tx && (
+                      <code className="truncate font-mono text-[10px] text-muted-foreground">{short(tx, 14)}</code>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => creditLatePayment(lp.id)}
+                      disabled={creditingId === lp.id}
+                    >
+                      {creditingId === lp.id
+                        ? <><Loader2 className="mr-1 h-3 w-3 animate-spin" />Crediting…</>
+                        : <><CheckCircle2 className="mr-1 h-3 w-3" />Credit Now</>}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Lookup */}
       <Card>
