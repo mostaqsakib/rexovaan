@@ -15,8 +15,6 @@ verify_jwt = false
 [functions.stock-broadcast]
 verify_jwt = false
 
-[functions.cryptomus-webhook]
-verify_jwt = false
 
 [functions.bep20-watcher]
 verify_jwt = false

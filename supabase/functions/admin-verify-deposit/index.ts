@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     }
 
     // Only allow manual admin verification for ID-based off-chain rails.
-    // On-chain rails (BEP20 / Polygon / TON / LTC / Cryptomus) must auto-verify;
+    // On-chain rails (BEP20 / Polygon / TON / LTC) must auto-verify;
     // legacy manual TxID submissions (old Binance BEP20 / TRC20 / etc.) are blocked.
     const ALLOWED_MANUAL = new Set(["Binance Pay", "Bybit Pay", "bKash"]);
     const pm = (deposit.payment_method || "").trim();

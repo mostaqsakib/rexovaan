@@ -224,20 +224,17 @@ const PaymentMethodsTab = () => {
               >
                 <option value="wallet">Wallet / Manual (customer submits TxID)</option>
                 <option value="bkash">bKash (auto-verify)</option>
-                <option value="cryptomus">Cryptomus (auto-verify, multi-crypto)</option>
               </select>
               <p className="text-xs text-muted-foreground mt-1">
-                {paymentType === 'cryptomus'
-                  ? 'Auto redirect to Cryptomus checkout. Requires CRYPTOMUS_MERCHANT_ID & API key configured.'
-                  : paymentType === 'bkash'
-                    ? 'Auto redirect to bKash. Requires bKash API keys configured.'
-                    : 'Customer sees wallet address & submits TxID for manual/on-chain verify.'}
+                {paymentType === 'bkash'
+                  ? 'Auto redirect to bKash. Requires bKash API keys configured.'
+                  : 'Customer sees wallet address & submits TxID for manual/on-chain verify.'}
               </p>
             </div>
             <div>
               <label className="text-sm font-medium">Payment Details</label>
-              <Input value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)} placeholder={paymentType === 'cryptomus' ? 'auto (unused for Cryptomus)' : 'Wallet address, ID, or env var name (e.g. BINANCE_ID)'} />
-              <p className="text-xs text-muted-foreground mt-1">{paymentType === 'cryptomus' ? 'Not shown to customer — enter any placeholder like "auto".' : 'Direct value or env variable name that resolves at runtime'}</p>
+              <Input value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)} placeholder="Wallet address, ID, or env var name (e.g. BINANCE_ID)" />
+              <p className="text-xs text-muted-foreground mt-1">Direct value or env variable name that resolves at runtime</p>
             </div>
             <div>
               <label className="text-sm font-medium">Instruction (optional)</label>
