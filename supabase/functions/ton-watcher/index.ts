@@ -120,9 +120,10 @@ Deno.serve(async (req) => {
         const receivedUsd = Number(rawAmount) / Math.pow(10, USDT_DECIMALS);
         if (receivedUsd <= 0) continue;
 
-        // Credit
+        const isLate = reservation.status === "expired" || reservation.status === "rejected";
+
         await supabase.from("ton_reserved_deposits").update({
-          status: "paid",
+          status: isLate ? "late_paid" : "paid",
           received_amount: receivedUsd,
           tx_hash: txHash,
           from_address: jt.sender?.address || null,
@@ -131,20 +132,28 @@ Deno.serve(async (req) => {
 
         if (reservation.deposit_id) {
           await supabase.from("bot_deposits").update({
-            status: "verified",
+            status: isLate ? "late_pending" : "verified",
             amount: receivedUsd,
             txn_hash: txHash,
-            verified_at: new Date().toISOString(),
+            ...(isLate ? {} : { verified_at: new Date().toISOString() }),
           }).eq("id", reservation.deposit_id);
         }
 
-        // Credit customer balance
         const { data: cust } = await supabase
           .from("bot_customers")
           .select("id, chat_id, balance")
           .eq("id", reservation.customer_id)
           .maybeSingle();
-        if (cust) {
+
+        if (isLate) {
+          if (cust?.chat_id) {
+            await notifyCustomer(String(cust.chat_id), `⏰ <b>Late TON Payment Detected</b>\n\n💵 Amount: <b>${receivedUsd.toFixed(2)} USDT</b>\n🆔 Memo: <code>${memo}</code>\n\nYour payment arrived after the checkout window expired. Our team will credit your account shortly.`);
+          }
+          const adminChat = Deno.env.get("ADMIN_CHAT_ID");
+          if (adminChat) {
+            await notifyCustomer(adminChat, `⏰ <b>LATE TON PAYMENT</b>\n⚠️ Needs manual credit.\n\nAmount: <b>${receivedUsd.toFixed(2)} USDT</b>\nMemo: <code>${memo}</code>\nDeposit: <code>${reservation.deposit_id}</code>`);
+          }
+        } else if (cust) {
           const newBalance = Number(cust.balance || 0) + receivedUsd;
           await supabase.from("bot_customers").update({ balance: newBalance }).eq("id", cust.id);
           await notifyCustomer(String(cust.chat_id), `✅ <b>USDT TON deposit confirmed</b>\n\n💰 Received: <b>${receivedUsd.toFixed(2)} USDT</b>\n🆔 Memo: <code>${memo}</code>\n💵 New balance: <b>$${newBalance.toFixed(2)}</b>`);
