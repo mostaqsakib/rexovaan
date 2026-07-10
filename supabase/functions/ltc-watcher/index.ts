@@ -110,11 +110,13 @@ Deno.serve(async (req) => {
 
                   await admin.from("bot_deposits").update({
                     status: "verified", verified_at: new Date().toISOString(),
+                    amount: usdCredited,
                     ltc_address: row.address, ltc_tx_hash: tx.txid, txn_hash: tx.txid,
                   }).eq("id", row.deposit_id);
                 } else {
                   await admin.from("bot_deposits").update({
                     status: "late_pending",
+                    amount: usdCredited,
                     ltc_address: row.address, ltc_tx_hash: tx.txid, txn_hash: tx.txid,
                   }).eq("id", row.deposit_id);
                 }
