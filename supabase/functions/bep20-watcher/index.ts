@@ -265,7 +265,7 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
           if (adminChatId) {
             await sendTelegram("sendMessage", {
               chat_id: adminChatId,
-              text: `💰 <b>Deposit Received (${chainLabel})</b>${wrongNet ? "\n⚠️ WRONG NETWORK RECOVERY" : ""}\n\nCustomer: <code>${customer?.chat_id || res.customer_id}</code>\nAmount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\nAddress: <code>${toAddr}</code>\n<a href="${chain.explorerTx(txHash)}">Tx: ${txHash}</a>`,
+              text: `💰 <b>Deposit Received (${chainLabel})</b>${wrongNet ? "\n⚠️ WRONG NETWORK RECOVERY" : ""}\n\nCustomer: <b>${customerLabel}</b>\nAmount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\nAddress: <code>${toAddr}</code>\n<a href="${chain.explorerTx(txHash)}">Tx: ${txHash}</a>`,
               parse_mode: "HTML",
             });
           }
