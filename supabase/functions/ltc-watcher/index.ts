@@ -49,8 +49,12 @@ Deno.serve(async (req) => {
     const { data: settings } = await admin.from("ltc_settings").select("*").eq("singleton", true).single();
     const minConf = Number(settings?.min_confirmations ?? 2);
 
+    const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: reserved } = await admin
-      .from("ltc_reserved_addresses").select("*").eq("status", "pending").limit(200);
+      .from("ltc_reserved_addresses").select("*")
+      .in("status", ["pending", "expired", "rejected"])
+      .gte("created_at", cutoffIso)
+      .limit(200);
 
     if (!reserved || reserved.length === 0) {
       return new Response(JSON.stringify({ ok: true, ...summary, note: "no pending" }), {
