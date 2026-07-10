@@ -84,6 +84,8 @@ Deno.serve(async (req) => {
         payment_method: "LTC",
         status: "pending",
         ltc_address: address,
+        pending_product_id,
+        pending_quantity,
       } as any)
       .select("id")
       .single();
