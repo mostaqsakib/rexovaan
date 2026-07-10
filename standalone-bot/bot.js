@@ -109,6 +109,13 @@ const PLACEHOLDER_KEYS = new Set([
 let cachedPageMsgs = {};
 let pageMsgsLastFetch = 0;
 
+const ONCHAIN_AMOUNT_DEFAULTS = {
+  bep20_amount_msg: `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 0.01 USDT</i>\n\nYou'll get a <b>unique BSC address</b> just for this deposit. Send USDT or USDC (BEP20) — auto-credited after 3 confirmations (~9 sec).`,
+  polygon_amount_msg: `🟣 <b>USDT/USDC Polygon (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 0.01 USDT</i>\n\nYou'll get a <b>unique Polygon address</b> just for this deposit. Send USDT or USDC on <b>Polygon (MATIC network)</b> — auto-credited after ~20 confirmations (~40 sec).`,
+  ton_amount_msg: `💎 <b>USDT TON (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT</b> (example: <code>10</code>).\n<i>Minimum: 0.01 USDT</i>\n\nYou'll get the deposit <b>address + a unique memo/comment</b>. Send USDT (TON Jetton) with the exact memo — auto-credited within ~30 seconds after on-chain confirmation.`,
+  ltc_amount_msg: `Ł <b>Litecoin (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USD</b> (example: <code>10</code>).\n<i>Minimum: $0.01</i>\n\nYou'll get a <b>unique LTC address</b> just for this deposit + the exact LTC amount at current rate. Auto-credited after 2 confirmations (~5 min).`,
+};
+
 // ── Channel Join Verification cache ──
 let cachedChannelJoin = {
   enabled: false,
