@@ -62,6 +62,15 @@ const PAGE_MSG_KEYS = {
   msg_flash_sale_ended: "Flash Sale Ended",
   msg_recent_sale: "Recent Sale Feed (Bot)",
   msg_recent_sale_web: "Recent Sale Feed (Web)",
+  channel_join_message: "Channel Join Prompt",
+  bep20_amount_msg: "BEP20 — Amount Prompt",
+  bep20_address_msg: "BEP20 — Address Details",
+  polygon_amount_msg: "Polygon — Amount Prompt",
+  polygon_address_msg: "Polygon — Address Details",
+  ton_amount_msg: "TON — Amount Prompt",
+  ton_address_msg: "TON — Address + Memo",
+  ltc_amount_msg: "LTC — Amount Prompt",
+  ltc_address_msg: "LTC — Address Details",
 };
 const PLACEHOLDER_KEYS = new Set([
   "name",
