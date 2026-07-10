@@ -62,6 +62,15 @@ const PAGE_MSG_KEYS = {
   msg_flash_sale_ended: "Flash Sale Ended",
   msg_recent_sale: "Recent Sale Feed (Bot)",
   msg_recent_sale_web: "Recent Sale Feed (Web)",
+  channel_join_message: "Channel Join Prompt",
+  bep20_amount_msg: "BEP20 — Amount Prompt",
+  bep20_address_msg: "BEP20 — Address Details",
+  polygon_amount_msg: "Polygon — Amount Prompt",
+  polygon_address_msg: "Polygon — Address Details",
+  ton_amount_msg: "TON — Amount Prompt",
+  ton_address_msg: "TON — Address + Memo",
+  ltc_amount_msg: "LTC — Amount Prompt",
+  ltc_address_msg: "LTC — Address Details",
 };
 const PLACEHOLDER_KEYS = new Set([
   "name",
@@ -6937,9 +6946,15 @@ async function handleCallback(callbackQuery, emojiMap) {
   }
 
   if (data === "adm_editmsg" && isAdmin(chatId)) {
-    const buttons = Object.entries(PAGE_MSG_KEYS).map(([key, label]) => [{ text: `✏️ ${label}`, callback_data: `editmsg_${key}` }]);
+    const entries = Object.entries(PAGE_MSG_KEYS);
+    const buttons = [];
+    for (let i = 0; i < entries.length; i += 2) {
+      const row = [{ text: `✏️ ${entries[i][1]}`, callback_data: `editmsg_${entries[i][0]}` }];
+      if (entries[i + 1]) row.push({ text: `✏️ ${entries[i + 1][1]}`, callback_data: `editmsg_${entries[i + 1][0]}` });
+      buttons.push(row);
+    }
     buttons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
-    await editOrSend(chatId, msgId, `✏️ <b>Edit Page Messages</b>\n\nSelect a page to edit its message.\nSend the new message with premium emojis & formatting — it will be saved as-is.\n\n<b>Available placeholders:</b>\n• Welcome: <code>{name}</code>\n• Profile: <code>{id}</code> <code>{balance}</code> <code>{joined}</code>\n• Balance: <code>{balance}</code>\n• Withdraw: <code>{balance}</code>\n• Referral: <code>{ref_24h}</code> <code>{ref_7d}</code> <code>{ref_total}</code> <code>{earned}</code> <code>{available}</code> <code>{transferred}</code> <code>{commission}</code> <code>{bonus}</code> <code>{link}</code>\n• Stock Alert: <code>{product}</code> <code>{added}</code> <code>{stock}</code> <code>{price}</code>\n• Pay with Balance Confirm: <code>{product}</code> <code>{quantity}</code> <code>{subtotal}</code> <code>{final}</code> <code>{balance}</code> <code>{after}</code> <code>{currency}</code> <code>{price}</code>\n• Order Summary: <code>{product}</code> <code>{quantity}</code> <code>{price}</code> <code>{total}</code> <code>{currency}</code> <code>{balance_section}</code> <code>{payment_hint}</code> <code>{pay_later_section}</code>`, { inline_keyboard: buttons });
+    await editOrSend(chatId, msgId, `✏️ <b>Edit Page Messages</b>\n\nSelect a page to edit its message.\nSend the new message with premium emojis & formatting — it will be saved as-is.\n\n<b>Available placeholders:</b>\n• Welcome: <code>{name}</code>\n• Profile: <code>{id}</code> <code>{balance}</code> <code>{joined}</code>\n• Balance / Withdraw / Deposit: <code>{balance}</code>\n• Referral: <code>{ref_24h}</code> <code>{ref_7d}</code> <code>{ref_total}</code> <code>{earned}</code> <code>{available}</code> <code>{transferred}</code> <code>{commission}</code> <code>{bonus}</code> <code>{link}</code>\n• Stock Alert: <code>{product}</code> <code>{added}</code> <code>{stock}</code> <code>{price}</code>\n• Pay with Balance Confirm: <code>{product}</code> <code>{quantity}</code> <code>{subtotal}</code> <code>{final}</code> <code>{balance}</code> <code>{after}</code> <code>{currency}</code> <code>{price}</code>\n• Order Summary: <code>{product}</code> <code>{quantity}</code> <code>{price}</code> <code>{total}</code> <code>{currency}</code> <code>{balance_section}</code> <code>{payment_hint}</code> <code>{pay_later_section}</code>\n• Crypto address messages: dynamic — address / memo / QR are injected by the bot automatically`, { inline_keyboard: buttons });
     return;
   }
 
@@ -6971,6 +6986,15 @@ async function handleCallback(callbackQuery, emojiMap) {
       msg_flash_sale_ended: `⏰ <b>FLASH SALE ENDED</b>\n\n{product}\n\n<i>This limited-time offer has expired. Regular pricing is back.</i>`,
       msg_recent_sale: `🛒 Someone just bought <b>{quantity}× {product}</b>`,
       msg_recent_sale_web: `🛍️ Someone just bought <b>{quantity}× {product}</b> from the website`,
+      channel_join_message: `🔒 <b>Join Our Channel</b>\n\nPlease join our channel to use the bot.`,
+      bep20_amount_msg: `🟡 <b>USDT/USDC BEP20 (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get a <b>unique BSC address</b> just for this deposit. Send USDT or USDC (BEP20) — auto-credited after 3 confirmations (~9 sec).`,
+      bep20_address_msg: `🟡 <b>USDT/USDC BEP20 Deposit</b>\n\nSend exactly <b>{amount} USDT/USDC</b> on <b>BEP20 (BSC)</b> to:\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⏱ Expires in {ttl_min} min. Auto-credited after 3 confirmations.`,
+      polygon_amount_msg: `🟣 <b>USDT/USDC Polygon (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get a <b>unique Polygon address</b> just for this deposit.`,
+      polygon_address_msg: `🟣 <b>USDT/USDC Polygon Deposit</b>\n\nSend exactly <b>{amount} USDT/USDC</b> on <b>Polygon (MATIC)</b> to:\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⏱ Expires in {ttl_min} min.`,
+      ton_amount_msg: `💎 <b>USDT TON (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT</b> (example: <code>10</code>).\n<i>Minimum: 1 USDT</i>\n\nYou'll get the deposit address + a unique memo.`,
+      ton_address_msg: `💎 <b>USDT TON Deposit</b>\n\nSend exactly <b>{amount} USDT</b> (Jetton) to:\n<code>{address}</code>\n\n⚠️ <b>Memo/Comment (required):</b>\n<code>{memo}</code>\n<i>👆 Both fields must match exactly.</i>`,
+      ltc_amount_msg: `Ł <b>Litecoin (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USD</b> (example: <code>10</code>).\n<i>Minimum: $1</i>\n\nYou'll get a <b>unique LTC address</b> + exact LTC amount at current rate.`,
+      ltc_address_msg: `🪙 <b>LTC Deposit</b>\n\nSend exactly <b>{ltc_amount} LTC</b> (≈ \${usd_amount} USD) to:\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⏱ Auto-credited after 2 confirmations (~5 min).`,
     };
     const currentMsg = normalizeTelegramHtml(cachedPageMsgs[msgKey] || defaultMsgs[msgKey] || "(no message)");
     const isCustom = !!cachedPageMsgs[msgKey];
@@ -6997,6 +7021,15 @@ async function handleCallback(callbackQuery, emojiMap) {
       msg_flash_sale_ended: `<code>{product}</code> — Product (with emoji + name)`,
       msg_recent_sale: `<code>{product}</code> — Product (with emoji + name)\n<code>{quantity}</code> — Quantity bought`,
       msg_recent_sale_web: `<code>{product}</code> — Product (with emoji + name)\n<code>{quantity}</code> — Quantity bought`,
+      channel_join_message: `No placeholders — static message shown before join verification`,
+      bep20_amount_msg: `No placeholders — shown before user enters amount`,
+      bep20_address_msg: `<code>{amount}</code> — Amount in USDT\n<code>{address}</code> — Unique BSC address\n<code>{ttl_min}</code> — Minutes until expiry`,
+      polygon_amount_msg: `No placeholders — shown before user enters amount`,
+      polygon_address_msg: `<code>{amount}</code> — Amount in USDT\n<code>{address}</code> — Unique Polygon address\n<code>{ttl_min}</code> — Minutes until expiry`,
+      ton_amount_msg: `No placeholders — shown before user enters amount`,
+      ton_address_msg: `<code>{amount}</code> — Amount in USDT\n<code>{address}</code> — TON address\n<code>{memo}</code> — Unique memo/comment`,
+      ltc_amount_msg: `No placeholders — shown before user enters amount`,
+      ltc_address_msg: `<code>{ltc_amount}</code> — Amount in LTC\n<code>{usd_amount}</code> — Amount in USD\n<code>{address}</code> — Unique LTC address`,
     };
     const placeholderInfo = placeholderMap[msgKey] || "No placeholders";
 
