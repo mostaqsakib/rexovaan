@@ -215,6 +215,10 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact, contex
         : 'bep20-reserve-address';
       const body: any = { customer_id: customer.id, expected_amount: amt };
       if (onchainKind === 'bep20' || onchainKind === 'polygon') body.token = 'ANY';
+      if (pendingProductId) {
+        body.pending_product_id = pendingProductId;
+        body.pending_quantity = Math.max(1, Number(pendingQuantity || 1));
+      }
       const { data, error } = await supabase.functions.invoke(endpoint, { body });
       if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || 'Reserve failed');
       const d: any = data;
