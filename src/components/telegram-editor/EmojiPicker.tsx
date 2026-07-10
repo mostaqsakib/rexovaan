@@ -76,17 +76,43 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
     ids = Array.from(new Set(ids)).slice(0, 300);
     if (ids.length === 0) return;
     let cancelled = false;
-    supabase
-      .from('bot_custom_emoji_cache')
-      .select('emoji_id,lottie_url,fallback,status')
-      .in('emoji_id', ids)
-      .then(({ data }) => {
-        if (cancelled || !data?.length) return;
-        seedCustomEmojiCache(data
-          .filter((row) => row.status === 'ready' && row.lottie_url)
-          .map((row) => ({ id: row.emoji_id, url: row.lottie_url, fallback: row.fallback })));
+
+    (async () => {
+      const { data } = await supabase
+        .from('bot_custom_emoji_cache')
+        .select('emoji_id,lottie_url,fallback,status')
+        .in('emoji_id', ids);
+      if (cancelled) return;
+      const rows = data || [];
+      const readyRows = rows.filter((row) => row.status === 'ready' && row.lottie_url);
+      if (readyRows.length) {
+        seedCustomEmojiCache(readyRows.map((row) => ({ id: row.emoji_id, url: row.lottie_url, fallback: row.fallback })));
         setAssetVersion((v) => v + 1);
-      });
+      }
+      // Resolve any missing / pending emojis via the edge function so premium
+      // packs light up instead of showing only the small colored thumb.
+      const readySet = new Set(readyRows.map((row) => row.emoji_id));
+      const failedSet = new Set(rows.filter((row) => row.status === 'failed').map((row) => row.emoji_id));
+      const toResolve = ids.filter((id) => !readySet.has(id) && !failedSet.has(id));
+      // Edge function processes 25 per invocation; run a few batches in the background.
+      for (let i = 0; i < toResolve.length && i < 200; i += 25) {
+        if (cancelled) return;
+        const batch = toResolve.slice(i, i + 25);
+        try {
+          const { data: res } = await supabase.functions.invoke('get-custom-emojis', { body: { ids: batch } });
+          if (cancelled) return;
+          const emojis = (res as any)?.emojis || {};
+          const entries = Object.entries(emojis)
+            .filter(([, v]: any) => v?.url)
+            .map(([id, v]: any) => ({ id, url: v.url, fallback: v.fallback }));
+          if (entries.length) {
+            seedCustomEmojiCache(entries);
+            setAssetVersion((v) => v + 1);
+          }
+        } catch { /* ignore, retry on next open */ }
+      }
+    })();
+
     return () => { cancelled = true; };
   }, [activeSet, activeSetData, customSearchResults, mode, query, recent]);
 
