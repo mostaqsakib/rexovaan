@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
     const pm = (deposit.payment_method || "").trim();
     if (!ALLOWED_MANUAL.has(pm)) {
       return new Response(JSON.stringify({
-        error: `Manual verification disabled for "${pm || 'unknown'}". Only Binance Pay, Bybit Pay & bKash can be manually approved. On-chain deposits (BEP20/Polygon/TON/LTC/Cryptomus) auto-verify only.`
+        error: `Manual verification disabled for "${pm || 'unknown'}". Only Binance Pay, Bybit Pay & bKash can be manually approved. On-chain deposits (BEP20/Polygon/TON/LTC) auto-verify only.`
       }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
