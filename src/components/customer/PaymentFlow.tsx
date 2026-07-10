@@ -39,7 +39,7 @@ function detectOnchainKind(m: PaymentMethod | null): OnchainKind {
 }
 
 
-const VERIFY_WINDOW_MS = 5 * 60 * 1000;
+const VERIFY_WINDOW_MS = 30 * 60 * 1000;
 
 export interface PaymentFlowProps {
   /** USD amount to prefill (string or number). For bKash this gets converted to BDT. */
@@ -150,7 +150,18 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
     const tick = async () => {
       if (stopped) return;
       const elapsed = Date.now() - pendingDeposit.startedAt;
-      if (elapsed >= VERIFY_WINDOW_MS) { setVState('timeout'); return; }
+      if (elapsed >= VERIFY_WINDOW_MS) {
+        // Auto-cancel unpaid reservation so it doesn't linger as pending
+        try {
+          await supabase
+            .from('bot_deposits')
+            .update({ status: 'rejected' })
+            .eq('id', pendingDeposit.id)
+            .eq('status', 'pending');
+        } catch { /* ignore */ }
+        setVState('timeout');
+        return;
+      }
       const done = await checkStatus();
       if (done || stopped) return;
       if (pollIdx > 0 && pollIdx % 3 === 0) await triggerRecheck();
