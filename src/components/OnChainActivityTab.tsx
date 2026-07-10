@@ -121,6 +121,44 @@ const OnChainActivityTab = () => {
   const [gas, setGas] = useState<GasStatus | null>(null);
   const [gasLoading, setGasLoading] = useState(false);
   const [ltcGas, setLtcGas] = useState<GasChain & { master?: string } | null>(null);
+  const [latePayments, setLatePayments] = useState<any[]>([]);
+  const [creditingId, setCreditingId] = useState<string | null>(null);
+
+  const loadLatePayments = async () => {
+    const { data } = await supabase
+      .from('bot_deposits')
+      .select('id, customer_id, amount, payment_method, txn_hash, bep20_tx_hash, bep20_token, ltc_tx_hash, created_at, updated_at')
+      .eq('status', 'late_pending')
+      .order('updated_at', { ascending: false })
+      .limit(50);
+    const rows = data || [];
+    const custIds = Array.from(new Set(rows.map((r: any) => r.customer_id).filter(Boolean)));
+    let custMap: Record<string, any> = {};
+    if (custIds.length) {
+      const { data: cd } = await supabase.from('bot_customers')
+        .select('id, chat_id, username, first_name').in('id', custIds);
+      (cd || []).forEach((c: any) => { custMap[c.id] = c; });
+    }
+    setLatePayments(rows.map((r: any) => ({ ...r, _customer: custMap[r.customer_id] })));
+  };
+
+  const creditLatePayment = async (depositId: string) => {
+    setCreditingId(depositId);
+    try {
+      const { data, error } = await supabase.functions.invoke('credit-late-deposit', {
+        body: { deposit_id: depositId },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Credited $${Number((data as any)?.credited || 0).toFixed(2)}`);
+      await loadLatePayments();
+    } catch (e: any) {
+      toast.error(e.message ?? 'Credit failed');
+    } finally {
+      setCreditingId(null);
+    }
+  };
+
 
   const loadGas = async () => {
     setGasLoading(true);
