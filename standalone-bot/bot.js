@@ -4394,8 +4394,8 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
     try {
       const endpoint = isTON ? "ton-reserve-memo" : isLTC ? "ltc-reserve-address" : "bep20-reserve-address";
       const body = isLTC || isTON
-        ? { customer_id: fresh?.id, expected_amount: effectiveAmountToPay }
-        : { customer_id: fresh?.id, expected_amount: effectiveAmountToPay, token: "ANY" };
+        ? { customer_id: fresh?.id, expected_amount: effectiveAmountToPay, pending_product_id: productId, pending_quantity: qty }
+        : { customer_id: fresh?.id, expected_amount: effectiveAmountToPay, token: "ANY", pending_product_id: productId, pending_quantity: qty };
       const res = await fetch(`${process.env.SUPABASE_URL}/functions/v1/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
