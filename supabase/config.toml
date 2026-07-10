@@ -36,6 +36,10 @@ verify_jwt = false
 [functions.ltc-reserve-address]
 verify_jwt = false
 
+[functions.ltc-sweep]
+verify_jwt = false
+
+
 
 
 
