@@ -6946,9 +6946,15 @@ async function handleCallback(callbackQuery, emojiMap) {
   }
 
   if (data === "adm_editmsg" && isAdmin(chatId)) {
-    const buttons = Object.entries(PAGE_MSG_KEYS).map(([key, label]) => [{ text: `✏️ ${label}`, callback_data: `editmsg_${key}` }]);
+    const entries = Object.entries(PAGE_MSG_KEYS);
+    const buttons = [];
+    for (let i = 0; i < entries.length; i += 2) {
+      const row = [{ text: `✏️ ${entries[i][1]}`, callback_data: `editmsg_${entries[i][0]}` }];
+      if (entries[i + 1]) row.push({ text: `✏️ ${entries[i + 1][1]}`, callback_data: `editmsg_${entries[i + 1][0]}` });
+      buttons.push(row);
+    }
     buttons.push([{ text: "◀️ Admin Menu", callback_data: "adm_menu" }]);
-    await editOrSend(chatId, msgId, `✏️ <b>Edit Page Messages</b>\n\nSelect a page to edit its message.\nSend the new message with premium emojis & formatting — it will be saved as-is.\n\n<b>Available placeholders:</b>\n• Welcome: <code>{name}</code>\n• Profile: <code>{id}</code> <code>{balance}</code> <code>{joined}</code>\n• Balance: <code>{balance}</code>\n• Withdraw: <code>{balance}</code>\n• Referral: <code>{ref_24h}</code> <code>{ref_7d}</code> <code>{ref_total}</code> <code>{earned}</code> <code>{available}</code> <code>{transferred}</code> <code>{commission}</code> <code>{bonus}</code> <code>{link}</code>\n• Stock Alert: <code>{product}</code> <code>{added}</code> <code>{stock}</code> <code>{price}</code>\n• Pay with Balance Confirm: <code>{product}</code> <code>{quantity}</code> <code>{subtotal}</code> <code>{final}</code> <code>{balance}</code> <code>{after}</code> <code>{currency}</code> <code>{price}</code>\n• Order Summary: <code>{product}</code> <code>{quantity}</code> <code>{price}</code> <code>{total}</code> <code>{currency}</code> <code>{balance_section}</code> <code>{payment_hint}</code> <code>{pay_later_section}</code>`, { inline_keyboard: buttons });
+    await editOrSend(chatId, msgId, `✏️ <b>Edit Page Messages</b>\n\nSelect a page to edit its message.\nSend the new message with premium emojis & formatting — it will be saved as-is.\n\n<b>Available placeholders:</b>\n• Welcome: <code>{name}</code>\n• Profile: <code>{id}</code> <code>{balance}</code> <code>{joined}</code>\n• Balance / Withdraw / Deposit: <code>{balance}</code>\n• Referral: <code>{ref_24h}</code> <code>{ref_7d}</code> <code>{ref_total}</code> <code>{earned}</code> <code>{available}</code> <code>{transferred}</code> <code>{commission}</code> <code>{bonus}</code> <code>{link}</code>\n• Stock Alert: <code>{product}</code> <code>{added}</code> <code>{stock}</code> <code>{price}</code>\n• Pay with Balance Confirm: <code>{product}</code> <code>{quantity}</code> <code>{subtotal}</code> <code>{final}</code> <code>{balance}</code> <code>{after}</code> <code>{currency}</code> <code>{price}</code>\n• Order Summary: <code>{product}</code> <code>{quantity}</code> <code>{price}</code> <code>{total}</code> <code>{currency}</code> <code>{balance_section}</code> <code>{payment_hint}</code> <code>{pay_later_section}</code>\n• Crypto address messages: dynamic — address / memo / QR are injected by the bot automatically`, { inline_keyboard: buttons });
     return;
   }
 
