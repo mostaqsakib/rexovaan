@@ -71,11 +71,13 @@ Deno.serve(async (req) => {
       .eq("status", "pending")
       .lt("expires_at", new Date().toISOString());
 
-    // Load pending reservations
+    // Load pending + recently expired reservations (for late-payment detection)
+    const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: pendings, error: pErr } = await supabase
       .from("ton_reserved_deposits")
-      .select("id, customer_id, deposit_id, memo, expected_amount")
-      .eq("status", "pending");
+      .select("id, customer_id, deposit_id, memo, expected_amount, status")
+      .in("status", ["pending", "expired", "rejected"])
+      .gte("created_at", cutoffIso);
     if (pErr) throw pErr;
     if (!pendings || pendings.length === 0) {
       return new Response(JSON.stringify({ scanned: 0, matched: 0, message: "no pending reservations" }), {
