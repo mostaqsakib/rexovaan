@@ -191,6 +191,7 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
         await supabase.from("bot_deposits").update({
           status: "verified",
           verified_at: new Date().toISOString(),
+          amount: amt,
           bep20_tx_hash: txHash,
           bep20_token: tok.symbol,
           txn_hash: txHash,
