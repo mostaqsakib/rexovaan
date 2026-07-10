@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const { customer_id, expected_amount, token = "ANY" } = await req.json();
+    const { customer_id, expected_amount, token = "ANY", pending_product_id = null, pending_quantity = null } = await req.json();
     if (!customer_id || !expected_amount || expected_amount <= 0) {
       return json({ error: "customer_id and positive expected_amount required" }, 400);
     }
@@ -69,6 +69,8 @@ Deno.serve(async (req) => {
         status: "pending",
         bep20_address: address,
         bep20_token: t === "ANY" ? null : t,
+        pending_product_id: pending_product_id || null,
+        pending_quantity: pending_quantity || null,
       } as any)
       .select("id")
       .single();
