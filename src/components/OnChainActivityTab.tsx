@@ -497,7 +497,7 @@ const OnChainActivityTab = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {gas.chains.map((c) => {
+              {gas.chains.filter((c) => ['bsc','polygon','ethereum'].includes(c.chain)).map((c) => {
                 const status = c.status || (c.ok ? 'ok' : 'critical');
                 const border =
                   c.error ? 'border-border/60 bg-muted/30'
