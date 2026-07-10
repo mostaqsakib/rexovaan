@@ -12,6 +12,7 @@ import {
   Loader2, RefreshCw, Search, ExternalLink, Copy, Link2,
   ShieldAlert, Wallet, ArrowRight, CheckCircle2, Clock, AlertTriangle, Fuel,
 } from 'lucide-react';
+import LtcActivityCard from './LtcActivityCard';
 
 
 
@@ -579,6 +580,11 @@ const OnChainActivityTab = () => {
           <div className="border-t border-border/50 px-6 py-2 text-xs text-muted-foreground">{lookupResult}</div>
         )}
       </Card>
+
+      {/* Litecoin gateway */}
+      <LtcActivityCard />
+
+
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
