@@ -1,0 +1,1 @@
+UPDATE bot_payment_methods SET emoji = '', custom_emoji_id = NULL WHERE payment_type = 'ltc_auto';
