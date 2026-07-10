@@ -151,6 +151,15 @@ export function TgEmoji({ id, fallback, size = '1.25em', disableRemoteFetch = fa
     return () => { cancel = true; };
   }, [id, info, disableRemoteFetch]);
 
+  // Subscribe to seedCustomEmojiCache updates — critical for the emoji picker
+  // where TgEmoji is created with disableRemoteFetch=true and previously
+  // required remount (via key busting) to reflect cache seeds.
+  useEffect(() => {
+    if (info?.url) return; // already resolved
+    return subscribeEmoji(id, (v) => setInfo(v));
+  }, [id, info?.url]);
+
+
   useEffect(() => {
     let cancel = false;
     if (info?.url?.endsWith('.json') && !lottieData) {
