@@ -4412,13 +4412,21 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
 
       let body2 = "";
       let qrData = data.address;
+      const settingKey = isTON ? "ton_address_msg" : isLTC ? "ltc_address_msg" : isPolygon ? "polygon_address_msg" : "bep20_address_msg";
+      const { data: tmplRow } = await supabase.from("bot_settings").select("value").eq("key", settingKey).maybeSingle();
       if (isTON) {
         qrData = `ton://transfer/${data.address}?text=${data.memo}`;
-        body2 = `💎 <b>USDT TON — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send USDT (TON Jetton) to:</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n🆔 <b>Memo / Comment (REQUIRED):</b>\n<code>${data.memo}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Must include the exact memo</b>, otherwise the deposit won't be matched.\n⚠️ <b>TON network only</b> — USDT Jetton (not TRC20/BEP20).\n\nAuto-verified within ~30 seconds after confirmation. Balance is credited automatically — then complete this order from your balance.`;
+        const template = tmplRow?.value || `💎 <b>USDT TON — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send USDT (TON Jetton) to:</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n🆔 <b>Memo / Comment (REQUIRED):</b>\n<code>{memo}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Must include the exact memo</b>, otherwise the deposit won't be matched.\n⚠️ <b>TON network only</b> — USDT Jetton (not TRC20/BEP20).\n\nAuto-verified within ~30 seconds after confirmation.`;
+        body2 = replacePlaceholders(template, {
+          amount: effectiveAmountToPay.toFixed(2),
+          expires_min: String(expiresMin),
+          ttl_min: String(expiresMin),
+          address: data.address,
+          memo: data.memo,
+        });
       } else if (isLTC) {
         qrData = `litecoin:${data.address}?amount=${data.amount_ltc}`;
-        const { data: ltcAddrRow } = await supabase.from("bot_settings").select("value").eq("key", "ltc_address_msg").maybeSingle();
-        const template = ltcAddrRow?.value || `Ł <b>Litecoin — Auto-Verify</b>\n\n💵 Amount: <b>{amount_ltc} LTC</b> (~${"$"}{amount_usd})\n📊 Rate: 1 LTC = ${"$"}{rate}\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send this EXACT LTC amount to:</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Send exactly {amount_ltc} LTC.</b> Underpay = not credited.\n⚠️ <b>Litecoin network only.</b>\n\nAuto-verified after 2 confirmations (~5 min). Balance is credited automatically — then complete this order from your balance.`;
+        const template = tmplRow?.value || `Ł <b>Litecoin — Auto-Verify</b>\n\n💵 Amount: <b>{amount_ltc} LTC</b> (~${"$"}{amount_usd})\n📊 Rate: 1 LTC = ${"$"}{rate}\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send this EXACT LTC amount to:</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Send exactly {amount_ltc} LTC.</b> Underpay = not credited.\n⚠️ <b>Litecoin network only.</b>\n\nAuto-verified after 2 confirmations (~5 min).`;
         body2 = replacePlaceholders(template, {
           amount_ltc: data.amount_ltc.toString(),
           ltc_amount: data.amount_ltc.toString(),
@@ -4429,11 +4437,19 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
           ttl_min: String(expiresMin),
           address: data.address,
         });
-      } else if (isPolygon) {
-        body2 = `🟣 <b>USDT/USDC Polygon — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT/USDC</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send to this address (Polygon / MATIC):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted.\n⚠️ <b>Polygon network only.</b> Wrong network = lost funds.\n\nAuto-verified after ~20 confirmations (~40 sec). Balance is credited automatically — then complete this order from your balance.`;
       } else {
-        body2 = `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n💵 Amount: <b>${effectiveAmountToPay.toFixed(2)} USDT/USDC</b>\n⏱ Expires in: <b>${expiresMin} min</b>\n\n📥 <b>Send to this address (BSC / BEP20):</b>\n<code>${data.address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted.\n⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\nAuto-verified after 3 confirmations (~9 sec). Balance is credited automatically — then complete this order from your balance.`;
+        const defaultTmpl = isPolygon
+          ? `🟣 <b>USDT/USDC Polygon — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT/USDC</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send to this address (Polygon / MATIC):</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted.\n⚠️ <b>Polygon network only.</b> Wrong network = lost funds.\n\nAuto-verified after ~20 confirmations (~40 sec).`
+          : `🟡 <b>USDT/USDC BEP20 — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT/USDC</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send to this address (BSC / BEP20):</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n✅ Any amount will be credited exactly as received.\n✅ USDT or USDC — both accepted.\n⚠️ <b>BEP20 only.</b> Wrong network = lost funds.\n\nAuto-verified after 3 confirmations (~9 sec).`;
+        const template = tmplRow?.value || defaultTmpl;
+        body2 = replacePlaceholders(template, {
+          amount: effectiveAmountToPay.toFixed(2),
+          expires_min: String(expiresMin),
+          ttl_min: String(expiresMin),
+          address: data.address,
+        });
       }
+
 
       const caption = `${methodEmojiTag} <b>${method.name}</b>\n\n━━━━━━━━━━━━━━━━\n${pdProductEmoji} Product: <b>${product.name}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>$${total.toFixed(2)} USDT</b>\n${balanceUsed > 0 ? `💰 Balance Deduction: <b>-$${balanceUsed.toFixed(2)} USDT</b>\n💳 Amount to Pay: <b>$${effectiveAmountToPay.toFixed(2)} USDT</b>\n` : ""}━━━━━━━━━━━━━━━━\n\n${body2}`;
 
