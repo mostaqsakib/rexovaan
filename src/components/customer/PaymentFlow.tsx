@@ -48,9 +48,12 @@ export interface PaymentFlowProps {
   onVerified?: (info: { amount: number; via?: string; newBalance?: number }) => void;
   /** Show compact mode (used inside checkout). */
   compact?: boolean;
+  /** Payment methods context filter — 'purchase' (default) or 'deposit'. */
+  context?: 'purchase' | 'deposit';
 }
 
-export default function PaymentFlow({ prefillAmount, onVerified, compact }: PaymentFlowProps) {
+export default function PaymentFlow({ prefillAmount, onVerified, compact, context = 'purchase' }: PaymentFlowProps) {
+
   const { customer, refreshCustomer } = useCustomerAuth();
   const { format } = useCurrency();
 
