@@ -8286,7 +8286,9 @@ async function handleCallback(callbackQuery, emojiMap) {
     const prod = prods?.find((item) => item.id.startsWith(shortProductId));
     if (!prod) { await sendMessage(chatId, "❌ Product not found.", mainMenuKeyboard()); return; }
     const messageId = callbackQuery.message?.message_id;
-    await showPaymentMethodSelection(chatId, customer, prod.id, qty, emojiMap, messageId);
+    const isPhotoMsg = !!callbackQuery.message?.photo;
+    if (isPhotoMsg && messageId) { await deleteMessage(chatId, messageId).catch(() => {}); }
+    await showPaymentMethodSelection(chatId, customer, prod.id, qty, emojiMap, isPhotoMsg ? undefined : messageId);
     return;
   }
 
