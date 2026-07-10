@@ -30,6 +30,13 @@ verify_jwt = false
 [functions.ton-reserve-memo]
 verify_jwt = false
 
+[functions.ltc-watcher]
+verify_jwt = false
+
+[functions.ltc-reserve-address]
+verify_jwt = false
+
+
 
 
 
