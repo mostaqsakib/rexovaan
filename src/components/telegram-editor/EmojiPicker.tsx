@@ -33,7 +33,8 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
   const [query, setQuery] = useState('');
   const [sets, setSets] = useState<StickerSet[]>([]);
   const [recent, setRecent] = useState(loadRecent());
-  const [assetVersion, setAssetVersion] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(96);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     supabase.from('bot_emoji_sticker_sets').select('*').order('title')
