@@ -8286,7 +8286,9 @@ async function handleCallback(callbackQuery, emojiMap) {
     const prod = prods?.find((item) => item.id.startsWith(shortProductId));
     if (!prod) { await sendMessage(chatId, "❌ Product not found.", mainMenuKeyboard()); return; }
     const messageId = callbackQuery.message?.message_id;
-    await showPaymentMethodSelection(chatId, customer, prod.id, qty, emojiMap, messageId);
+    const isPhotoMsg = !!callbackQuery.message?.photo;
+    if (isPhotoMsg && messageId) { await deleteMessage(chatId, messageId).catch(() => {}); }
+    await showPaymentMethodSelection(chatId, customer, prod.id, qty, emojiMap, isPhotoMsg ? undefined : messageId);
     return;
   }
 
@@ -8570,7 +8572,10 @@ async function handleCallback(callbackQuery, emojiMap) {
   if (data === "cancel_order") {
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
     const cancelMsg = `❌ <b>Order Cancelled</b>\n\nYour order has been cancelled. No payment is required.`;
-    await editOrSend(chatId, msgId, cancelMsg, mainMenuKeyboard(emojiMap));
+    const isPhotoMsg = !!callbackQuery.message?.photo;
+    if (isPhotoMsg && msgId) { await deleteMessage(chatId, msgId).catch(() => {}); }
+    if (isPhotoMsg) await sendMessage(chatId, cancelMsg, mainMenuKeyboard(emojiMap));
+    else await editOrSend(chatId, msgId, cancelMsg, mainMenuKeyboard(emojiMap));
     return;
   }
 
