@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS idx_stock_items_invalid_at ON public.bot_product_stock_items (invalidated_at DESC) WHERE status = 'invalid';
