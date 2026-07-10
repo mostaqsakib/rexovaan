@@ -107,7 +107,6 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
             .map(([id, v]: any) => ({ id, url: v.url, fallback: v.fallback }));
           if (entries.length) {
             seedCustomEmojiCache(entries);
-            setAssetVersion((v) => v + 1);
           }
         } catch { /* ignore, retry on next open */ }
       }
