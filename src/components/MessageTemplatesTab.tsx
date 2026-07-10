@@ -72,7 +72,7 @@ const SECTIONS: Section[] = [
     group: 'Deposit Flow', key: 'msg_deposit', title: '8. Deposit — Method Chooser',
     default: `💳 <b>Deposit USDT</b>\n\n💡 You can send <b>any amount</b> — it will be added to your balance.\n\nSelect a payment method below:`,
     placeholders: '{balance}',
-    buttons: ['bkash', 'cryptomus_pay', 'deposit_method', 'back'],
+    buttons: ['bkash', 'deposit_method', 'back'],
   },
   {
     group: 'Deposit Flow', key: 'bep20_amount_msg', title: '9. BEP20 — Amount Prompt',

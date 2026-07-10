@@ -15,7 +15,7 @@ import HistoryTab from '@/components/HistoryTab';
 import CustomersTab from '@/components/CustomersTab';
 import WithdrawalsTab from '@/components/WithdrawalsTab';
 import DepositsTab from '@/components/DepositsTab';
-import CryptomusActivityTab from '@/components/CryptomusActivityTab';
+
 import OnChainActivityTab from '@/components/OnChainActivityTab';
 import PricingTab from '@/components/PricingTab';
 import SpecialPricingTab from '@/components/SpecialPricingTab';
@@ -52,7 +52,7 @@ const TAB_TITLES: Record<string, string> = {
   withdrawals: 'Withdrawals',
   deposits: 'Deposits',
   payments: 'Payment Methods',
-  cryptomus: 'Cryptomus Activity',
+  
   onchain: 'On-Chain Transactions',
   emojis: 'Button Emojis',
   referrals: 'Referrals',
@@ -189,7 +189,7 @@ const Index = () => {
             {activeTab === 'withdrawals' && <WithdrawalsTab />}
             {activeTab === 'deposits' && <DepositsTab />}
             {activeTab === 'payments' && <PaymentMethodsTab />}
-            {activeTab === 'cryptomus' && <CryptomusActivityTab />}
+            
             {activeTab === 'onchain' && <OnChainActivityTab />}
             {activeTab === 'emojis' && <ButtonEmojisTab />}
             {activeTab === 'referrals' && <ReferralStatsTab />}
