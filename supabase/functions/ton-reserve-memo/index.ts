@@ -22,6 +22,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const customerId: string = body.customer_id;
     const expectedAmount: number = Number(body.expected_amount);
+    const pendingProductId: string | null = body.pending_product_id || null;
+    const pendingQuantity: number | null = body.pending_quantity || null;
     if (!customerId || !Number.isFinite(expectedAmount) || expectedAmount < 1) {
       return new Response(JSON.stringify({ error: "customer_id and expected_amount>=1 required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
