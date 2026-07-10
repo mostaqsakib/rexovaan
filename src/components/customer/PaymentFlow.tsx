@@ -39,7 +39,7 @@ function detectOnchainKind(m: PaymentMethod | null): OnchainKind {
 }
 
 
-const VERIFY_WINDOW_MS = 5 * 60 * 1000;
+const VERIFY_WINDOW_MS = 30 * 60 * 1000;
 
 export interface PaymentFlowProps {
   /** USD amount to prefill (string or number). For bKash this gets converted to BDT. */
