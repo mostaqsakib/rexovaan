@@ -85,22 +85,55 @@ const SECTIONS: Section[] = [
     placeholders: '{amount} {address} {expires_min}',
     buttons: ['bep20_check_status', 'bep20_back_menu'],
   },
+  {
+    group: 'Deposit Flow', key: 'polygon_amount_msg', title: '11. Polygon — Amount Prompt',
+    default: `🟣 <b>USDT/USDC Polygon (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT/USDC</b> (example: <code>10</code>).\n<i>Minimum: 0.01 USDT</i>\n\nYou'll get a <b>unique Polygon address</b> just for this deposit.`,
+    buttons: ['polygon_back_menu', 'custom_amount'],
+  },
+  {
+    group: 'Deposit Flow', key: 'polygon_address_msg', title: '12. Polygon — Address / QR Page',
+    default: `🟣 <b>USDT/USDC Polygon — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT/USDC</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send to this address (Polygon / MATIC):</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n✅ USDT or USDC — both accepted.\n⚠️ <b>Polygon network only.</b> Wrong network = lost funds.`,
+    placeholders: '{amount} {address} {expires_min}',
+    buttons: ['polygon_back_menu'],
+  },
+  {
+    group: 'Deposit Flow', key: 'ton_amount_msg', title: '13. TON — Amount Prompt',
+    default: `💎 <b>USDT TON (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USDT</b> (example: <code>10</code>).\n<i>Minimum: 0.01 USDT</i>\n\nYou'll get the deposit <b>address + a unique memo/comment</b>.`,
+    buttons: ['ton_back_menu', 'custom_amount'],
+  },
+  {
+    group: 'Deposit Flow', key: 'ton_address_msg', title: '14. TON — Address / Memo Page',
+    default: `💎 <b>USDT TON — Auto-Verify</b>\n\n💵 Amount: <b>{amount} USDT</b>\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send USDT (TON Jetton) to:</b>\n<code>{address}</code>\n\n🆔 <b>Memo / Comment (REQUIRED):</b>\n<code>{memo}</code>\n<i>👆 Both fields must match exactly.</i>`,
+    placeholders: '{amount} {address} {memo} {expires_min}',
+    buttons: ['ton_back_menu'],
+  },
+  {
+    group: 'Deposit Flow', key: 'ltc_amount_msg', title: '15. LTC — Amount Prompt',
+    default: `Ł <b>Litecoin (Auto-Verify)</b>\n\n💵 Enter amount to deposit in <b>USD</b> (example: <code>10</code>).\n<i>Minimum: $0.01</i>\n\nYou'll get a <b>unique LTC address</b> just for this deposit + the exact LTC amount at current rate.`,
+    buttons: ['ltc_back_menu', 'custom_amount'],
+  },
+  {
+    group: 'Deposit Flow', key: 'ltc_address_msg', title: '16. LTC — Address / QR Page',
+    default: `Ł <b>Litecoin — Auto-Verify</b>\n\n💵 Amount: <b>{amount_ltc} LTC</b> (~${'$'}{amount_usd})\n📊 Rate: 1 LTC = ${'$'}{rate}\n⏱ Expires in: <b>{expires_min} min</b>\n\n📥 <b>Send this EXACT LTC amount to:</b>\n<code>{address}</code>\n<i>👆 Tap to copy</i>\n\n⚠️ <b>Send exactly {amount_ltc} LTC.</b> Underpay = not credited.\n⚠️ <b>Litecoin network only.</b>`,
+    placeholders: '{amount_ltc} {amount_usd} {rate} {address} {expires_min}',
+    buttons: ['ltc_back_menu'],
+  },
 
   // ─── Order Flow ───
   {
-    group: 'Order Flow', key: 'msg_order_summary', title: '11. Order Summary',
+    group: 'Order Flow', key: 'msg_order_summary', title: '17. Order Summary',
     default: `📋 <b>Order Summary</b>\n\n{product}\n🔢 Qty: <b>{quantity}</b>\n💵 Price: <b>\${price}</b> each\n💰 Total: <b>\${total} {currency}</b>{balance_section}{payment_hint}{pay_later_section}`,
     placeholders: '{product} {quantity} {price} {total} {currency} {balance_section} {payment_hint} {pay_later_section}',
     buttons: ['confirm_payment', 'change_quantity', 'cancel_order', 'pay_later'],
   },
   {
-    group: 'Order Flow', key: 'msg_pay_balance_confirm', title: '12. Pay with Balance — Confirm',
+    group: 'Order Flow', key: 'msg_pay_balance_confirm', title: '18. Pay with Balance — Confirm',
     default: `💰 <b>Pay with Balance</b>\n\n{product}\n🔢 Quantity: <b>{quantity}</b>\n🧾 Subtotal: <b>{subtotal} {currency}</b>\n💵 Final: <b>{final} {currency}</b>\n\n💰 Balance: <b>{balance}</b>\n📊 After: <b>{after}</b>\n\n<b>Confirm balance deduction?</b>`,
     placeholders: '{product} {quantity} {subtotal} {final} {balance} {after} {currency} {price}',
     buttons: ['pay_balance_confirm', 'pay_balance_cancel'],
   },
   {
-    group: 'Order Flow', key: 'msg_withdraw', title: '13. Withdraw',
+    group: 'Order Flow', key: 'msg_withdraw', title: '19. Withdraw',
     default: `💸 <b>Withdraw Funds</b>\n\nYour Balance: <b>{balance} USDT</b>\n\nEnter the amount you want to withdraw:`,
     placeholders: '{balance}',
     buttons: ['back'],
@@ -108,53 +141,53 @@ const SECTIONS: Section[] = [
 
   // ─── Auto Broadcasts ───
   {
-    group: 'Auto Broadcasts', key: 'msg_keyword_reply', title: '14. Keyword Reply (Groups)',
+    group: 'Auto Broadcasts', key: 'msg_keyword_reply', title: '20. Keyword Reply (Groups)',
     default: `✅ <b>Available now!</b> Tap below to buy:`,
     placeholders: '{product} {products} {count}',
     buttons: ['buy_now'],
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_stock_alert', title: '15. Stock Alert',
+    group: 'Auto Broadcasts', key: 'msg_stock_alert', title: '21. Stock Alert',
     default: `📢 <b>{added} new stock added for {product}!</b>\n\n📊 Available: <b>{stock}</b> items\n💰 Price: <b>{price} USDT</b>{bulk_pricing}`,
     placeholders: '{product} {added} {stock} {price} {bulk_pricing}',
     buttons: ['buy_now', 'stock_alert'],
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_new_product', title: '16. New Product Alert',
+    group: 'Auto Broadcasts', key: 'msg_new_product', title: '22. New Product Alert',
     default: `🆕 <b>New Product Available!</b>\n\n📦 <b>{product}</b>\n💰 Price: <b>{price} USDT</b>\n📊 Stock: <b>{stock}</b>`,
     placeholders: '{product} {price} {stock} {description}',
     buttons: ['buy_now', 'new_product'],
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_price_up', title: '17. Price Increased',
+    group: 'Auto Broadcasts', key: 'msg_price_up', title: '23. Price Increased',
     default: `📈 <b>Price Increased</b>\n\n📦 <b>{product}</b>\n💰 Old: <s>{old_price} USDT</s>\n💎 New: <b>{new_price} USDT</b>{bulk_pricing}`,
     placeholders: '{product} {old_price} {new_price} {bulk_pricing}',
     buttons: ['buy_now'],
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_price_down', title: '18. Price Drop',
+    group: 'Auto Broadcasts', key: 'msg_price_down', title: '24. Price Drop',
     default: `📉 <b>Price Drop!</b>\n\n📦 <b>{product}</b>\n💰 Was: <s>{old_price} USDT</s>\n🔥 Now: <b>{new_price} USDT</b>{bulk_pricing}`,
     placeholders: '{product} {old_price} {new_price} {bulk_pricing}',
     buttons: ['buy_now'],
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_flash_sale', title: '19. Flash Sale',
+    group: 'Auto Broadcasts', key: 'msg_flash_sale', title: '25. Flash Sale',
     default: `🔥 <b>FLASH SALE — LIMITED TIME!</b>\n\n{product}\n\n💰 Sale Price: <b>\${price}</b>\n<s>Regular: \${original}</s> — Save \${savings}\n\n⏳ Ends in: <b><code>{countdown}</code></b>`,
     placeholders: '{product} {price} {original} {savings} {countdown}',
     buttons: ['buy_now'],
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_flash_sale_ended', title: '20. Flash Sale Ended',
+    group: 'Auto Broadcasts', key: 'msg_flash_sale_ended', title: '26. Flash Sale Ended',
     default: `⏰ <b>FLASH SALE ENDED</b>\n\n{product}\n\n<i>This limited-time offer has expired.</i>`,
     placeholders: '{product}',
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_recent_sale', title: '21. Recent Sale — Bot',
+    group: 'Auto Broadcasts', key: 'msg_recent_sale', title: '27. Recent Sale — Bot',
     default: `🛒 Someone just bought <b>{quantity}× {product}</b>`,
     placeholders: '{product} {quantity}',
   },
   {
-    group: 'Auto Broadcasts', key: 'msg_recent_sale_web', title: '22. Recent Sale — Web',
+    group: 'Auto Broadcasts', key: 'msg_recent_sale_web', title: '28. Recent Sale — Web',
     default: `🛍️ Someone just bought <b>{quantity}× {product}</b> from the website`,
     placeholders: '{product} {quantity}',
   },
