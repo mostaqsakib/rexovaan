@@ -26,6 +26,18 @@ function isBkashMethod(m: PaymentMethod | null) {
   return n.includes('bkash') || n.includes('বিকাশ') || (m.payment_type || '').toLowerCase() === 'bkash';
 }
 
+type OnchainKind = 'bep20' | 'polygon' | 'ton' | 'ltc' | null;
+function detectOnchainKind(m: PaymentMethod | null): OnchainKind {
+  if (!m) return null;
+  const n = (m.name || '').toLowerCase();
+  const t = (m.payment_type || '').toLowerCase();
+  if (t === 'ton_auto' || n === 'usdt ton' || n.includes('ton auto')) return 'ton';
+  if (t === 'ltc_auto' || n === 'litecoin (ltc)' || n.includes('ltc auto') || n.includes('litecoin')) return 'ltc';
+  if (t === 'polygon' || n.includes('polygon')) return 'polygon';
+  if (t === 'bep20' || n.includes('bep20')) return 'bep20';
+  return null;
+}
+
 
 const VERIFY_WINDOW_MS = 5 * 60 * 1000;
 
@@ -58,6 +70,12 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
   const [nowTs, setNowTs] = useState<number>(Date.now());
 
   const isBkash = useMemo(() => isBkashMethod(selected), [selected]);
+  const onchainKind = useMemo(() => detectOnchainKind(selected), [selected]);
+  const [onchain, setOnchain] = useState<{
+    address: string; memo?: string; token?: string; amountUsd: number;
+    amountLtc?: string | number; rate?: number; expiresAt: string; depositId: string; kind: OnchainKind;
+  } | null>(null);
+  
   
 
   useEffect(() => {
