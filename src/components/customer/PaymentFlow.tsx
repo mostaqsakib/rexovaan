@@ -97,7 +97,7 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact, contex
       setMethods([]);
       setLoading(false);
     });
-  }, []);
+  }, [context]);
 
   useEffect(() => {
     if (vState !== 'verifying') return;
