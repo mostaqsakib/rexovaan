@@ -4283,7 +4283,7 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
   const paymentType0 = method.payment_type?.toLowerCase() || "";
   const methodName0 = method.name?.toLowerCase() || "";
   const isBkash0 = methodName0.includes("bkash") || methodName0.includes("বিকাশ") || paymentType0 === "bkash";
-  const isCryptomus0 = methodName0.includes("cryptomus") || paymentType0 === "cryptomus";
+  
 
   const methodEmojiTag = method.custom_emoji_id
     ? `<tg-emoji emoji-id="${method.custom_emoji_id}">${method.emoji}</tg-emoji>`
@@ -4295,8 +4295,6 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
   if (isBkash0) {
     const bdtRate0 = await getDollarRateBDT();
     msg += `🇧🇩 BDT: <b>৳${(total * bdtRate0).toFixed(2)}</b> (Rate: ${bdtRate0})\n`;
-  } else if (isCryptomus0) {
-    msg += `💳 Amount to Pay: <b>$${effectiveAmountToPay.toFixed(2)} USDT</b>\n`;
   } else if (balanceUsed > 0) {
     msg += `💰 Balance Deduction: <b>-$${balanceUsed.toFixed(2)} USDT</b>\n💳 Amount to Pay: <b>$${effectiveAmountToPay.toFixed(2)} USDT</b>\n`;
   }
@@ -4306,7 +4304,7 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
   const methodName = method.name?.toLowerCase() || "";
 
   const isBkash = methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash";
-  const isCryptomus = methodName.includes("cryptomus") || paymentType === "cryptomus";
+  const isBkash = methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash";
 
   if (isBkash) {
     const bdtRate = await getDollarRateBDT();
