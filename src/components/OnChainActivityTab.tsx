@@ -120,19 +120,29 @@ const OnChainActivityTab = () => {
   const [lookupResult, setLookupResult] = useState<string | null>(null);
   const [gas, setGas] = useState<GasStatus | null>(null);
   const [gasLoading, setGasLoading] = useState(false);
+  const [ltcGas, setLtcGas] = useState<GasChain & { master?: string } | null>(null);
 
   const loadGas = async () => {
     setGasLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('bep20-gas-status');
+      const [{ data, error }, ltcRes] = await Promise.all([
+        supabase.functions.invoke('bep20-gas-status'),
+        supabase.functions.invoke('ltc-gas-status'),
+      ]);
       if (error) throw error;
       setGas(data as GasStatus);
+      if (!ltcRes.error && ltcRes.data && (ltcRes.data as any).ok !== false) {
+        setLtcGas(ltcRes.data as any);
+      } else {
+        setLtcGas(null);
+      }
     } catch (e: any) {
       toast.error(e.message ?? 'Gas status failed');
     } finally {
       setGasLoading(false);
     }
   };
+
 
 
   const load = async () => {
