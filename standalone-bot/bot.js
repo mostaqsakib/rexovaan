@@ -9108,6 +9108,99 @@ async function backgroundDepositChecker() {
   }
 }
 
+// ── Background Auto-Fulfill for on-chain Direct-Pay ──
+// Watchers (BEP20/LTC/TON) auto-verify on-chain deposits and credit balance.
+// If such a deposit was created for a direct product purchase (pending_product_id set),
+// we auto-deduct the product cost from balance and deliver the product.
+async function backgroundAutoFulfillChecker() {
+  const CHECK_INTERVAL = 20 * 1000; // every 20s
+  const MAX_AGE_HOURS = 24;
+  while (true) {
+    await new Promise(r => setTimeout(r, CHECK_INTERVAL));
+    try {
+      const cutoff = new Date(Date.now() - MAX_AGE_HOURS * 60 * 60 * 1000).toISOString();
+      const { data: rows } = await supabase
+        .from("bot_deposits")
+        .select("id, customer_id, amount, pending_product_id, pending_quantity, bep20_tx_hash, txn_hash, payment_method, customer:bot_customers(id, chat_id, username, first_name, balance)")
+        .eq("status", "verified")
+        .not("pending_product_id", "is", null)
+        .not("pending_quantity", "is", null)
+        .gte("created_at", cutoff)
+        .order("created_at", { ascending: true })
+        .limit(10);
+      if (!rows || rows.length === 0) continue;
+
+      for (const dep of rows) {
+        try {
+          const customer = dep.customer;
+          if (!customer) { await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", dep.id); continue; }
+          const chatId = customer.chat_id;
+          const productId = dep.pending_product_id;
+          const qty = Number(dep.pending_quantity) || 1;
+          const { data: product } = await supabase.from("bot_products").select("*").eq("id", productId).single();
+          if (!product) {
+            await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", dep.id);
+            continue;
+          }
+          const emojiMap = await loadButtonEmojis();
+
+          if (!product.is_active) {
+            await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", dep.id);
+            await sendMessage(chatId,
+              `⚠️ <b>Product Unavailable</b>\n\nThe product <b>${product.name}</b> is currently disabled.\nYour payment of <b>${Number(dep.amount).toFixed(2)} USDT</b> has been credited to your balance.`,
+              mainMenuKeyboard(emojiMap)
+            ).catch(() => {});
+            notifyAdmin(`⚠️ <b>Direct Pay on Disabled Product</b>\n\n👤 ${getCustomerLabel(customer)}\n📦 ${product.name} x${qty}\n💵 Credited to balance instead.`).catch(() => {});
+            continue;
+          }
+
+          const unitPrice = await getTieredPrice(productId, qty, Number(product.price), customer.id);
+          const expectedTotal = Math.round(unitPrice * qty * 10000) / 10000;
+
+          // Re-fetch fresh balance (watcher already credited)
+          const { data: freshBal } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
+          const currentBal = freshBal ? Number(freshBal.balance) : 0;
+
+          if (currentBal < expectedTotal) {
+            // Not enough (underpay) — keep credit on balance, cancel pending order
+            await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", dep.id);
+            const shortfall = expectedTotal - currentBal;
+            await sendMessage(chatId,
+              `⚠️ <b>Insufficient Payment — Order Not Delivered</b>\n\nProduct Required: <b>${expectedTotal.toFixed(2)} USDT</b>\n💳 Balance After Credit: <b>${currentBal.toFixed(2)} USDT</b>\n📉 Shortfall: <b>${shortfall.toFixed(2)} USDT</b>\n\nAdd more funds and re-order.`,
+              mainMenuKeyboard(emojiMap)
+            ).catch(() => {});
+            continue;
+          }
+
+          const newBal = Math.round((currentBal - expectedTotal) * 10000) / 10000;
+          await supabase.from("bot_customers").update({ balance: newBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
+          // Clear pending flags first to avoid duplicate delivery on retry
+          await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", dep.id);
+
+          const txnHash = dep.bep20_tx_hash || dep.txn_hash || "";
+          const verifiedVia = dep.payment_method || "On-chain Auto";
+          let receiptMsg = `✅ <b>Payment Verified & Order Placed!</b>\n\n💵 Paid: <b>${Number(dep.amount).toFixed(2)} USDT</b>\n🛒 Product Cost: <b>${expectedTotal.toFixed(2)} USDT</b>\n💳 Remaining Balance: <b>${newBal.toFixed(2)} USDT</b>\n\n⏳ Delivering your items...`;
+          await sendMessage(chatId, receiptMsg).catch(() => {});
+
+          try {
+            await executeDirectPayDelivery(chatId, customer, product, qty, expectedTotal, emojiMap, verifiedVia, txnHash);
+          } catch (delErr) {
+            console.error("[AutoFulfill] delivery error:", delErr?.message || delErr);
+            // Rollback balance since delivery failed
+            await supabase.from("bot_customers").update({ balance: currentBal, updated_at: new Date().toISOString() }).eq("id", customer.id);
+            await sendMessage(chatId, "❌ Delivery error. Your funds are on balance. Contact admin.", mainMenuKeyboard(emojiMap)).catch(() => {});
+          }
+        } catch (e) {
+          console.error("[AutoFulfill] row error:", e?.message || e);
+        }
+      }
+    } catch (err) {
+      console.error("[AutoFulfill] loop error:", err?.message || err);
+    }
+  }
+}
+
+
 // ── Background Auto Stock Alert ──
 async function backgroundStockAlertChecker() {
   const CHECK_INTERVAL = 2 * 60 * 1000; // check every 2 minutes
