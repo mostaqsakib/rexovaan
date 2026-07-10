@@ -75,7 +75,9 @@ export default function Deposit() {
 
       {/* Unified payment flow — auto-generates on-chain addresses, handles bKash, Binance Pay, etc. */}
       <PaymentFlow
+        context="deposit"
         prefillAmount={prefillAmount}
+
         onVerified={(info) => {
           if (nextUrl) {
             toast.success(`Payment of $${info.amount.toFixed(2)} received — completing your order…`);
