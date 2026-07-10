@@ -181,9 +181,44 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact }: Paym
     setVState('idle');
     setPendingDeposit(null);
     setVerifiedInfo(null);
+    setOnchain(null);
     setTimeout(() => document.getElementById('pf-instructions')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
+
+  const reserveOnchain = async () => {
+    if (!onchainKind || !customer) return;
+    const amt = Number(amount);
+    if (!amt || amt < 0.01) { toast.error('Enter a valid amount (min 0.01)'); return; }
+    setSubmitting(true);
+    try {
+      const endpoint = onchainKind === 'ton' ? 'ton-reserve-memo'
+        : onchainKind === 'ltc' ? 'ltc-reserve-address'
+        : 'bep20-reserve-address';
+      const body: any = { customer_id: customer.id, expected_amount: amt };
+      if (onchainKind === 'bep20' || onchainKind === 'polygon') body.token = 'ANY';
+      const { data, error } = await supabase.functions.invoke(endpoint, { body });
+      if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || 'Reserve failed');
+      const d: any = data;
+      setOnchain({
+        address: d.address,
+        memo: d.memo,
+        token: d.token,
+        amountUsd: amt,
+        amountLtc: d.amount_ltc,
+        rate: d.rate,
+        expiresAt: d.expires_at,
+        depositId: d.deposit_id,
+        kind: onchainKind,
+      });
+      setPendingDeposit({ id: String(d.deposit_id), startedAt: Date.now() });
+      setVState('verifying');
+    } catch (e: any) {
+      toast.error(e.message || 'Reserve failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const submitDeposit = async () => {
     const parsedAmount = Number(amount);
