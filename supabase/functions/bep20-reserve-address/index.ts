@@ -69,6 +69,8 @@ Deno.serve(async (req) => {
         status: "pending",
         bep20_address: address,
         bep20_token: t === "ANY" ? null : t,
+        pending_product_id: pending_product_id || null,
+        pending_quantity: pending_quantity || null,
       } as any)
       .select("id")
       .single();
