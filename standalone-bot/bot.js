@@ -4304,7 +4304,6 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
   const methodName = method.name?.toLowerCase() || "";
 
   const isBkash = methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash";
-  const isBkash = methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash";
 
   if (isBkash) {
     const bdtRate = await getDollarRateBDT();
