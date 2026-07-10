@@ -5143,8 +5143,8 @@ async function handleMessage(message, emojiMap) {
 
   if (customer.pending_action?.startsWith("bep20_deposit_amount") && text && !text.startsWith("/")) {
     const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
-      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>1 USDT</b>.");
+    if (!Number.isFinite(amountUSD) || amountUSD < 0.01) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>0.01 USDT</b>.");
       return;
     }
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
@@ -5190,8 +5190,8 @@ async function handleMessage(message, emojiMap) {
 
   if (customer.pending_action?.startsWith("polygon_deposit_amount") && text && !text.startsWith("/")) {
     const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
-      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>1 USDT</b>.");
+    if (!Number.isFinite(amountUSD) || amountUSD < 0.01) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>0.01 USDT</b>.");
       return;
     }
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
@@ -5237,8 +5237,8 @@ async function handleMessage(message, emojiMap) {
 
   if (customer.pending_action?.startsWith("ton_deposit_amount") && text && !text.startsWith("/")) {
     const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
-      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>1 USDT</b>.");
+    if (!Number.isFinite(amountUSD) || amountUSD < 0.01) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>0.01 USDT</b>.");
       return;
     }
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
@@ -5285,8 +5285,8 @@ async function handleMessage(message, emojiMap) {
 
   if (customer.pending_action?.startsWith("ltc_deposit_amount") && text && !text.startsWith("/")) {
     const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(amountUSD) || amountUSD < 1) {
-      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>$1</b>.");
+    if (!Number.isFinite(amountUSD) || amountUSD < 0.01) {
+      await sendMessage(chatId, "❌ Please send a valid amount. Minimum is <b>$0.01</b>.");
       return;
     }
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
