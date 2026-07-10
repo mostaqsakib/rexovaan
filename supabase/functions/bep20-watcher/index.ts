@@ -225,7 +225,10 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
 
       try {
         const { data: customer } = await supabase
-          .from("bot_customers").select("chat_id").eq("id", res.customer_id).maybeSingle();
+          .from("bot_customers").select("chat_id, username, first_name").eq("id", res.customer_id).maybeSingle();
+        const customerLabel = customer?.username
+          ? `@${customer.username}`
+          : (customer?.first_name || customer?.chat_id || res.customer_id);
         const shortTx = `${txHash.slice(0, 10)}…${txHash.slice(-8)}`;
         const wrongNet = res.token !== "ANY" && !res.received_chains?.includes("bsc") && chain.id !== "bsc";
         const chainLabel = chain.name;
