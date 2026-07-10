@@ -9329,6 +9329,10 @@ async function backgroundStockAlertChecker() {
   backgroundStockAlertChecker().catch(err => console.error("[Stock-Alert] Fatal error:", err));
   console.log("📦 Background stock alert checker started (every 5 min)");
 
+  // Start background auto-fulfill for on-chain direct-pay deposits (non-blocking)
+  backgroundAutoFulfillChecker().catch(err => console.error("[AutoFulfill] Fatal error:", err));
+  console.log("🚚 Background auto-fulfill checker started (every 20s)");
+
   flashSaleTickerLoop().catch(err => console.error("[FlashSale] Fatal error:", err));
   console.log("🔥 Flash sale countdown ticker started (every 5s)");
 
