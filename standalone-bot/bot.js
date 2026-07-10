@@ -2606,15 +2606,6 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     if (cust) {
       await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount` }).eq("id", cust.id);
     }
-  } else if (methodName.includes("cryptomus") || paymentType === "cryptomus") {
-    msg += `<tg-emoji emoji-id="5071060314359859038">🪙</tg-emoji> <b>Cryptomus Crypto Checkout</b>\n\n`;
-    msg += `💵 Send the amount you want to deposit in <b>USDT/USD</b> (example: <code>5</code>).\n`;
-    msg += `<i>Minimum: 0.50 USDT</i>\n`;
-
-    const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
-    if (cust) {
-      await supabase.from("bot_customers").update({ pending_action: `cryptomus_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
-    }
   } else if (paymentType === "bep20" || methodName.includes("bep20 auto") || methodName.includes("usdt/usdc bep20")) {
 
     const { data: bepAmtRow } = await supabase.from("bot_settings").select("value").eq("key", "bep20_amount_msg").maybeSingle();
@@ -2681,7 +2672,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     msg += `💳 <b>Payment Details:</b>\n<code>${paymentInfo}</code>\n<i>👆 Tap to copy</i>\n`;
   }
 
-  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || methodName.includes("cryptomus") || paymentType === "cryptomus" || paymentType === "bep20" || paymentType === "polygon" || paymentType === "ton_auto" || paymentType === "ltc_auto" || methodName.includes("usdt/usdc bep20") || methodName.includes("usdt polygon") || methodName === "usdt ton" || methodName === "litecoin (ltc)")) {
+  if (!(methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash" || paymentType === "bep20" || paymentType === "polygon" || paymentType === "ton_auto" || paymentType === "ltc_auto" || methodName.includes("usdt/usdc bep20") || methodName.includes("usdt polygon") || methodName === "usdt ton" || methodName === "litecoin (ltc)")) {
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
     msg += `\n━━━━━━━━━━━━━━━━\nAfter sending, paste your <b>Transaction Hash (TxID)</b> or <b>Order ID</b> here and we'll verify it <b>automatically</b>.`;
   }
@@ -3589,39 +3580,6 @@ async function createBkashPayment(amountBDT, customerId, pendingProductId = null
   }
 }
 
-async function createCryptomusPayment(amountUSD, customerId, pendingProductId = null, pendingQuantity = null) {
-  try {
-    const supabaseUrl = envGet("SUPABASE_URL");
-    const serviceKey = envGet("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceKey) {
-      return { ok: false, error: "Cryptomus is not configured on the bot server." };
-    }
-
-    const res = await fetch(`${supabaseUrl}/functions/v1/cryptomus-create-payment`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
-        apikey: serviceKey,
-      },
-      body: JSON.stringify({
-        amount_usd: amountUSD,
-        customer_id: customerId,
-        pending_product_id: pendingProductId,
-        pending_quantity: pendingQuantity,
-        source: "bot",
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.url) {
-      return { ok: false, error: data?.error || `Cryptomus checkout failed (${res.status}).` };
-    }
-    return { ok: true, url: data.url, orderId: data.order_id, uuid: data.uuid };
-  } catch (err) {
-    console.error("[Cryptomus] CreatePayment error:", err.message);
-    return { ok: false, error: err.message || "Unexpected Cryptomus error." };
-  }
-}
 
 async function getDollarRateBDT() {
   const { data } = await supabase.from("bot_settings").select("value").eq("key", "dollar_rate_bdt").maybeSingle();
