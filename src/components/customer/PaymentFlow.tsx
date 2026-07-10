@@ -50,9 +50,13 @@ export interface PaymentFlowProps {
   compact?: boolean;
   /** Payment methods context filter — 'purchase' (default) or 'deposit'. */
   context?: 'purchase' | 'deposit';
+  /** Direct-purchase product id — enables background auto-fulfillment for on-chain reservations even if the user closes the tab. */
+  pendingProductId?: string | null;
+  /** Quantity for the pending product (defaults to 1). */
+  pendingQuantity?: number | null;
 }
 
-export default function PaymentFlow({ prefillAmount, onVerified, compact, context = 'purchase' }: PaymentFlowProps) {
+export default function PaymentFlow({ prefillAmount, onVerified, compact, context = 'purchase', pendingProductId, pendingQuantity }: PaymentFlowProps) {
 
   const { customer, refreshCustomer } = useCustomerAuth();
   const { format } = useCurrency();
@@ -211,6 +215,10 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact, contex
         : 'bep20-reserve-address';
       const body: any = { customer_id: customer.id, expected_amount: amt };
       if (onchainKind === 'bep20' || onchainKind === 'polygon') body.token = 'ANY';
+      if (pendingProductId) {
+        body.pending_product_id = pendingProductId;
+        body.pending_quantity = Math.max(1, Number(pendingQuantity || 1));
+      }
       const { data, error } = await supabase.functions.invoke(endpoint, { body });
       if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || 'Reserve failed');
       const d: any = data;

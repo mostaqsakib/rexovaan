@@ -394,6 +394,8 @@ export default function Checkout() {
           <PaymentFlow
             prefillAmount={shortBy.toFixed(2)}
             compact
+            pendingProductId={productId}
+            pendingQuantity={qty}
             onVerified={async () => {
               await refreshCustomer();
               if (!result && !placing) {
