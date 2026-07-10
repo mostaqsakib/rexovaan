@@ -64,7 +64,9 @@ Deno.serve(async (req) => {
         amount: expectedAmount,
         payment_method: "USDT TON",
         status: "pending",
-      })
+        pending_product_id: pendingProductId,
+        pending_quantity: pendingQuantity,
+      } as any)
       .select("id")
       .single();
     if (depErr) throw depErr;
