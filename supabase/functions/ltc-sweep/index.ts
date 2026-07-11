@@ -105,6 +105,21 @@ Deno.serve(async (req) => {
 
     for (const row of rows) {
       summary.checked++;
+
+      // Threshold guard: skip sweeping tiny amounts unless force=true. Funds stay safe on derived address.
+      const paidLtc = Number(row.paid_amount_ltc || 0);
+      const paidUsd = ltcPrice > 0 ? paidLtc * ltcPrice : 0;
+      if (!force && paidUsd > 0 && paidUsd < minUsd) {
+        if (row.sweep_status !== "deferred") {
+          await admin.from("ltc_reserved_addresses").update({
+            sweep_status: "deferred",
+            sweep_error: `Below threshold: $${paidUsd.toFixed(2)} < $${minUsd.toFixed(2)}`,
+          }).eq("id", row.id);
+        }
+        summary.deferred++;
+        continue;
+      }
+
       try {
         const utxos = await fetchUtxos(row.address);
         const totalIn = utxos.reduce((s, u) => s + u.value, 0);
