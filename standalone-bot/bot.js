@@ -3738,7 +3738,20 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
   }
 
   if (verified && amount > 0) {
-    await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+    // Race-safe claim of the TxID: unique partial index on bot_deposits(txn_hash)
+    // guarantees only ONE concurrent verifier can insert. If insert fails with
+    // a unique-violation, another submission already claimed this TxID → abort
+    // so we never double-credit or double-deliver on the same on-chain txn.
+    const { error: depInsErr } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+    if (depInsErr) {
+      console.log(`[Verify] Duplicate TxID insert blocked: ${normalizedTxn} → ${depInsErr.message}`);
+      await sendMessage(chatId, "⚠️ This transaction has already been used by another account. Each TxID can only be verified once.", mainMenuKeyboard());
+      if (customer.pending_action) {
+        await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+      }
+      return;
+    }
+
 
     if (customer.pending_action?.startsWith("directpay_") || customer.pending_action?.startsWith("bkashpay_")) {
       const { productId, qty } = parseDirectPayAction(customer.pending_action);
