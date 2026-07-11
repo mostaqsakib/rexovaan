@@ -494,7 +494,7 @@ const OnChainActivityTab = () => {
               Live BEP20 gateway — every incoming USDT/USDC transfer to a per-order address is scanned and credited automatically.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={load} disabled={refreshing}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
@@ -502,15 +502,32 @@ const OnChainActivityTab = () => {
               {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               <span className="ml-1.5">Scan now</span>
             </Button>
+            <Button
+              size="sm"
+              variant={stats.deferredCount > 0 ? 'default' : 'outline'}
+              onClick={runBatchSweep}
+              disabled={batchSweeping}
+              title="Force sweep all pending + deferred (small) deposits now"
+            >
+              {batchSweeping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+              <span className="ml-1.5">
+                Sweep all now{stats.deferredCount > 0 ? ` (${stats.deferredCount})` : ''}
+              </span>
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 pt-0 md:grid-cols-4">
           <Stat label="Total credited" value={`$${stats.totalCredited.toFixed(2)}`} accent="text-success" />
           <Stat label="Active addresses" value={String(stats.activeAddrs)} />
           <Stat label="Auto-swept → main" value={`$${stats.swept.toFixed(2)}`} accent="text-primary" />
-          <Stat label="Awaiting sweep" value={`$${stats.awaitingSweep.toFixed(2)}`} accent="text-warning" />
+          <Stat
+            label={stats.deferredCount > 0 ? `Deferred (${stats.deferredCount}) + Awaiting` : 'Awaiting sweep'}
+            value={`$${(stats.awaitingSweep).toFixed(2)}`}
+            accent={stats.deferredCount > 0 ? 'text-warning' : 'text-warning'}
+          />
         </CardContent>
       </Card>
+
 
       {/* Gas tank emergency alert (only for visible chains) */}
       {(() => {
