@@ -537,44 +537,54 @@ Deno.serve(async (req) => {
       return json({ success: true, verified: true, amount: verifiedAmount, via: verifiedVia, new_balance: newBal, deposit_id: depId });
     }
 
-    // Not verified on recheck → keep pending, return status
+    // Not verified on recheck → auto-cancel (no admin approval anymore)
     if (isRecheck) {
-      return json({ success: true, verified: false, deposit_id: existingDepositId, status: "pending" });
+      if (existingDepositId) {
+        await supabase
+          .from("bot_deposits")
+          .update({
+            status: "rejected",
+            rejected_at: new Date().toISOString(),
+            rejection_reason: "Auto-verification failed",
+          })
+          .eq("id", existingDepositId);
+      }
+      return json({ success: true, verified: false, deposit_id: existingDepositId, status: "rejected" });
     }
 
-    // Not verified → fall back to pending (admin verifies manually)
-    // SECURITY: do NOT store user-supplied claimed amount — admin must verify the real on-chain amount
+    // Not verified on first try → record as rejected (no manual review)
     const { data: deposit, error: insertError } = await supabase
       .from("bot_deposits")
-      .insert({ customer_id: customer.id, amount: null, txn_hash: normalizedTxn, status: "pending", payment_method: paymentMethod || null, source: "web" })
+      .insert({
+        customer_id: customer.id,
+        amount: 0,
+        txn_hash: normalizedTxn,
+        status: "rejected",
+        payment_method: paymentMethod || null,
+        source: "web",
+        rejected_at: new Date().toISOString(),
+        rejection_reason: "Auto-verification failed on submit",
+      })
       .select("id,created_at")
       .single();
     if (insertError) throw insertError;
 
     if (adminChatId) {
       await sendTelegramMessage(adminChatId,
-        `🔔 <b>New Deposit (Auto-Verify Failed)</b>\n\n` +
+        `❌ <b>Auto-Cancelled Deposit (Web)</b>\n\n` +
         `👤 ${escapeHtml(label)}\n` +
         `💳 Method: <b>${escapeHtml(paymentMethod || "Unknown")}</b>\n` +
-        `💰 Amount: <b>⚠️ Unverified — check txn manually</b>\n` +
         `🧾 TxID: <code>${escapeHtml(normalizedTxn)}</code>\n\n` +
-        `Open Admin → Bot Logs → Deposits to verify or reject manually.`);
+        `<i>Auto-verify failed. No manual review — customer notified. If funds actually landed on-chain they'll auto-credit.</i>`);
     }
     if (customer.chat_id) {
       await sendTelegramMessage(customer.chat_id,
-        `⏳ <b>Deposit Submitted</b>\n\nAmount: <b>${claimedAmount.toFixed(2)} USDT</b>\nTxID: <code>${escapeHtml(normalizedTxn)}</code>\n\n` +
-        `We couldn't auto-verify it yet. Admin will check it shortly.`);
+        `❌ <b>Deposit Not Verified</b>\n\nTxID: <code>${escapeHtml(normalizedTxn)}</code>\n\n` +
+        `We couldn't auto-verify this transaction. The submission has been cancelled.\n\n` +
+        `<i>If you actually sent funds, they'll auto-credit when detected on-chain. Otherwise double-check the TxID and try again.</i>`);
     }
 
-    // Email customer (works for users without Telegram)
-    await sendDepositEmail(supabase, recipientEmail, 'deposit-pending', {
-      customerName: customer.first_name || customer.username || undefined,
-      amount: claimedAmount,
-      paymentMethod: paymentMethod || 'Unknown',
-      txnHash: normalizedTxn,
-    }, `deposit-pending-${deposit.id}`);
-
-    return json({ success: true, verified: false, deposit_id: deposit.id });
+    return json({ success: true, verified: false, deposit_id: deposit.id, status: "rejected" });
   } catch (error) {
     console.error("submit-deposit-verification error", error);
     return json({ error: error instanceof Error ? error.message : "Failed to submit deposit" }, 500);
