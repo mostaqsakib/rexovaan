@@ -3865,12 +3865,18 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
     if (retryVerified && retryAmount > 0) {
       amount = retryAmount; verified = true; verifiedVia = retryVia; ltcRawAmount = retryLtcRaw;
       // Guard against race: ensure deposit isn't already recorded (e.g. background checker raced us)
-      const { data: dupDep } = await supabase.from("bot_deposits").select("id, status").eq("txn_hash", normalizedTxn).maybeSingle();
-      if (dupDep && dupDep.status === "verified") {
-        console.log(`[Verify] Retry skipped: deposit ${normalizedTxn} already verified`);
+      // Race-safe claim (see comment above). If another verifier already
+      // inserted this txn_hash, the unique index rejects our insert → abort.
+      const { error: depInsErr2 } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+      if (depInsErr2) {
+        console.log(`[Verify] Retry duplicate TxID insert blocked: ${normalizedTxn} → ${depInsErr2.message}`);
+        await sendMessage(chatId, "⚠️ This transaction has already been used by another account. Each TxID can only be verified once.", mainMenuKeyboard());
+        if (customer.pending_action) {
+          await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+        }
         return;
       }
-      await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+
 
       if (customer.pending_action?.startsWith("directpay_") || customer.pending_action?.startsWith("bkashpay_")) {
         const { productId, qty } = parseDirectPayAction(customer.pending_action);
