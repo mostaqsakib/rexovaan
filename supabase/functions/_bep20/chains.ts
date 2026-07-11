@@ -163,8 +163,12 @@ export function getRpcUrl(cfg: ChainCfg): string | null {
   return cfg.defaultRpc ?? null;
 }
 
+// Chains hard-disabled (too expensive / unused). Removing the RPC secret would also work,
+// but this makes the intent explicit and survives accidental secret re-adds.
+const DISABLED_CHAINS: ChainId[] = ["ethereum", "avalanche"];
+
 export function enabledChains(): ChainCfg[] {
-  return Object.values(CHAINS).filter((c) => !!getRpcUrl(c));
+  return Object.values(CHAINS).filter((c) => !DISABLED_CHAINS.includes(c.id) && !!getRpcUrl(c));
 }
 
 export function tokenByContract(chain: ChainCfg, addrLower: string): TokenCfg | null {
