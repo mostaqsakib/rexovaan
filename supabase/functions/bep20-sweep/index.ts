@@ -82,6 +82,21 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
     if (!receivedChains.includes(chain.id)) continue;
 
     const entry: any = { id: row.id, chain: chain.id, address: row.address, action: "skip" };
+
+    // Threshold guard: skip small deposits unless force=true. Funds stay safe on the derived address.
+    const receivedUsd = Number(row.received_amount || 0);
+    if (!opts.force && receivedUsd > 0 && receivedUsd < opts.minUsd) {
+      entry.action = "deferred_small"; entry.receivedUsd = receivedUsd; entry.threshold = opts.minUsd;
+      if (row.sweep_status !== "deferred") {
+        await supabase.from("bep20_reserved_addresses").update({
+          sweep_status: "deferred",
+          sweep_last_error: `Below threshold: $${receivedUsd.toFixed(2)} < $${opts.minUsd.toFixed(2)}`,
+        }).eq("id", row.id);
+      }
+      results.push(entry);
+      continue;
+    }
+
     try {
       const derived = deriveAddressWithXprv(xprv, row.derivation_index);
       if (derived.address.toLowerCase() !== String(row.address).toLowerCase()) throw new Error("derivation mismatch");
