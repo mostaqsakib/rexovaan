@@ -41,8 +41,8 @@ export const CHAINS: Record<ChainId, ChainCfg> = {
     defaultRpc: "https://bsc-dataseed.binance.org",
     confirmations: 3,
     chunkSize: 4000,
-    minGasNativeWei: 5_000_000_000_000_000n,   // 0.005 BNB
-    gasTopUpWei:      2_000_000_000_000_000n,  // 0.002 BNB
+    minGasNativeWei: 2_000_000_000_000_000n,   // 0.002 BNB (~$1.40) — alert threshold
+    gasTopUpWei:       200_000_000_000_000n,   // 0.0002 BNB (~$0.14) — enough for 2 sweeps, 10× less waste
     explorerTx: (h) => `https://bscscan.com/tx/${h}`,
     tokens: [
       { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
@@ -58,8 +58,8 @@ export const CHAINS: Record<ChainId, ChainCfg> = {
     defaultRpc: "https://polygon-rpc.com",
     confirmations: 20,
     chunkSize: 500,
-    minGasNativeWei: 500_000_000_000_000_000n, // 0.5 MATIC
-    gasTopUpWei:     200_000_000_000_000_000n, // 0.2 MATIC
+    minGasNativeWei: 200_000_000_000_000_000n, // 0.2 MATIC — alert threshold
+    gasTopUpWei:      30_000_000_000_000_000n, // 0.03 MATIC (~$0.02) — enough for a sweep with buffer
     explorerTx: (h) => `https://polygonscan.com/tx/${h}`,
     tokens: [
       { symbol: "USDT", address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 },
