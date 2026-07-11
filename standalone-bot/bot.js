@@ -3162,8 +3162,8 @@ async function convertLtcToUsdt(ltcAmount) {
 async function verifyBybitTransfer(orderId, apiKey, apiSecret) {
   const normalizedOrderId = String(orderId || "").trim();
   const recvWindow = "20000";
-  // Scan window: 7 days (was 2h) — covers late submissions & API indexing lag
-  const SCAN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+  // Scan window: 6h — covers late submissions & API indexing lag
+  const SCAN_WINDOW_MS = 6 * 60 * 60 * 1000;
   // Coins to check — Bybit users sometimes send USDC / other stablecoins
   const COINS = ["USDT", "USDC"];
 
