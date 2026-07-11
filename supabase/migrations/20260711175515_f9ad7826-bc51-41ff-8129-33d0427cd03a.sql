@@ -1,0 +1,1 @@
+UPDATE bot_button_emojis SET button_label = regexp_replace(button_label, '\s*Button\s*$', '') WHERE button_label ILIKE '% Button';
