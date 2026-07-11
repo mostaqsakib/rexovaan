@@ -437,8 +437,38 @@ const OnChainActivityTab = () => {
     const swept = reserved
       .filter((r) => r.sweep_status === 'swept')
       .reduce((s, r) => s + Number(r.received_amount || 0), 0);
-    return { totalCredited, activeAddrs, awaitingSweep, swept, fakeCount: fakes.length };
+    const deferredRows = reserved.filter((r) => r.sweep_status === 'deferred');
+    const deferredCount = deferredRows.length;
+    const deferredUsd = deferredRows.reduce((s, r) => s + Number(r.received_amount || 0), 0);
+    return { totalCredited, activeAddrs, awaitingSweep, swept, fakeCount: fakes.length, deferredCount, deferredUsd };
   }, [registry, reserved, fakes]);
+
+  const [batchSweeping, setBatchSweeping] = useState(false);
+  const runBatchSweep = async () => {
+    if (!confirm(`Force sweep all pending & deferred deposits now?\n\nThis will sweep even small amounts and cost gas per address.`)) return;
+    setBatchSweeping(true);
+    try {
+      const [bep, ltc] = await Promise.all([
+        supabase.functions.invoke('bep20-sweep', { body: { force: true } }),
+        supabase.functions.invoke('ltc-sweep', { body: { force: true } }),
+      ]);
+      const bepOk = !bep.error && (bep.data as any)?.ok;
+      const ltcOk = !ltc.error && (ltc.data as any)?.ok;
+      const bepChains = (bep.data as any)?.chains || [];
+      let sweptCount = 0;
+      bepChains.forEach((c: any) => (c.results || []).forEach((r: any) => { if (r.action === 'swept') sweptCount++; }));
+      const ltcSwept = (ltc.data as any)?.swept || 0;
+      toast.success(`Batch sweep done — BEP20: ${sweptCount} swept, LTC: ${ltcSwept} swept`);
+      if (!bepOk) toast.error(`BEP20: ${bep.error?.message || (bep.data as any)?.error || 'failed'}`);
+      if (!ltcOk) toast.error(`LTC: ${ltc.error?.message || (ltc.data as any)?.error || 'failed'}`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? 'Batch sweep failed');
+    } finally {
+      setBatchSweeping(false);
+    }
+  };
+
 
   if (loading) {
     return (
