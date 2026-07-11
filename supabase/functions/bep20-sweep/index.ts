@@ -49,7 +49,7 @@ async function checkGasTank(chain: ChainCfg, master: string, provider: any, supa
   return { chain: chain.id, native: chain.nativeSymbol, ok: false, bal: ethers.formatEther(bal), alerted: true };
 }
 
-async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destination: string, supabase: any) {
+async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destination: string, supabase: any, opts: { force: boolean; minUsd: number }) {
   const rpcUrl = getRpcUrl(chain);
   if (!rpcUrl) return { chain: chain.id, skipped: "no rpc" };
 
