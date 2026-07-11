@@ -1,0 +1,1 @@
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.bot_customers TO authenticated; GRANT ALL ON public.bot_customers TO service_role;
