@@ -9074,6 +9074,8 @@ async function backgroundDepositChecker() {
               {
                 const emojiMap = await loadButtonEmojis();
                 await processDirectPayPurchase({ chatId, customer, product, qty, expectedTotal, amount, verifiedVia, ltcRawAmount, normalizedTxn: txn, emojiMap, receiptPrefix: "✅ <b>Payment Verified!</b> — Background Check" });
+                // Clear pending flags so backgroundAutoFulfillChecker doesn't re-process this deposit
+                await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", dep.id);
               }
             } else {
               // Product not found — just add to balance
