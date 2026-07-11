@@ -3888,41 +3888,39 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
       await sendMessage(chatId, receiptMsg, mainMenuKeyboard());
       notifyAdmin(`✅ <b>Auto-Verified Deposit</b>\n\n👤 ${getCustomerLabel(customer)}\n${formatPaymentResultLine(amount, verifiedVia, ltcRawAmount, normalizedTxn)}${plResult.deducted > 0 ? `🏷️ Pay Later Deducted: ${plResult.deducted.toFixed(2)} USDT\n` : ""}`);
     } else {
-      // All retries exhausted - fall back to manual verification
+      // All retries exhausted → auto-cancel (no admin approval anymore).
+      // Record as rejected so it shows in history & prevents TxID reuse.
+      await supabase.from("bot_deposits").insert({
+        customer_id: customer.id,
+        amount: 0,
+        txn_hash: normalizedTxn,
+        status: "rejected",
+        rejected_at: new Date().toISOString(),
+        rejection_reason: "Auto-verification failed after 5min retry",
+      });
+
       if (customer.pending_action?.startsWith("directpay_") || customer.pending_action?.startsWith("bkashpay_")) {
         const { productId, qty } = parseDirectPayAction(customer.pending_action);
-        const { data: product } = await supabase.from("bot_products").select("name, price").eq("id", productId).single();
-        const unitPrice = product ? await getTieredPrice(productId, qty, Number(product.price), customer.id) : 0;
-        const totalPrice = Math.round(unitPrice * qty * 10000) / 10000;
-
-        await supabase.from("bot_deposits").insert({
-          customer_id: customer.id, amount: totalPrice, txn_hash: normalizedTxn, status: "pending",
-          pending_product_id: productId, pending_quantity: qty,
-        });
-
+        await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+        const { data: product } = await supabase.from("bot_products").select("name").eq("id", productId).maybeSingle();
         await sendMessage(chatId,
-          `⏳ <b>Payment Submitted for Manual Review</b>\n\nProduct: <b>${product?.name || "Unknown"}</b> x${qty}\n` +
+          `❌ <b>Payment Not Verified</b>\n\n` +
+          `Product: <b>${product?.name || "Unknown"}</b> x${qty}\n` +
           `TxID: <code>${normalizedTxn}</code>\n\n` +
-          `⚠️ We tried verifying for 5 minutes but couldn't confirm this transaction automatically. Your payment has been sent to <b>admin for manual review</b>.\n\n` +
-          `Once verified, your order will be delivered automatically.`,
+          `⚠️ We couldn't confirm this payment automatically within 5 minutes. The order has been <b>cancelled</b>.\n\n` +
+          `<i>If you actually sent funds, they'll auto-credit when detected on-chain (usually within a few minutes). Otherwise please try again with a fresh transaction.</i>`,
           mainMenuKeyboard()
         );
-
-        const { data: latestDep } = await supabase.from("bot_deposits").select("id").eq("customer_id", customer.id).eq("status", "pending").order("created_at", { ascending: false }).limit(1).single();
-        const depShortId = latestDep ? latestDep.id.slice(0, 8) : "";
-        notifyAdmin(
-          `⏳ <b>Pending Direct Pay</b>\n\n👤 ${getCustomerLabel(customer)}\n📦 ${product?.name || "?"} x${qty} = ${totalPrice.toFixed(2)} USDT${selectedPaymentMethodLabel ? `\n💳 Method: <b>${selectedPaymentMethodLabel}</b>` : ""}\n🪙 Expected Network/Coin: <b>${escapeHtml(formatVerificationVia(selectedPaymentMethodName || "Auto Verification"))}</b>\n🔗 TxID: <code>${normalizedTxn}</code>\n\n⚠️ Auto-verification failed after 5min retry. Manual review needed.`,
-          depShortId ? { inline_keyboard: [[{ text: "✅ Verify Deposit", callback_data: `dep_approve_${depShortId}` }, { text: "❌ Reject", callback_data: `dep_reject_${depShortId}` }]] } : undefined
-        );
+        notifyAdmin(`❌ <b>Auto-Cancelled Direct Pay</b>\n\n👤 ${getCustomerLabel(customer)}\n📦 ${product?.name || "?"} x${qty}${selectedPaymentMethodLabel ? `\n💳 Method: <b>${selectedPaymentMethodLabel}</b>` : ""}\n🔗 TxID: <code>${normalizedTxn}</code>\n\n<i>Auto-verify failed. No manual review — customer notified.</i>`);
       } else {
-        await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount: 0, txn_hash: normalizedTxn, status: "pending" });
-        await sendMessage(chatId, `⏳ <b>Deposit Submitted for Manual Review</b>\n\nTxID: <code>${normalizedTxn}</code>\n\n⚠️ We tried verifying for 5 minutes but couldn't confirm automatically. It has been sent to <b>admin for manual review</b>.\nYour balance will be updated once verified.`, mainMenuKeyboard());
-        const { data: latestDep2 } = await supabase.from("bot_deposits").select("id").eq("customer_id", customer.id).eq("status", "pending").order("created_at", { ascending: false }).limit(1).single();
-        const depShortId2 = latestDep2 ? latestDep2.id.slice(0, 8) : "";
-        notifyAdmin(
-          `⏳ <b>Pending Deposit</b>\n\n👤 ${getCustomerLabel(customer)}${selectedPaymentMethodLabel ? `\n💳 Method: <b>${selectedPaymentMethodLabel}</b>` : ""}\n🪙 Expected Network/Coin: <b>${escapeHtml(formatVerificationVia(selectedPaymentMethodName || "Auto Verification"))}</b>\n🔗 TxID: <code>${normalizedTxn}</code>\n\n⚠️ Auto-verification failed after 5min retry. Manual review needed.`,
-          depShortId2 ? { inline_keyboard: [[{ text: "✅ Verify Deposit", callback_data: `dep_approve_${depShortId2}` }, { text: "❌ Reject", callback_data: `dep_reject_${depShortId2}` }]] } : undefined
+        await sendMessage(chatId,
+          `❌ <b>Deposit Not Verified</b>\n\n` +
+          `TxID: <code>${normalizedTxn}</code>\n\n` +
+          `⚠️ We couldn't confirm this transaction automatically within 5 minutes. The submission has been <b>cancelled</b>.\n\n` +
+          `<i>If you actually sent funds, they'll auto-credit when detected on-chain. Otherwise please double-check the TxID and try again.</i>`,
+          mainMenuKeyboard()
         );
+        notifyAdmin(`❌ <b>Auto-Cancelled Deposit</b>\n\n👤 ${getCustomerLabel(customer)}${selectedPaymentMethodLabel ? `\n💳 Method: <b>${selectedPaymentMethodLabel}</b>` : ""}\n🔗 TxID: <code>${normalizedTxn}</code>\n\n<i>Auto-verify failed. No manual review — customer notified.</i>`);
       }
     }
     } catch (bgErr) {
