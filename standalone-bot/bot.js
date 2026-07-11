@@ -9159,6 +9159,22 @@ async function backgroundAutoFulfillChecker() {
           const unitPrice = await getTieredPrice(productId, qty, Number(product.price), customer.id);
           const expectedTotal = Math.round(unitPrice * qty * 10000) / 10000;
 
+          // Safety: if this deposit's product was already delivered by another path
+          // (e.g. BG-Verify processDirectPayPurchase), silently clear pending flags.
+          const { data: recentOrder } = await supabase
+            .from("bot_orders")
+            .select("id")
+            .eq("customer_id", customer.id)
+            .eq("product_id", productId)
+            .eq("status", "completed")
+            .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+            .limit(1)
+            .maybeSingle();
+          if (recentOrder?.id) {
+            await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", dep.id);
+            continue;
+          }
+
           // Re-fetch fresh balance (watcher already credited)
           const { data: freshBal } = await supabase.from("bot_customers").select("balance").eq("id", customer.id).single();
           const currentBal = freshBal ? Number(freshBal.balance) : 0;
