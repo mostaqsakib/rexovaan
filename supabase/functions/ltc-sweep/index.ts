@@ -50,6 +50,19 @@ async function sendTelegram(method: string, body: Record<string, unknown>) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  // Parse force flag — force=true bypasses small-deposit threshold + re-picks deferred rows.
+  let force = false;
+  try {
+    const url = new URL(req.url);
+    if (url.searchParams.get("force") === "1" || url.searchParams.get("force") === "true") force = true;
+    if (req.method !== "GET") {
+      const body = await req.json().catch(() => ({}));
+      if (body && (body.force === true || body.force === "true" || body.force === 1)) force = true;
+    }
+  } catch { /* ignore */ }
+
+  const minUsd = Number(Deno.env.get("SWEEP_MIN_USD_LTC") ?? "2");
+
   const xprv = Deno.env.get("LTC_XPRV");
   const destAddress = Deno.env.get("LTC_MASTER_ADDRESS");
   if (!xprv || !destAddress) {
@@ -58,18 +71,29 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Fetch LTC price once for threshold check.
+  let ltcPrice = 0;
+  try {
+    const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=litecoin&vs_currencies=usd");
+    if (r.ok) ltcPrice = Number((await r.json())?.litecoin?.usd ?? 0);
+  } catch { /* fall back to 0 → threshold effectively disabled if price unavailable */ }
+
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const summary = { checked: 0, swept: 0, skipped: 0, errors: [] as string[] };
+  const summary = { checked: 0, swept: 0, skipped: 0, deferred: 0, errors: [] as string[], force, minUsd, ltcPrice };
 
   try {
+    const orFilter = force
+      ? "sweep_status.is.null,sweep_status.eq.pending,sweep_status.eq.failed,sweep_status.eq.deferred"
+      : "sweep_status.is.null,sweep_status.eq.pending,sweep_status.eq.failed";
+
     // Find paid addresses not yet swept (retry up to 5 times).
     const { data: rows } = await admin
       .from("ltc_reserved_addresses")
       .select("id, address, derivation_index, paid_amount_ltc, sweep_status, sweep_attempts")
       .eq("status", "paid")
-      .or("sweep_status.is.null,sweep_status.eq.pending,sweep_status.eq.failed")
+      .or(orFilter)
       .lt("sweep_attempts", 5)
-      .limit(50);
+      .limit(force ? 100 : 50);
 
     if (!rows || rows.length === 0) {
       return new Response(JSON.stringify({ ok: true, ...summary, note: "nothing to sweep" }), {
@@ -81,6 +105,21 @@ Deno.serve(async (req) => {
 
     for (const row of rows) {
       summary.checked++;
+
+      // Threshold guard: skip sweeping tiny amounts unless force=true. Funds stay safe on derived address.
+      const paidLtc = Number(row.paid_amount_ltc || 0);
+      const paidUsd = ltcPrice > 0 ? paidLtc * ltcPrice : 0;
+      if (!force && paidUsd > 0 && paidUsd < minUsd) {
+        if (row.sweep_status !== "deferred") {
+          await admin.from("ltc_reserved_addresses").update({
+            sweep_status: "deferred",
+            sweep_error: `Below threshold: $${paidUsd.toFixed(2)} < $${minUsd.toFixed(2)}`,
+          }).eq("id", row.id);
+        }
+        summary.deferred++;
+        continue;
+      }
+
       try {
         const utxos = await fetchUtxos(row.address);
         const totalIn = utxos.reduce((s, u) => s + u.value, 0);

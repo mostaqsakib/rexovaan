@@ -49,7 +49,7 @@ async function checkGasTank(chain: ChainCfg, master: string, provider: any, supa
   return { chain: chain.id, native: chain.nativeSymbol, ok: false, bal: ethers.formatEther(bal), alerted: true };
 }
 
-async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destination: string, supabase: any) {
+async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destination: string, supabase: any, opts: { force: boolean; minUsd: number }) {
   const rpcUrl = getRpcUrl(chain);
   if (!rpcUrl) return { chain: chain.id, skipped: "no rpc" };
 
@@ -82,6 +82,21 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
     if (!receivedChains.includes(chain.id)) continue;
 
     const entry: any = { id: row.id, chain: chain.id, address: row.address, action: "skip" };
+
+    // Threshold guard: skip small deposits unless force=true. Funds stay safe on the derived address.
+    const receivedUsd = Number(row.received_amount || 0);
+    if (!opts.force && receivedUsd > 0 && receivedUsd < opts.minUsd) {
+      entry.action = "deferred_small"; entry.receivedUsd = receivedUsd; entry.threshold = opts.minUsd;
+      if (row.sweep_status !== "deferred") {
+        await supabase.from("bep20_reserved_addresses").update({
+          sweep_status: "deferred",
+          sweep_last_error: `Below threshold: $${receivedUsd.toFixed(2)} < $${opts.minUsd.toFixed(2)}`,
+        }).eq("id", row.id);
+      }
+      results.push(entry);
+      continue;
+    }
+
     try {
       const derived = deriveAddressWithXprv(xprv, row.derivation_index);
       if (derived.address.toLowerCase() !== String(row.address).toLowerCase()) throw new Error("derivation mismatch");
@@ -146,31 +161,51 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
+    // Parse force flag (from body OR ?force=1) — force=true bypasses the small-deposit threshold
+    // and also re-picks previously deferred rows.
+    let force = false;
+    try {
+      const url = new URL(req.url);
+      if (url.searchParams.get("force") === "1" || url.searchParams.get("force") === "true") force = true;
+      if (req.method !== "GET") {
+        const body = await req.json().catch(() => ({}));
+        if (body && (body.force === true || body.force === "true" || body.force === 1)) force = true;
+      }
+    } catch { /* ignore */ }
+
+    const minUsd = Number(Deno.env.get("SWEEP_MIN_USD_BEP20") ?? "2");
+
     const xprv = Deno.env.get("BSC_SWEEP_XPRV") || Deno.env.get("BSC_XPRV");
     const destination = Deno.env.get("BSC_SWEEP_DESTINATION");
     if (!xprv) return json({ error: "BSC_SWEEP_XPRV not configured" }, 500);
     if (!destination) return json({ error: "BSC_SWEEP_DESTINATION not configured" }, 500);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // Include 'deferred' rows when force=true so manual batch sweep catches all accumulated small amounts.
+    const orFilter = force
+      ? "sweep_status.is.null,sweep_status.eq.needs_gas,sweep_status.eq.error,sweep_status.eq.deferred"
+      : "sweep_status.is.null,sweep_status.eq.needs_gas,sweep_status.eq.error";
+
     const { data: rows, error: rowsErr } = await supabase
       .from("bep20_reserved_addresses")
       .select("id, address, derivation_index, token, received_amount, received_chains, sweep_status, sweep_attempts")
       .eq("status", "paid")
-      .or("sweep_status.is.null,sweep_status.eq.needs_gas,sweep_status.eq.error")
+      .or(orFilter)
       .lt("sweep_attempts", 8)
       .order("paid_at", { ascending: true })
-      .limit(20);
+      .limit(force ? 100 : 20);
     if (rowsErr) throw rowsErr;
-    if (!rows || rows.length === 0) return json({ ok: true, processed: 0 });
+    if (!rows || rows.length === 0) return json({ ok: true, processed: 0, force, minUsd });
 
     const chains = enabledChains();
     if (chains.length === 0) return json({ error: "no chains configured" }, 500);
 
     const results = await Promise.all(chains.map((c) =>
-      sweepOnChain(c, rows, xprv, destination, supabase).catch((e) => ({ chain: c.id, error: (e as Error).message })),
+      sweepOnChain(c, rows, xprv, destination, supabase, { force, minUsd }).catch((e) => ({ chain: c.id, error: (e as Error).message })),
     ));
 
-    return json({ ok: true, destination, processed: rows.length, chains: results });
+    return json({ ok: true, destination, processed: rows.length, force, minUsd, chains: results });
   } catch (e) {
     console.error("bep20-sweep fatal", e);
     return json({ error: (e as Error).message }, 500);
