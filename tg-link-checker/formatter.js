@@ -23,7 +23,7 @@ export function buildSummary({ total, valid, invalid, errors, durationMs }) {
   ].filter(Boolean).join('\n');
 }
 
-export function buildProgressText({ checked, total, valid, invalid, errors, elapsedMs, label }) {
+export function buildProgressText({ checked, total, valid, invalid, errors, elapsedMs, label, stallRecoveries }) {
   const pct = total > 0 ? Math.floor((checked / total) * 100) : 0;
   const bar = makeBar(pct);
   return [
@@ -33,6 +33,7 @@ export function buildProgressText({ checked, total, valid, invalid, errors, elap
     `✅ Valid: <b>${valid}</b>`,
     `❌ Invalid: <b>${invalid}</b>`,
     errors ? `⚠️ Errors: <b>${errors}</b>` : null,
+    stallRecoveries ? `🔄 Auto-recovered: <b>${stallRecoveries}x</b>` : null,
     `⏱ ${formatDuration(elapsedMs)}`,
   ].filter(Boolean).join('\n');
 }
