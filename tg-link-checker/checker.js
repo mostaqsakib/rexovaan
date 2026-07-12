@@ -246,12 +246,15 @@ export async function prewarm() {
   catch (e) { console.warn('prewarm failed (will retry on first use):', e?.message || e); }
 }
 
+const STALL_TIMEOUT_MS = parseInt(process.env.STALL_TIMEOUT_MS || '90000', 10);
+
 export async function checkUrls(urls, { concurrency = 50, onProgress, signal } = {}) {
-  const ctx = await getBrowser();
   const total = urls.length;
   const results = new Array(total);
   let nextIdx = 0;
   let checked = 0, valid = 0, invalid = 0, errors = 0;
+  let lastProgressAt = Date.now();
+  let stallRecoveries = 0;
 
   // Throttle progress callbacks to reduce per-check overhead (bot edits etc.).
   let lastTick = 0;
@@ -259,7 +262,7 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
   const PROGRESS_MIN_MS = 150;
   const emit = () => {
     if (typeof onProgress !== 'function') return;
-    try { onProgress({ checked, total, valid, invalid, errors }); } catch {}
+    try { onProgress({ checked, total, valid, invalid, errors, stallRecoveries }); } catch {}
   };
   const tick = () => {
     if (typeof onProgress !== 'function') return;
@@ -289,10 +292,20 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
       const i = nextIdx++;
       if (i >= total) return;
       const url = urls[i];
-      const judgement = await withHardTimeout(judgeUrl(ctx, url), navTimeout * 3 + 5000, 'judgeUrl')
-        .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
+      let judgement;
+      try {
+        const ctx = await getBrowser();
+        judgement = await withHardTimeout(
+          judgeUrl(ctx, url),
+          navTimeout * 3 + 5000,
+          'judgeUrl',
+        );
+      } catch (e) {
+        judgement = { result: 'error', reason: String(e?.message || e).slice(0, 240) };
+      }
       results[i] = { url, ...judgement };
       checked++;
+      lastProgressAt = Date.now();
       if (judgement.result === 'valid') valid++;
       else if (judgement.result === 'invalid') invalid++;
       else errors++;
@@ -300,7 +313,32 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
     }
   };
 
-  const conc = Math.max(1, Math.min(concurrency, total));
-  await Promise.all(Array.from({ length: conc }, () => runWorker()));
+  // Stall watchdog — if no worker completes for STALL_TIMEOUT_MS,
+  // force-close the browser so in-flight requests fail (via hard timeout)
+  // and getBrowser() relaunches a fresh Chrome for the remaining URLs.
+  let watchdog = null;
+  const startWatchdog = () => {
+    watchdog = setInterval(async () => {
+      if (checked >= total) return;
+      const idle = Date.now() - lastProgressAt;
+      if (idle < STALL_TIMEOUT_MS) return;
+      stallRecoveries++;
+      console.warn(`⚠️ Stall detected (${Math.round(idle / 1000)}s no progress at ${checked}/${total}). Relaunching browser...`);
+      lastProgressAt = Date.now(); // avoid rapid re-fire while restart is in progress
+      const dying = browserCtx;
+      browserCtx = null;
+      browserLaunchPromise = null;
+      try { await dying?.close(); } catch {}
+    }, Math.max(5000, Math.floor(STALL_TIMEOUT_MS / 3)));
+  };
+
+  startWatchdog();
+  try {
+    const conc = Math.max(1, Math.min(concurrency, total));
+    await Promise.all(Array.from({ length: conc }, () => runWorker()));
+  } finally {
+    if (watchdog) clearInterval(watchdog);
+    if (tickTimer) { clearTimeout(tickTimer); tickTimer = null; }
+  }
   return results;
 }
