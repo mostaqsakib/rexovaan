@@ -1862,11 +1862,6 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
     const orderNumTxt = orderId ? String(orderId).substring(0, 4).toUpperCase() : '';
     const purchaseDateTxt = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (UTC+6)';
     let txt = "";
-    if (orderNumTxt) txt += `Order: #${orderNumTxt}\n`;
-    txt += `Date: ${purchaseDateTxt}\n`;
-    txt += `Product: ${product.name}\n`;
-    txt += `Quantity: ${textItems.length}\n`;
-    txt += `${'='.repeat(40)}\n\n`;
     for (let i = 0; i < textItems.length; i++) {
       const entries = Object.entries(textItems[i]).filter(([, v]) => v && String(v).trim());
       let text = "";
@@ -1882,7 +1877,12 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
       ? `Order-${orderNumTxt}-${safeName}-${textItems.length}items.txt`
       : `${safeName}-${textItems.length}items.txt`;
     await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending delivery as file…`);
-    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${product.name} — ${textItems.length} items${orderNumTxt ? ` — Order #${orderNumTxt}` : ''}`);
+    const fileCaption =
+      `📄 <b>${product.name}</b>\n` +
+      (orderNumTxt ? `🧾 Order: <b>#${orderNumTxt}</b>\n` : '') +
+      `📅 Date: <b>${purchaseDateTxt}</b>\n` +
+      `🔢 Quantity: <b>${textItems.length}</b>`;
+    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, fileCaption);
   } else if (textItems.length > 0) {
     // Try to fit everything in one message with header
     const singleMsg = headerInfo + `\n${productHeader}\n\n` + formattedItems.join("\n") + "\n";
