@@ -1859,7 +1859,14 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
 
   if (bulkAsFile) {
     // Bulk order — deliver text items directly as a TXT file, skip in-chat listing & selection prompt
+    const orderNumTxt = orderId ? String(orderId).substring(0, 4).toUpperCase() : '';
+    const purchaseDateTxt = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (Bangladesh, UTC+6)';
     let txt = "";
+    if (orderNumTxt) txt += `Order: #${orderNumTxt}\n`;
+    txt += `Date: ${purchaseDateTxt}\n`;
+    txt += `Product: ${product.name}\n`;
+    txt += `Quantity: ${textItems.length}\n`;
+    txt += `${'='.repeat(40)}\n\n`;
     for (let i = 0; i < textItems.length; i++) {
       const entries = Object.entries(textItems[i]).filter(([, v]) => v && String(v).trim());
       let text = "";
@@ -1870,10 +1877,12 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
       }
       txt += textItems.length > 1 ? `${i + 1}. ${text}\n${isMultiCol ? '\n' : ''}` : `${text}\n${isMultiCol ? '\n' : ''}`;
     }
-    const startRow = headerInfo && typeof headerInfo === 'string' ? '' : '';
-    const filename = `${product.name}-${textItems.length}items.txt`;
+    const safeName = String(product.name).replace(/[^\w\-]+/g, '_').slice(0, 40);
+    const filename = orderNumTxt
+      ? `Order-${orderNumTxt}-${safeName}-${textItems.length}items.txt`
+      : `${safeName}-${textItems.length}items.txt`;
     await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending delivery as file…`);
-    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${product.name} — ${textItems.length} items`);
+    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${product.name} — ${textItems.length} items${orderNumTxt ? ` — Order #${orderNumTxt}` : ''}`);
   } else if (textItems.length > 0) {
     // Try to fit everything in one message with header
     const singleMsg = headerInfo + `\n${productHeader}\n\n` + formattedItems.join("\n") + "\n";
