@@ -5130,17 +5130,20 @@ async function handleDownloadOrder(chatId, orderId, isCsv) {
     return entries.map(([k, v]) => `${k}: ${v}`).join('\n');
   };
 
+  const orderNumDl = String(order.id).substring(0, 4).toUpperCase();
+  const safeProdName = String(productName).replace(/[^\w\-]+/g, '_').slice(0, 40);
+
   if (isCsv) {
     if (dlMultiCol) {
       let csv = dlKeys.join(',') + '\n';
       for (const item of details) csv += dlKeys.map(k => `"${(item[k] || '').replace(/"/g, '""')}"`).join(',') + '\n';
-      const filename = `${productName}-#${startRow}-#${endRow}.csv`;
-      await sendDocumentBuffer(chatId, Buffer.from(csv), filename, `📊 ${productName} — ${details.length} items`);
+      const filename = `Order-${orderNumDl}-${safeProdName}-#${startRow}-#${endRow}.csv`;
+      await sendDocumentBuffer(chatId, Buffer.from(csv), filename, `📊 ${productName} — ${details.length} items — Order #${orderNumDl}`);
     } else {
       let csv = "Item\n";
       for (const item of details) csv += `"${getItemText(item).replace(/"/g, '""')}"\n`;
-      const filename = `${productName}-#${startRow}-#${endRow}.csv`;
-      await sendDocumentBuffer(chatId, Buffer.from(csv), filename, `📊 ${productName} — ${details.length} items`);
+      const filename = `Order-${orderNumDl}-${safeProdName}-#${startRow}-#${endRow}.csv`;
+      await sendDocumentBuffer(chatId, Buffer.from(csv), filename, `📊 ${productName} — ${details.length} items — Order #${orderNumDl}`);
     }
   } else {
     let txt = "";
@@ -5148,8 +5151,8 @@ async function handleDownloadOrder(chatId, orderId, isCsv) {
       const text = getItemText(details[i], i);
       txt += details.length > 1 ? `${i + 1}. ${text}\n${dlMultiCol ? '\n' : ''}` : `${text}\n${dlMultiCol ? '\n' : ''}`;
     }
-    const filename = `${productName}-#${startRow}-#${endRow}.txt`;
-    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${productName} — ${details.length} items`);
+    const filename = `Order-${orderNumDl}-${safeProdName}-#${startRow}-#${endRow}.txt`;
+    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${productName} — ${details.length} items — Order #${orderNumDl}`);
   }
 }
 
