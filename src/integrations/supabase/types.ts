@@ -2457,6 +2457,13 @@ export type Database = {
         Args: { _item_id: string; _reason: string; _result: string }
         Returns: undefined
       }
+      merge_customer_accounts: {
+        Args: { _source_auth_id: string; _target_auth_id: string }
+        Returns: {
+          message: string
+          status: string
+        }[]
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
