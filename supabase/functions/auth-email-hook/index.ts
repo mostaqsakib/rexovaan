@@ -36,9 +36,9 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 
 // Configuration
 const SITE_NAME = "Rexovaan Shoppie"
-const SENDER_DOMAIN = "mail.rexovaan.com"
+const SENDER_DOMAIN = "notify.mail.rexovaan.com"
 const ROOT_DOMAIN = "rexovaan.com"
-const FROM_DOMAIN = "mail.rexovaan.com" // Must align with the verified sender domain
+const FROM_DOMAIN = "notify.mail.rexovaan.com" // Must align with the verified sender domain
 
 // Sample data for preview mode ONLY (not used in actual email sending).
 // URLs are baked in at scaffold time from the project's real data.
