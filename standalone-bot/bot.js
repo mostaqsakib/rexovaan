@@ -1860,7 +1860,7 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
   if (bulkAsFile) {
     // Bulk order — deliver text items directly as a TXT file, skip in-chat listing & selection prompt
     const orderNumTxt = orderId ? String(orderId).substring(0, 4).toUpperCase() : '';
-    const purchaseDateTxt = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (Bangladesh, UTC+6)';
+    const purchaseDateTxt = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (UTC+6)';
     let txt = "";
     if (orderNumTxt) txt += `Order: #${orderNumTxt}\n`;
     txt += `Date: ${purchaseDateTxt}\n`;
@@ -4685,7 +4685,7 @@ async function executeInternalStockDelivery(chatId, customer, product, qty, tota
   clearStockCache();
   processReferralCommission(customer.id, totalPrice, orderRow.id).catch(e => console.error("Ref commission err:", e));
   const orderNumInv = orderRow.id.substring(0, 4).toUpperCase();
-  const purchaseDateBD = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (Bangladesh, UTC+6)';
+  const purchaseDateBD = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (UTC+6)';
   const headerInfo = `✅ <b>Order Successful!</b>\n\n🧾 Order: <b>#${orderNumInv}</b>\n📅 Date: <b>${purchaseDateBD}</b>\nProduct: <b>${product.name}</b>\nQuantity: <b>${qty}</b>\nTotal: <b>${totalPrice.toFixed(2)} ${product.currency}</b>${extraAdminText}\n`;
   await deliverOrderItems(chatId, product, orderDetails, orderRow.id, headerInfo, emojiMap);
   notifyRecentSale(product.name, qty, product.custom_emoji_id).catch(() => {});
