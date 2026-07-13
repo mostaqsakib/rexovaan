@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
       }
     } catch { /* ignore */ }
 
-    const minUsd = Number(Deno.env.get("SWEEP_MIN_USD_BEP20") ?? "2");
+    const minUsd = Number(Deno.env.get("SWEEP_MIN_USD_BEP20") ?? "0.5");
 
     const xprv = Deno.env.get("BSC_SWEEP_XPRV") || Deno.env.get("BSC_XPRV");
     const destination = Deno.env.get("BSC_SWEEP_DESTINATION");
