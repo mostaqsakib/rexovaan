@@ -63,7 +63,15 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
 
   const provider = new ethers.JsonRpcProvider(rpcUrl, { chainId: chain.chainId, name: chain.name });
   const feeData = await provider.getFeeData();
-  const gasPrice = ((feeData.gasPrice ?? ethers.parseUnits("1", "gwei")) * 11n) / 10n;
+  // Per-chain minimum gas price floor. BSC accepts as low as 0.1 gwei; public RPCs
+  // often over-report the "suggested" price. Use whichever is LOWER: network suggestion
+  // or a sane cap for that chain. Small 5% bump for reliable inclusion.
+  const chainMinGwei: Record<string, string> = { bsc: "0.1", polygon: "30", arbitrum: "0.01", optimism: "0.001", base: "0.005" };
+  const capGwei = chainMinGwei[chain.id] ?? "1";
+  const cap = ethers.parseUnits(capGwei, "gwei");
+  const suggested = feeData.gasPrice ?? cap;
+  const base = suggested < cap ? suggested : cap;
+  const gasPrice = (base * 105n) / 100n;
   const tokenGasCost = TOKEN_TRANSFER_GAS * gasPrice;
   const bnbGasCost = BNB_TRANSFER_GAS * gasPrice;
   const gasTopUp = chain.gasTopUpWei > (tokenGasCost * 12n) / 10n ? chain.gasTopUpWei : (tokenGasCost * 12n) / 10n;
