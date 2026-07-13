@@ -165,7 +165,9 @@ export function getRpcUrl(cfg: ChainCfg): string | null {
 
 // Chains hard-disabled (too expensive / unused). Removing the RPC secret would also work,
 // but this makes the intent explicit and survives accidental secret re-adds.
-const DISABLED_CHAINS: ChainId[] = ["ethereum", "avalanche"];
+// Customers only use BSC + Polygon for USDT (TON & LTC handled by separate watchers).
+// Arbitrum/Optimism/Base/Ethereum/Avalanche disabled to save gas tank funds + RPC calls.
+const DISABLED_CHAINS: ChainId[] = ["arbitrum", "optimism", "base", "ethereum", "avalanche"];
 
 export function enabledChains(): ChainCfg[] {
   return Object.values(CHAINS).filter((c) => !DISABLED_CHAINS.includes(c.id) && !!getRpcUrl(c));
