@@ -199,12 +199,14 @@ Deno.serve(async (req) => {
   const hasPendingProduct = deposit.pending_product_id && deposit.pending_quantity;
 
   if (hasPendingProduct) {
+    // Mark payment received (still "pending" so admin-verify can flip to verified & deliver)
     const { data: updatedDeposit } = await supabase
       .from("bot_deposits")
       .update({
         status: "pending",
         txn_hash: trxID,
         amount: usdtAmount,
+        payment_method: "bKash",
       })
       .eq("id", deposit.id)
       .neq("status", "verified")
@@ -215,11 +217,44 @@ Deno.serve(async (req) => {
       return htmlResp("success", "Payment already processed.");
     }
 
+    // Auto-fulfill via admin-verify-deposit (uses service_role bypass in require-admin)
+    let fulfillErr: string | null = null;
+    try {
+      const fnRes = await fetch(`${supabaseUrl}/functions/v1/admin-verify-deposit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supabaseKey}`,
+          apikey: supabaseKey,
+        },
+        body: JSON.stringify({ deposit_id: deposit.id, amount: usdtAmount }),
+      });
+      const fnData = await fnRes.json().catch(() => ({}));
+      if (!fnRes.ok) {
+        fulfillErr = fnData?.error || `HTTP ${fnRes.status}`;
+        console.error("[bKash] auto-fulfill failed", fulfillErr, fnData);
+      }
+    } catch (e) {
+      fulfillErr = String((e as Error).message || e);
+      console.error("[bKash] auto-fulfill threw", fulfillErr);
+    }
+
     const chatId = customer?.chat_id;
     if (chatId) {
       await sendTelegram("sendMessage", {
         chat_id: chatId,
-        text: `✅ <b>bKash Payment Received!</b>\n\n💰 Paid: <b>৳${bdtAmount.toFixed(2)} BDT</b>\n🧾 TrxID: <code>${trxID}</code>\n\n⏳ Processing your order...`,
+        text: fulfillErr
+          ? `✅ <b>bKash Payment Received!</b>\n\n💰 Paid: <b>৳${bdtAmount.toFixed(2)} BDT</b>\n🧾 TrxID: <code>${trxID}</code>\n\n⏳ Order is being processed by admin.`
+          : `✅ <b>bKash Payment Received!</b>\n\n💰 Paid: <b>৳${bdtAmount.toFixed(2)} BDT</b>\n🧾 TrxID: <code>${trxID}</code>\n\n📦 Your order has been delivered — check your messages.`,
+        parse_mode: "HTML",
+      });
+    }
+
+    const adminChatId = Deno.env.get("ADMIN_CHAT_ID");
+    if (adminChatId && fulfillErr) {
+      await sendTelegram("sendMessage", {
+        chat_id: adminChatId,
+        text: `⚠️ <b>bKash order auto-fulfill failed</b>\n\nDeposit: <code>${deposit.id}</code>\nTrxID: <code>${trxID}</code>\nAmount: $${usdtAmount.toFixed(2)}\nError: ${fulfillErr}\n\nPlease verify manually.`,
         parse_mode: "HTML",
       });
     }

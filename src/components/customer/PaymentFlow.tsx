@@ -286,8 +286,13 @@ export default function PaymentFlow({ prefillAmount, onVerified, compact, contex
     if (!bdt || bdt < 10) { toast.error('Enter at least 10 BDT'); return; }
     setSubmitting(true);
     try {
+      const bkashBody: any = { amount_bdt: bdt };
+      if (pendingProductId) {
+        bkashBody.pending_product_id = pendingProductId;
+        bkashBody.pending_quantity = Math.max(1, Number(pendingQuantity || 1));
+      }
       const { data, error } = await supabase.functions.invoke('bkash-create-payment', {
-        body: { amount_bdt: bdt },
+        body: bkashBody,
       });
       if (error) {
         let msg = error.message || 'Failed to start bKash payment';
