@@ -1855,7 +1855,26 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
   // Build all formatted items first (text items only)
   const formattedItems = textItems.map((item, i) => formatItem(item, i));
 
-  if (textItems.length > 0) {
+  const bulkAsFile = textItems.length > 0 && qty > BULK_DOWNLOAD_THRESHOLD;
+
+  if (bulkAsFile) {
+    // Bulk order — deliver text items directly as a TXT file, skip in-chat listing & selection prompt
+    let txt = "";
+    for (let i = 0; i < textItems.length; i++) {
+      const entries = Object.entries(textItems[i]).filter(([, v]) => v && String(v).trim());
+      let text = "";
+      if (!isMultiCol || entries.length <= 1) {
+        text = entries.find(([, v]) => String(v).startsWith('http'))?.[1] || entries[0]?.[1] || '';
+      } else {
+        text = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
+      }
+      txt += textItems.length > 1 ? `${i + 1}. ${text}\n${isMultiCol ? '\n' : ''}` : `${text}\n${isMultiCol ? '\n' : ''}`;
+    }
+    const startRow = headerInfo && typeof headerInfo === 'string' ? '' : '';
+    const filename = `${product.name}-${textItems.length}items.txt`;
+    await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending delivery as file…`);
+    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, `📄 ${product.name} — ${textItems.length} items`);
+  } else if (textItems.length > 0) {
     // Try to fit everything in one message with header
     const singleMsg = headerInfo + `\n${productHeader}\n\n` + formattedItems.join("\n") + "\n";
     if (singleMsg.length <= MAX_MSG_LENGTH) {
@@ -1885,42 +1904,8 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
     // File-only delivery: send a single header so user knows what's coming
     await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending ${fileItems.length} file(s)…`);
   }
-
-  // Deliver file items as Telegram documents — download via service role,
-  // then upload to Telegram as multipart so Telegram never needs to fetch
-  // the private signed URL itself (this was failing silently before).
-  for (let i = 0; i < fileItems.length; i++) {
-    const it = fileItems[i];
-    const fname = it._file_name || `file_${i + 1}`;
-    try {
-      const { data: blob, error: dlErr } = await supabase.storage
-        .from("product-files")
-        .download(it._file_path);
-      if (dlErr || !blob) {
-        console.error("storage download failed:", dlErr?.message, "path:", it._file_path);
-        await trackSend(chatId, `⚠️ Could not prepare file: <code>${fname}</code>. Please contact support.`);
-        continue;
-      }
-      const ab = await blob.arrayBuffer();
-      const buf = Buffer.from(ab);
-      const cap = fileItems.length > 1 ? `${i + 1} / ${fileItems.length}` : undefined;
-      await sendDocumentBuffer(chatId, buf, fname, cap);
-    } catch (e) {
-      console.error("file delivery failed:", e?.message, "path:", it._file_path);
-      await trackSend(chatId, `⚠️ Failed to send: <code>${fname}</code>`);
-    }
-  }
-
-
-  if (qty > BULK_DOWNLOAD_THRESHOLD) {
-    await trackSend(chatId, `📁 Bulk order — download as file?`, {
-      inline_keyboard: [
-        [applyEmoji({ text: "📄 TXT", callback_data: `dl_txt_${orderId}` }, "download_txt", emojiMap),
-         applyEmoji({ text: "📊 CSV", callback_data: `dl_csv_${orderId}` }, "download_csv", emojiMap)],
-        [applyEmoji({ text: "❌ No thanks", callback_data: "cancel" }, "no_thanks", emojiMap)],
-      ],
-    });
-  }
+...
+  // Bulk selection prompt removed — bulk text orders auto-delivered as TXT above
 
   if (product.delivery_instruction) {
     await trackSend(chatId, `📋 <b>Important Instructions:</b>\n\n${product.delivery_instruction}`);
