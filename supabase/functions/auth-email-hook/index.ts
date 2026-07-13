@@ -36,7 +36,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 
 // Configuration
 const SITE_NAME = "Rexovaan Shoppie"
-const SENDER_DOMAIN = "notify.mail.rexovaan.com"
+const SENDER_DOMAIN = "mail.rexovaan.com"
 const ROOT_DOMAIN = "rexovaan.com"
 const FROM_DOMAIN = "notify.mail.rexovaan.com" // Must align with the verified sender domain
 
