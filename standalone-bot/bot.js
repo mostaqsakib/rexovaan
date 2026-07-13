@@ -1860,7 +1860,7 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
   if (bulkAsFile) {
     // Bulk order — deliver text items directly as a TXT file, skip in-chat listing & selection prompt
     const orderNumTxt = orderId ? String(orderId).substring(0, 4).toUpperCase() : '';
-    const purchaseDateTxt = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (Bangladesh, UTC+6)';
+    const purchaseDateTxt = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (UTC+6)';
     let txt = "";
     if (orderNumTxt) txt += `Order: #${orderNumTxt}\n`;
     txt += `Date: ${purchaseDateTxt}\n`;
