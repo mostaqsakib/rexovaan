@@ -5,6 +5,7 @@ import { requireAdmin } from "../_shared/require-admin.ts";
 import { applyDepositCredit } from "../_shared/apply-deposit-credit.ts";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
+const BULK_TXT_THRESHOLD = 20;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,19 +56,29 @@ async function sheetsRequest(token: string, spreadsheetId: string, path: string,
 }
 
 async function tgFetch(method: string, body: Record<string, unknown>): Promise<{ ok: boolean; status: number; data: any }> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-  const TELEGRAM_API_KEY = (Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY"))!;
+  const BOT_TOKEN = Deno.env.get("BOT_TOKEN") || Deno.env.get("TELEGRAM_BOT_TOKEN");
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY");
   // Retry transient failures up to 3 times.
   let lastErr: any = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const res = await fetch(`${GATEWAY_URL}/${method}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": TELEGRAM_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const res = BOT_TOKEN
+        ? await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        : LOVABLE_API_KEY && TELEGRAM_API_KEY
+          ? await fetch(`${GATEWAY_URL}/${method}`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": TELEGRAM_API_KEY, "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            })
+          : null;
+      if (!res) return { ok: false, status: 0, data: { error: "Missing Telegram credentials" } };
       const data = await res.json().catch(() => ({}));
-      if (res.ok) return { ok: true, status: res.status, data };
+      if (res.ok && data?.ok !== false) return { ok: true, status: res.status, data };
       lastErr = { status: res.status, data };
       // Don't retry client errors (bad chat id, blocked bot, etc.)
       if (res.status >= 400 && res.status < 500) break;
@@ -98,6 +109,80 @@ async function sendTelegramVideo(chatId: number, videoUrl: string, caption?: str
   if (caption) body.caption = caption;
   if (replyMarkup) body.reply_markup = replyMarkup;
   return await tgFetch("sendVideo", body);
+}
+
+async function notifyAdmin(text: string, replyMarkup?: unknown) {
+  const adminChatId = Number(Deno.env.get("ADMIN_CHAT_ID"));
+  if (!adminChatId) return;
+  await sendTelegramMessage(adminChatId, text, replyMarkup);
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function safeFilename(value: string) {
+  return String(value || "order").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 60) || "order";
+}
+
+function itemText(item: Record<string, unknown>, multiColumn: boolean) {
+  const entries = Object.entries(item || {}).filter(([, v]) => v != null && String(v).trim());
+  if (!multiColumn || entries.length <= 1) {
+    return String(entries.find(([, v]) => String(v).startsWith("http"))?.[1] ?? entries[0]?.[1] ?? "");
+  }
+  return entries.map(([key, value]) => `${key}: ${value}`).join("\n");
+}
+
+async function sendTelegramDocument(chatId: number, content: string, filename: string, caption: string, replyMarkup?: unknown) {
+  const BOT_TOKEN = Deno.env.get("BOT_TOKEN") || Deno.env.get("TELEGRAM_BOT_TOKEN");
+  if (!BOT_TOKEN) {
+    console.error("[admin-verify-deposit] Telegram sendDocument skipped: missing BOT_TOKEN");
+    return { ok: false, status: 0, data: { error: "Missing BOT_TOKEN" } };
+  }
+
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("document", new Blob([content], { type: "text/plain; charset=utf-8" }), filename);
+  form.append("caption", caption);
+  form.append("parse_mode", "HTML");
+  if (replyMarkup) form.append("reply_markup", JSON.stringify(replyMarkup));
+
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.ok === false) {
+    console.error("[admin-verify-deposit] Telegram sendDocument failed:", JSON.stringify({ status: res.status, data }));
+    return { ok: false, status: res.status, data };
+  }
+  return { ok: true, status: res.status, data };
+}
+
+async function purchaseFromSource(supabaseUrl: string, serviceKey: string, product: any, quantity: number): Promise<Record<string, string>[]> {
+  if (!product?.source_id || !product?.source_product_id) return [];
+  const res = await fetch(`${supabaseUrl}/functions/v1/product-sources`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+    },
+    body: JSON.stringify({
+      action: "purchase",
+      source_id: product.source_id,
+      source_product_id: product.source_product_id,
+      quantity,
+    }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload?.ok) throw new Error(payload?.error || `Source purchase failed (${res.status})`);
+  const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+  if (accounts.length < quantity) throw new Error("Source returned insufficient accounts");
+  return accounts.map((account: unknown) => ({ "Delivery Info": String(account) }));
 }
 
 const mainMenuKeyboard = () => ({
@@ -168,6 +253,8 @@ Deno.serve(async (req) => {
         const plLine = applied.paidPayLater > 0
           ? `\n🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>`
           : "";
+        await supabase.from("bot_customers").update({ pending_action: null, updated_at: new Date().toISOString() }).eq("id", customer.id);
+        await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
         await sendTelegramMessage(customer.chat_id,
           `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\nNew Balance: <b>${applied.newBalance.toFixed(2)} USDT</b>`,
           mainMenuKeyboard()
@@ -228,7 +315,7 @@ Deno.serve(async (req) => {
       // Sufficient funds — new balance = (current balance + deposit) - product cost
       const newBalance = currentBalance + amount - totalPrice;
       const amountFromBalance = Math.max(0, totalPrice - amount);
-      await supabase.from("bot_customers").update({ balance: newBalance, updated_at: new Date().toISOString() }).eq("id", customer.id);
+      await supabase.from("bot_customers").update({ balance: newBalance, pending_action: null, updated_at: new Date().toISOString() }).eq("id", customer.id);
 
       // Notify customer
       let paymentMsg = `✅ <b>Payment Verified!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>`;
@@ -272,11 +359,10 @@ Deno.serve(async (req) => {
           );
         }
 
+        await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
+
         return new Response(JSON.stringify({ success: true, action: "manual_delivery_pending", product: product.name, qty }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-
-      paymentMsg += `\n\n⏳ Delivering your order...`;
-      await sendTelegramMessage(customer.chat_id, paymentMsg);
 
       if (!product.is_manual_delivery) {
         const { data: orderRow } = await supabase.from("bot_orders").insert({
@@ -292,39 +378,84 @@ Deno.serve(async (req) => {
 
         if (!orderRow?.id) throw new Error("Order create failed");
 
-        const { data: reserved, error: reserveError } = await supabase.rpc("reserve_internal_stock_items", {
-          _product_id: product.id,
-          _quantity: qty,
-          _order_id: orderRow?.id,
-        });
-
-        if (reserveError || !reserved || reserved.length < qty) {
-          if (orderRow?.id) await supabase.from("bot_orders").update({ status: "stock_failed" }).eq("id", orderRow.id);
-          await sendTelegramMessage(customer.chat_id, "❌ Stock finished. Contact admin for refund.", mainMenuKeyboard());
-          return new Response(JSON.stringify({ error: "Insufficient internal stock" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-
-        const orderDetails = reserved.map((item: { data: Record<string, string> }) => item.data || {});
-        await supabase.from("bot_orders").update({ details: orderDetails }).eq("id", orderRow.id);
-        await sendTelegramMessage(customer.chat_id,
-          `✅ <b>Order Delivered!</b>\n\nProduct: <b>${product.name}</b>\nQuantity: <b>${qty}</b>\nTotal Paid: <b>${totalPrice.toFixed(2)} ${product.currency}</b>`
-        );
-
-        const CHUNK_SIZE = 30;
-        for (let i = 0; i < orderDetails.length; i += CHUNK_SIZE) {
-          const chunk = orderDetails.slice(i, i + CHUNK_SIZE);
-          let msg = `📦 <b>Items${orderDetails.length > CHUNK_SIZE ? ` (${i + 1}-${i + chunk.length} of ${qty})` : ''}:</b>\n\n`;
-          for (let j = 0; j < chunk.length; j++) {
-            const item = chunk[j];
-            const numPrefix = orderDetails.length > 1 ? `${i + j + 1}. ` : '';
-            msg += `<code>${numPrefix}${Object.values(item).join(" | ")}</code>\n`;
+        let orderDetails: Record<string, unknown>[] = [];
+        if (product.source_id && product.source_product_id) {
+          try {
+            orderDetails = await purchaseFromSource(supabaseUrl, supabaseKey, product, qty);
+          } catch (sourceErr) {
+            await supabase.from("bot_orders").update({ status: "pending_delivery" }).eq("id", orderRow.id);
+            await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
+            await sendTelegramMessage(customer.chat_id,
+              `⏳ <b>Order Placed — Pending Manual Delivery</b>\n\nProduct: <b>${escapeHtml(product.name)}</b>\nQuantity: <b>${qty}</b>\nTotal: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n\nAuto-delivery temporarily unavailable. Admin will deliver manually.`,
+              mainMenuKeyboard()
+            );
+            await notifyAdmin(
+              `🔔 <b>Source Failed → Manual Delivery Needed</b>\n\n👤 ${escapeHtml(customer.username ? `@${customer.username}` : customer.first_name || `#${customer.chat_id}`)}\n📦 Product: <b>${escapeHtml(product.name)}</b> x${qty}\n💰 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>bKash</b>\n\n⚠️ Source error: <code>${escapeHtml(sourceErr instanceof Error ? sourceErr.message : String(sourceErr))}</code>`,
+              { inline_keyboard: [[{ text: "📦 Deliver", callback_data: `mdlvr_${String(orderRow.id).slice(0, 8)}` }], [{ text: "❌ Cancel & Refund", callback_data: `mdcancel_${String(orderRow.id).slice(0, 8)}` }]] }
+            );
+            return new Response(JSON.stringify({ success: true, action: "pending_delivery", product: product.name, qty, orderId: orderRow.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
-          await sendTelegramMessage(customer.chat_id, msg);
+        } else {
+          const { data: reserved, error: reserveError } = await supabase.rpc("reserve_internal_stock_items", {
+            _product_id: product.id,
+            _quantity: qty,
+            _order_id: orderRow?.id,
+          });
+
+          if (reserveError || !reserved || reserved.length < qty) {
+            await supabase.from("bot_orders").update({ status: "pending_delivery" }).eq("id", orderRow.id);
+            await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
+            await sendTelegramMessage(customer.chat_id,
+              `⏳ <b>Order Placed — Pending Manual Delivery</b>\n\nProduct: <b>${escapeHtml(product.name)}</b>\nQuantity: <b>${qty}</b>\nTotal: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n\nStock temporarily unavailable. Admin will deliver manually.`,
+              mainMenuKeyboard()
+            );
+            await notifyAdmin(
+              `🔔 <b>Stock Empty → Manual Delivery Needed</b>\n\n👤 ${escapeHtml(customer.username ? `@${customer.username}` : customer.first_name || `#${customer.chat_id}`)}\n📦 Product: <b>${escapeHtml(product.name)}</b> x${qty}\n💰 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>bKash</b>`,
+              { inline_keyboard: [[{ text: "📦 Deliver", callback_data: `mdlvr_${String(orderRow.id).slice(0, 8)}` }], [{ text: "❌ Cancel & Refund", callback_data: `mdcancel_${String(orderRow.id).slice(0, 8)}` }]] }
+            );
+            return new Response(JSON.stringify({ success: true, action: "pending_delivery", product: product.name, qty, orderId: orderRow.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+
+          orderDetails = reserved.map((item: { data: Record<string, unknown> }) => item.data || {});
+        }
+        await supabase.from("bot_orders").update({ details: orderDetails, delivered_at: new Date().toISOString() }).eq("id", orderRow.id);
+
+        const detailKeys = Object.keys(orderDetails[0] || {});
+        const multiColumn = detailKeys.length > 1;
+        const header = `✅ <b>Order Delivered!</b>\n\nProduct: <b>${escapeHtml(product.name)}</b>\nQuantity: <b>${qty}</b>\nTotal Paid: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>`;
+
+        if (orderDetails.length > BULK_TXT_THRESHOLD) {
+          let txt = "";
+          for (let i = 0; i < orderDetails.length; i++) {
+            const text = itemText(orderDetails[i], multiColumn);
+            txt += orderDetails.length > 1 ? `${i + 1}. ${text}\n${multiColumn ? "\n" : ""}` : `${text}\n${multiColumn ? "\n" : ""}`;
+          }
+          const orderNum = String(orderRow.id).slice(0, 4).toUpperCase();
+          const filename = `Order-${orderNum}-${safeFilename(product.name)}-${orderDetails.length}items.txt`;
+          await sendTelegramDocument(customer.chat_id, txt, filename, header, mainMenuKeyboard());
+        } else {
+          paymentMsg += `\n\n⏳ Delivering your order...`;
+          await sendTelegramMessage(customer.chat_id, paymentMsg);
+          await sendTelegramMessage(customer.chat_id, header);
+
+          const CHUNK_SIZE = 30;
+          for (let i = 0; i < orderDetails.length; i += CHUNK_SIZE) {
+            const chunk = orderDetails.slice(i, i + CHUNK_SIZE);
+            let msg = `📦 <b>Items${orderDetails.length > CHUNK_SIZE ? ` (${i + 1}-${i + chunk.length} of ${qty})` : ''}:</b>\n\n`;
+            for (let j = 0; j < chunk.length; j++) {
+              const item = chunk[j];
+              const numPrefix = orderDetails.length > 1 ? `${i + j + 1}. ` : '';
+              msg += `<code>${escapeHtml(`${numPrefix}${Object.values(item).join(" | ")}`)}</code>\n`;
+            }
+            await sendTelegramMessage(customer.chat_id, msg);
+          }
         }
 
         if (product.delivery_instruction) {
           await sendTelegramMessage(customer.chat_id, `📋 <b>Important Instructions:</b>\n\n${product.delivery_instruction}`, mainMenuKeyboard());
         }
+
+        await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
 
         return new Response(JSON.stringify({ success: true, action: "delivered", product: product.name, qty }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }

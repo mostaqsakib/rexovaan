@@ -315,18 +315,24 @@ Deno.serve(async (req) => {
 
 async function sendTelegram(method: string, body: Record<string, unknown>) {
   const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
+  const BOT_TOKEN = Deno.env.get("BOT_TOKEN") || Deno.env.get("TELEGRAM_BOT_TOKEN");
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   const TELEGRAM_API_KEY = (Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY"));
-  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) return;
+  if (!BOT_TOKEN && (!LOVABLE_API_KEY || !TELEGRAM_API_KEY)) return;
 
-  await fetch(`${GATEWAY_URL}/${method}`, {
+  const res = await fetch(BOT_TOKEN ? `https://api.telegram.org/bot${BOT_TOKEN}/${method}` : `${GATEWAY_URL}/${method}`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "X-Connection-Api-Key": TELEGRAM_API_KEY,
-      "Content-Type": "application/json",
-    },
+    headers: BOT_TOKEN
+      ? { "Content-Type": "application/json" }
+      : {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "X-Connection-Api-Key": TELEGRAM_API_KEY!,
+          "Content-Type": "application/json",
+        },
     body: JSON.stringify(body),
   });
+  if (!res.ok) {
+    console.error(`[bKash] Telegram ${method} failed`, res.status, await res.text().catch(() => ""));
+  }
 }
 

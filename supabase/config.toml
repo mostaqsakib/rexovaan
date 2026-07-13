@@ -12,6 +12,9 @@ verify_jwt = false
 [functions.bot-reseller-api-manage]
 verify_jwt = false
 
+[functions.bkash-callback]
+verify_jwt = false
+
 [functions.stock-broadcast]
 verify_jwt = false
 
