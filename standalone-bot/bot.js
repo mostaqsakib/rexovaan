@@ -1913,7 +1913,6 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
     // File-only delivery: send a single header so user knows what's coming
     await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending ${fileItems.length} file(s)…`);
   }
-...
   // Bulk selection prompt removed — bulk text orders auto-delivered as TXT above
 
   if (product.delivery_instruction) {
