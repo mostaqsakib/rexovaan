@@ -58,8 +58,8 @@ export const CHAINS: Record<ChainId, ChainCfg> = {
     defaultRpc: "https://polygon-rpc.com",
     confirmations: 20,
     chunkSize: 500,
-    minGasNativeWei: 200_000_000_000_000_000n, // 0.2 MATIC — alert threshold
-    gasTopUpWei:      30_000_000_000_000_000n, // 0.03 MATIC (~$0.02) — enough for a sweep with buffer
+    minGasNativeWei:  50_000_000_000_000_000n, // 0.05 MATIC — alert threshold
+    gasTopUpWei:       3_000_000_000_000_000n, // 0.003 MATIC (~$0.002) — 2× actual sweep cost
     explorerTx: (h) => `https://polygonscan.com/tx/${h}`,
     tokens: [
       { symbol: "USDT", address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 },
