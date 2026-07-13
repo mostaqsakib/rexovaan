@@ -1,0 +1,6 @@
+DROP TRIGGER IF EXISTS prevent_bot_customers_sensitive_self_update ON public.bot_customers;
+
+CREATE TRIGGER prevent_bot_customers_sensitive_self_update
+BEFORE UPDATE ON public.bot_customers
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_bot_customers_sensitive_self_update();
