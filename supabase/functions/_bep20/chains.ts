@@ -41,8 +41,8 @@ export const CHAINS: Record<ChainId, ChainCfg> = {
     defaultRpc: "https://bsc-dataseed.binance.org",
     confirmations: 3,
     chunkSize: 4000,
-    minGasNativeWei: 2_000_000_000_000_000n,   // 0.002 BNB (~$1.40) — alert threshold
-    gasTopUpWei:       200_000_000_000_000n,   // 0.0002 BNB (~$0.14) — enough for 2 sweeps, 10× less waste
+    minGasNativeWei: 1_000_000_000_000_000n,   // 0.001 BNB (~$0.70) — alert threshold
+    gasTopUpWei:        20_000_000_000_000n,   // 0.00002 BNB — ~2× actual sweep cost @ 0.1 gwei (90k gas = 9e-6 BNB)
     explorerTx: (h) => `https://bscscan.com/tx/${h}`,
     tokens: [
       { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
