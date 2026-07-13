@@ -14,7 +14,10 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function transfer(address,uint256) returns (bool)",
 ];
-const TOKEN_TRANSFER_GAS = 90_000n;
+// USDT-BEP20 transfer actual gas usage ≈ 52k, USDC ≈ 55k. 65k gives 15-20% safety margin.
+// Unused gas is refunded by the network, but this is the ceiling used to fund the derived
+// address — a lower ceiling = less BNB stranded per throwaway address.
+const TOKEN_TRANSFER_GAS = 65_000n;
 const BNB_TRANSFER_GAS = 21_000n;
 
 async function sendTelegram(method: string, body: Record<string, unknown>) {
