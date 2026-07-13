@@ -51,6 +51,10 @@ Deno.serve(async (req) => {
     const amountBDT = Number(body?.amount_bdt);
     if (!amountBDT || amountBDT <= 0) return json({ error: "Enter a valid BDT amount" }, 400);
     if (amountBDT < 10) return json({ error: "Minimum amount is 10 BDT" }, 400);
+    const pendingProductId: string | null = body?.pending_product_id || null;
+    const pendingQuantity: number | null = pendingProductId
+      ? Math.max(1, Math.floor(Number(body?.pending_quantity || 1)))
+      : null;
 
     const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: customer } = await admin
@@ -111,6 +115,9 @@ Deno.serve(async (req) => {
       status: "bkash_pending",
       txn_hash: `bkash_${paymentID}`,
       source: "web",
+      payment_method: "bKash",
+      pending_product_id: pendingProductId,
+      pending_quantity: pendingQuantity,
     });
     if (depErr) {
       console.error("[bKash] deposit insert failed", depErr);
