@@ -163,7 +163,7 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
             sweep_last_try_at: new Date().toISOString(),
             sweep_last_error: null,
           }).eq("id", row.id);
-          const replacementReceipt = await provider.waitForTransaction(tx.hash, 1, 45_000).catch(() => null);
+          const replacementReceipt = await provider.waitForTransaction(tx.hash, 1, 12_000).catch(() => null);
           if (!replacementReceipt || replacementReceipt.status !== 1) {
             entry.action = "gas_replaced"; entry.gasTx = tx.hash;
             results.push(entry); continue;
@@ -191,7 +191,7 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
           sweep_last_error: null,
         }).eq("id", row.id);
 
-        const receipt = await provider.waitForTransaction(tx.hash, 1, 45_000).catch(() => null);
+        const receipt = await provider.waitForTransaction(tx.hash, 1, 12_000).catch(() => null);
         if (!receipt || receipt.status !== 1) {
           entry.action = "gas_funded"; entry.gasTx = tx.hash;
           results.push(entry); continue;
