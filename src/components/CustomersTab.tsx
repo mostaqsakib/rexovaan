@@ -221,15 +221,15 @@ const CustomersTab = () => {
     if (!creditCustomer) return;
     setSavingCredit(true);
     try {
-      const { error } = await supabase
-        .from('bot_customers')
-        .update({
-          pay_later_enabled: creditEnabled,
-          pay_later_limit: Number(creditLimit) || 0,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', creditCustomer.id);
+      const { data, error } = await supabase.functions.invoke('admin-set-pay-later', {
+        body: {
+          customer_id: creditCustomer.id,
+          enabled: creditEnabled,
+          limit: Number(creditLimit) || 0,
+        },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       toast.success(`Pay Later ${creditEnabled ? 'enabled' : 'disabled'} for ${getLabel(creditCustomer)}`);
       setCreditCustomer(null);
       fetchCustomers(true);
