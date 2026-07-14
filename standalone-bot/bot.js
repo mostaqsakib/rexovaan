@@ -8999,10 +8999,24 @@ async function pollUpdates() {
       const updates = data.result || [];
       if (updates.length === 0) continue;
 
+      // Advance offset IMMEDIATELY (before handlers finish) so the next
+      // getUpdates() call isn't blocked by a slow handler in this batch.
+      // Tradeoff: on a hard process crash mid-batch an update could in theory
+      // not be reprocessed. Acceptable because uncaughtException/unhandledRejection
+      // handlers log-and-continue rather than crash, and each handler already
+      // has its own try/catch.
+      offset = Math.max(...updates.map((u) => u.update_id)) + 1;
+      supabase.from("telegram_bot_state")
+        .update({ update_offset: offset, updated_at: new Date().toISOString() })
+        .eq("id", 1)
+        .then(() => {}, (e) => console.error("Failed to persist offset:", e?.message || e));
+
       const emojiMap = await loadButtonEmojis();
 
-      // Process updates concurrently for speed
-      await Promise.allSettled(updates.map(async (update) => {
+      // Process updates concurrently for speed — fire-and-forget so the poll
+      // loop immediately iterates and calls getUpdates() again without waiting
+      // for this batch's handlers to complete.
+      Promise.allSettled(updates.map(async (update) => {
         try {
           if (update.my_chat_member) await handleMyChatMember(update.my_chat_member);
           else if (update.callback_query) {
@@ -9038,12 +9052,8 @@ async function pollUpdates() {
         } catch (err) {
           console.error("Error processing update", update.update_id, err);
         }
-      }));
+      })).catch(() => {});
 
-      offset = Math.max(...updates.map((u) => u.update_id)) + 1;
-
-      // Save offset
-      await supabase.from("telegram_bot_state").update({ update_offset: offset, updated_at: new Date().toISOString() }).eq("id", 1);
     } catch (err) {
       console.error("Polling error:", err);
       await new Promise((r) => setTimeout(r, 5000));
