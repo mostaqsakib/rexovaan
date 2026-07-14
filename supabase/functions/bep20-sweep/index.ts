@@ -20,6 +20,14 @@ const ERC20_ABI = [
 const TOKEN_TRANSFER_GAS = 65_000n;
 const BNB_TRANSFER_GAS = 21_000n;
 
+async function getMasterNonces(provider: any, address: string) {
+  const [latest, pending] = await Promise.all([
+    provider.getTransactionCount(address, "latest"),
+    provider.getTransactionCount(address, "pending"),
+  ]);
+  return { latest, pending };
+}
+
 async function sendTelegram(method: string, body: Record<string, unknown>) {
   const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
   if (!BOT_TOKEN) return;
@@ -84,7 +92,8 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
   const master = deriveAddressWithXprv(xprv, 0);
   const masterWallet = new ethers.Wallet(master.privateKey, provider);
   const gasStatus = await checkGasTank(chain, master.address, provider, supabase);
-  let masterNonce = await provider.getTransactionCount(master.address, "pending");
+  let masterNonces = await getMasterNonces(provider, master.address);
+  let masterNonce = masterNonces.pending;
   let masterBnb: bigint = await provider.getBalance(master.address);
 
 
@@ -130,10 +139,15 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
         if (!receipt) {
           const pendingTx = await provider.getTransaction(row.gas_tx_hash).catch(() => null);
           const pendingGas = pendingTx?.gasPrice ?? 0n;
+          masterNonces = await getMasterNonces(provider, master.address);
+          const nonceGap = pendingTx && pendingTx.from?.toLowerCase() === master.address.toLowerCase()
+            ? pendingTx.nonce - masterNonces.latest
+            : 0;
           const lastTryAt = row.sweep_last_try_at ? new Date(row.sweep_last_try_at).getTime() : 0;
           const oldEnough = !lastTryAt || Date.now() - lastTryAt > 10 * 60_000;
           const underpriced = pendingGas > 0n && pendingGas < gasPrice;
-          const shouldReplace = !!pendingTx && (oldEnough || underpriced);
+          const blockedByNonceGap = nonceGap > 0;
+          const shouldReplace = !!pendingTx && (oldEnough || underpriced || blockedByNonceGap);
           if (!shouldReplace) {
             entry.action = "awaiting_gas";
             entry.gasTx = row.gas_tx_hash;
@@ -153,8 +167,12 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
             entry.action = "master_underfunded"; entry.masterBnb = ethers.formatEther(masterBnb);
             results.push(entry); continue;
           }
+          // If the stored gas tx has a future nonce, it cannot mine until every
+          // missing earlier nonce confirms. Send a fresh top-up at the latest
+          // executable nonce to recover instead of waiting on the gap.
+          const replacementNonce = blockedByNonceGap ? masterNonces.latest : pendingTx.nonce;
           const tx = await masterWallet.sendTransaction({
-            to: derived.address, value: replacementTopUp, gasLimit: BNB_TRANSFER_GAS, gasPrice: replacementGas, nonce: pendingTx.nonce,
+            to: derived.address, value: replacementTopUp, gasLimit: BNB_TRANSFER_GAS, gasPrice: replacementGas, nonce: replacementNonce,
           });
           masterBnb -= replacementCost;
           await supabase.from("bep20_reserved_addresses").update({
@@ -165,7 +183,13 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
           }).eq("id", row.id);
           const replacementReceipt = await provider.waitForTransaction(tx.hash, 1, 12_000).catch(() => null);
           if (!replacementReceipt || replacementReceipt.status !== 1) {
-            entry.action = "gas_replaced"; entry.gasTx = tx.hash;
+            entry.action = blockedByNonceGap ? "gas_recovered_nonce_gap" : "gas_replaced";
+            entry.gasTx = tx.hash;
+            if (blockedByNonceGap) {
+              entry.previousGasTx = row.gas_tx_hash;
+              entry.previousNonce = pendingTx.nonce;
+              entry.recoveryNonce = replacementNonce;
+            }
             results.push(entry); continue;
           }
           derivedNative = await provider.getBalance(derived.address);
@@ -180,6 +204,8 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
           entry.action = "master_underfunded"; entry.masterBnb = ethers.formatEther(masterBnb);
           results.push(entry); continue;
         }
+        masterNonces = await getMasterNonces(provider, master.address);
+        masterNonce = masterNonces.pending;
         const tx = await masterWallet.sendTransaction({
           to: derived.address, value: gasTopUp, gasLimit: BNB_TRANSFER_GAS, gasPrice, nonce: masterNonce++,
         });
