@@ -2898,51 +2898,57 @@ async function verifyBep20Transfer(txnHash) {
     "https://bsc-rpc.publicnode.com",
   ];
 
-  for (const rpcUrl of rpcUrls) {
-    try {
-      const res = await fetchWithTimeout(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          method: "eth_getTransactionReceipt",
-          params: [normalizedHash],
-          id: 1,
-        }),
-      });
+  // Fetch both RPC endpoints CONCURRENTLY with a shorter 6s timeout so a
+  // single slow/unresponsive endpoint can't stall verification for ~30s.
+  const settled = await Promise.allSettled(rpcUrls.map((rpcUrl) =>
+    fetchWithTimeout(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getTransactionReceipt",
+        params: [normalizedHash],
+        id: 1,
+      }),
+    }, 6000).then(async (res) => ({ rpcUrl, res, data: res.ok ? await res.json() : null }))
+  ));
 
-      if (!res.ok) {
-        console.error(`BEP20 RPC HTTP error from ${rpcUrl}:`, res.status);
-        continue;
+  for (let i = 0; i < settled.length; i++) {
+    const result = settled[i];
+    const rpcUrl = rpcUrls[i];
+    if (result.status === "rejected") {
+      console.error(`BEP20 RPC verify error from ${rpcUrl}:`, result.reason?.message || result.reason);
+      continue;
+    }
+    const { res, data } = result.value;
+    if (!res.ok) {
+      console.error(`BEP20 RPC HTTP error from ${rpcUrl}:`, res.status);
+      continue;
+    }
+    if (data?.error) {
+      console.error(`BEP20 RPC error from ${rpcUrl}:`, data.error?.message || JSON.stringify(data.error));
+      continue;
+    }
+
+    const receipt = data?.result;
+    if (!receipt || receipt.status !== "0x1" || !Array.isArray(receipt.logs)) continue;
+
+    for (const log of receipt.logs) {
+      if (log.address?.toLowerCase() !== usdtContract) continue;
+      if (log.topics?.[0] !== transferTopic || !log.topics?.[2]) continue;
+
+      const to = `0x${String(log.topics[2]).slice(-40).toLowerCase()}`;
+      if (to !== walletAddress) continue;
+
+      const rawAmount = BigInt(log.data || "0x0");
+      const amount = Number(rawAmount) / 1e18;
+      if (amount > 0) {
+        console.log(`BEP20 verified via RPC (${rpcUrl}): ${amount} USDT`);
+        return { verified: true, amount };
       }
-
-      const data = await res.json();
-      if (data?.error) {
-        console.error(`BEP20 RPC error from ${rpcUrl}:`, data.error?.message || JSON.stringify(data.error));
-        continue;
-      }
-
-      const receipt = data?.result;
-      if (!receipt || receipt.status !== "0x1" || !Array.isArray(receipt.logs)) continue;
-
-      for (const log of receipt.logs) {
-        if (log.address?.toLowerCase() !== usdtContract) continue;
-        if (log.topics?.[0] !== transferTopic || !log.topics?.[2]) continue;
-
-        const to = `0x${String(log.topics[2]).slice(-40).toLowerCase()}`;
-        if (to !== walletAddress) continue;
-
-        const rawAmount = BigInt(log.data || "0x0");
-        const amount = Number(rawAmount) / 1e18;
-        if (amount > 0) {
-          console.log(`BEP20 verified via RPC (${rpcUrl}): ${amount} USDT`);
-          return { verified: true, amount };
-        }
-      }
-    } catch (e) {
-      console.error(`BEP20 RPC verify error from ${rpcUrl}:`, e.message);
     }
   }
+
 
   console.log(`BEP20 verify: no match for ${normalizedHash}`);
   return { verified: false, amount: 0 };
@@ -8999,10 +9005,24 @@ async function pollUpdates() {
       const updates = data.result || [];
       if (updates.length === 0) continue;
 
+      // Advance offset IMMEDIATELY (before handlers finish) so the next
+      // getUpdates() call isn't blocked by a slow handler in this batch.
+      // Tradeoff: on a hard process crash mid-batch an update could in theory
+      // not be reprocessed. Acceptable because uncaughtException/unhandledRejection
+      // handlers log-and-continue rather than crash, and each handler already
+      // has its own try/catch.
+      offset = Math.max(...updates.map((u) => u.update_id)) + 1;
+      supabase.from("telegram_bot_state")
+        .update({ update_offset: offset, updated_at: new Date().toISOString() })
+        .eq("id", 1)
+        .then(() => {}, (e) => console.error("Failed to persist offset:", e?.message || e));
+
       const emojiMap = await loadButtonEmojis();
 
-      // Process updates concurrently for speed
-      await Promise.allSettled(updates.map(async (update) => {
+      // Process updates concurrently for speed — fire-and-forget so the poll
+      // loop immediately iterates and calls getUpdates() again without waiting
+      // for this batch's handlers to complete.
+      Promise.allSettled(updates.map(async (update) => {
         try {
           if (update.my_chat_member) await handleMyChatMember(update.my_chat_member);
           else if (update.callback_query) {
@@ -9038,12 +9058,8 @@ async function pollUpdates() {
         } catch (err) {
           console.error("Error processing update", update.update_id, err);
         }
-      }));
+      })).catch(() => {});
 
-      offset = Math.max(...updates.map((u) => u.update_id)) + 1;
-
-      // Save offset
-      await supabase.from("telegram_bot_state").update({ update_offset: offset, updated_at: new Date().toISOString() }).eq("id", 1);
     } catch (err) {
       console.error("Polling error:", err);
       await new Promise((r) => setTimeout(r, 5000));
