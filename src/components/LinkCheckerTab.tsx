@@ -205,31 +205,10 @@ export default function LinkCheckerTab() {
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={async () => {
                   if (!confirm('Delete ALL completed / cancelled / failed jobs?')) return;
-                  const activeStatuses = ['running', 'queued', 'vps_queued'];
-                  // Fetch ALL old job IDs from DB (not just loaded ones), in chunks
-                  const oldIds: string[] = [];
-                  let from = 0;
-                  const pageSize = 1000;
-                  while (true) {
-                    const { data, error } = await supabase
-                      .from('link_check_jobs')
-                      .select('id')
-                      .not('status', 'in', `(${activeStatuses.join(',')})`)
-                      .range(from, from + pageSize - 1);
-                    if (error) { toast.error(error.message); return; }
-                    const rows = (data as { id: string }[]) || [];
-                    oldIds.push(...rows.map(r => r.id));
-                    if (rows.length < pageSize) break;
-                    from += pageSize;
-                  }
-                  if (oldIds.length === 0) { toast.info('Nothing to clear'); return; }
-                  // Delete items + jobs in chunks of 200
-                  for (let i = 0; i < oldIds.length; i += 200) {
-                    const chunk = oldIds.slice(i, i + 200);
-                    await supabase.from('link_check_items').delete().in('job_id', chunk);
-                    await supabase.from('link_check_jobs').delete().in('id', chunk);
-                  }
-                  toast.success(`Cleared ${oldIds.length} old jobs`);
+                  const { data, error } = await (supabase as any).rpc('clear_old_link_check_jobs');
+                  if (error) { toast.error(error.message); return; }
+                  const deleted = Array.isArray(data) ? (data[0]?.deleted_jobs ?? 0) : 0;
+                  toast.success(`Cleared ${deleted} old jobs`);
                   void loadAll();
                 }}><Trash2 className="h-4 w-4 mr-1" /> Clear Old</Button>
                 <Button size="sm" variant="ghost" onClick={loadAll}><RefreshCw className="h-4 w-4" /></Button>
