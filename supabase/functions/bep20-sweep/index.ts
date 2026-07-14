@@ -166,7 +166,7 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
           }
           derivedNative = await provider.getBalance(derived.address);
         }
-        if (receipt.status === 1) {
+        if (receipt?.status === 1) {
           derivedNative = await provider.getBalance(derived.address);
         }
       }
