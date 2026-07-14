@@ -2376,6 +2376,12 @@ export type Database = {
           total_price: number
         }[]
       }
+      clear_old_link_check_jobs: {
+        Args: never
+        Returns: {
+          deleted_jobs: number
+        }[]
+      }
       create_withdrawal_atomic: {
         Args: {
           _amount: number
