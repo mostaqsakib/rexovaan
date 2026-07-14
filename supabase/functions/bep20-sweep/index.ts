@@ -66,15 +66,17 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
 
   const provider = new ethers.JsonRpcProvider(rpcUrl, { chainId: chain.chainId, name: chain.name });
   const feeData = await provider.getFeeData();
-  // Per-chain minimum gas price floor. BSC accepts as low as 0.1 gwei; public RPCs
-  // often over-report the "suggested" price. Use whichever is LOWER: network suggestion
-  // or a sane cap for that chain. Small 5% bump for reliable inclusion.
-  const chainMinGwei: Record<string, string> = { bsc: "0.1", polygon: "30", arbitrum: "0.01", optimism: "0.001", base: "0.005" };
-  const capGwei = chainMinGwei[chain.id] ?? "1";
+  // BSC accepts very low gas, so keep a hard low cap there. Polygon can spike
+  // sharply; capping it at 30 gwei leaves manual gas top-ups pending forever.
+  // Use live Polygon gas with a protective ceiling, but keep BSC cheap.
+  const capGweiByChain: Record<string, string> = { bsc: "0.1", polygon: "500", arbitrum: "0.01", optimism: "0.001", base: "0.005" };
+  const capGwei = capGweiByChain[chain.id] ?? "1";
   const cap = ethers.parseUnits(capGwei, "gwei");
   const suggested = feeData.gasPrice ?? cap;
-  const base = suggested < cap ? suggested : cap;
-  const gasPrice = (base * 105n) / 100n;
+  const base = chain.id === "polygon"
+    ? (suggested > cap ? cap : suggested)
+    : (suggested < cap ? suggested : cap);
+  const gasPrice = chain.id === "polygon" ? (base * 120n) / 100n : (base * 105n) / 100n;
   const tokenGasCost = TOKEN_TRANSFER_GAS * gasPrice;
   const bnbGasCost = BNB_TRANSFER_GAS * gasPrice;
   const gasTopUp = chain.gasTopUpWei > (tokenGasCost * 12n) / 10n ? chain.gasTopUpWei : (tokenGasCost * 12n) / 10n;
@@ -83,7 +85,7 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
   const masterWallet = new ethers.Wallet(master.privateKey, provider);
   const gasStatus = await checkGasTank(chain, master.address, provider, supabase);
   let masterNonce = await provider.getTransactionCount(master.address, "pending");
-  const masterBnb: bigint = await provider.getBalance(master.address);
+  let masterBnb: bigint = await provider.getBalance(master.address);
 
 
   const results: any[] = [];
@@ -122,7 +124,57 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
       }
       if (!picked) { entry.action = "no_balance"; results.push(entry); continue; }
 
-      const derivedNative: bigint = await provider.getBalance(derived.address);
+      let derivedNative: bigint = await provider.getBalance(derived.address);
+      if (derivedNative < tokenGasCost && row.gas_tx_hash) {
+        const receipt = await provider.getTransactionReceipt(row.gas_tx_hash).catch(() => null);
+        if (!receipt) {
+          const pendingTx = await provider.getTransaction(row.gas_tx_hash).catch(() => null);
+          const pendingGas = pendingTx?.gasPrice ?? 0n;
+          const lastTryAt = row.sweep_last_try_at ? new Date(row.sweep_last_try_at).getTime() : 0;
+          const oldEnough = !lastTryAt || Date.now() - lastTryAt > 10 * 60_000;
+          const underpriced = pendingGas > 0n && pendingGas < gasPrice;
+          const shouldReplace = !!pendingTx && (oldEnough || underpriced);
+          if (!shouldReplace) {
+            entry.action = "awaiting_gas";
+            entry.gasTx = row.gas_tx_hash;
+            if (pendingGas > 0n) entry.gasPrice = ethers.formatUnits(pendingGas, "gwei") + " gwei";
+            results.push(entry);
+            continue;
+          }
+
+          const replacementGas = pendingTx.gasPrice && pendingTx.gasPrice >= gasPrice
+            ? (pendingTx.gasPrice * 120n) / 100n
+            : gasPrice;
+          const replacementTopUp = gasTopUp > (TOKEN_TRANSFER_GAS * replacementGas * 12n) / 10n
+            ? gasTopUp
+            : (TOKEN_TRANSFER_GAS * replacementGas * 12n) / 10n;
+          const replacementCost = replacementTopUp + BNB_TRANSFER_GAS * replacementGas;
+          if (masterBnb < replacementCost) {
+            entry.action = "master_underfunded"; entry.masterBnb = ethers.formatEther(masterBnb);
+            results.push(entry); continue;
+          }
+          const tx = await masterWallet.sendTransaction({
+            to: derived.address, value: replacementTopUp, gasLimit: BNB_TRANSFER_GAS, gasPrice: replacementGas, nonce: pendingTx.nonce,
+          });
+          masterBnb -= replacementCost;
+          await supabase.from("bep20_reserved_addresses").update({
+            sweep_status: "needs_gas",
+            gas_tx_hash: tx.hash,
+            sweep_last_try_at: new Date().toISOString(),
+            sweep_last_error: null,
+          }).eq("id", row.id);
+          const replacementReceipt = await provider.waitForTransaction(tx.hash, 1, 12_000).catch(() => null);
+          if (!replacementReceipt || replacementReceipt.status !== 1) {
+            entry.action = "gas_replaced"; entry.gasTx = tx.hash;
+            results.push(entry); continue;
+          }
+          derivedNative = await provider.getBalance(derived.address);
+        }
+        if (receipt?.status === 1) {
+          derivedNative = await provider.getBalance(derived.address);
+        }
+      }
+
       if (derivedNative < tokenGasCost) {
         if (masterBnb < gasTopUp + bnbGasCost) {
           entry.action = "master_underfunded"; entry.masterBnb = ethers.formatEther(masterBnb);
@@ -131,8 +183,25 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
         const tx = await masterWallet.sendTransaction({
           to: derived.address, value: gasTopUp, gasLimit: BNB_TRANSFER_GAS, gasPrice, nonce: masterNonce++,
         });
-        entry.action = "gas_funded"; entry.gasTx = tx.hash;
-        results.push(entry); continue;
+        masterBnb -= (gasTopUp + bnbGasCost);
+        await supabase.from("bep20_reserved_addresses").update({
+          sweep_status: "needs_gas",
+          gas_tx_hash: tx.hash,
+          sweep_last_try_at: new Date().toISOString(),
+          sweep_last_error: null,
+        }).eq("id", row.id);
+
+        const receipt = await provider.waitForTransaction(tx.hash, 1, 12_000).catch(() => null);
+        if (!receipt || receipt.status !== 1) {
+          entry.action = "gas_funded"; entry.gasTx = tx.hash;
+          results.push(entry); continue;
+        }
+
+        derivedNative = await provider.getBalance(derived.address);
+        if (derivedNative < tokenGasCost) {
+          entry.action = "gas_funded"; entry.gasTx = tx.hash; entry.native = ethers.formatEther(derivedNative);
+          results.push(entry); continue;
+        }
       }
 
       const tokenContract = new ethers.Contract(picked.tok.address, ERC20_ABI, derivedWallet);
@@ -200,7 +269,7 @@ Deno.serve(async (req) => {
 
     const { data: rows, error: rowsErr } = await supabase
       .from("bep20_reserved_addresses")
-      .select("id, address, derivation_index, token, received_amount, received_chains, sweep_status, sweep_attempts")
+      .select("id, address, derivation_index, token, received_amount, received_chains, sweep_status, sweep_attempts, gas_tx_hash, sweep_last_try_at")
       .eq("status", "paid")
       .or(orFilter)
       .lt("sweep_attempts", 8)
