@@ -8574,6 +8574,8 @@ async function handleCallback(callbackQuery, emojiMap) {
   if (data.startsWith("customqty_")) {
     const productId = data.replace("customqty_", "");
     await supabase.from("bot_customers").update({ pending_action: `customqty_${productId}` }).eq("id", customer.id);
+    // Remove the previous "Select Quantity" message so only the reply prompt remains
+    if (msgId) await deleteMessage(chatId, msgId).catch(() => {});
     await sendMessage(chatId, "✏️ Type the quantity you want to buy:", { force_reply: true, selective: true });
     return;
   }
