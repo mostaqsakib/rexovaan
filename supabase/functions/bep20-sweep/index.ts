@@ -83,7 +83,7 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
   const masterWallet = new ethers.Wallet(master.privateKey, provider);
   const gasStatus = await checkGasTank(chain, master.address, provider, supabase);
   let masterNonce = await provider.getTransactionCount(master.address, "pending");
-  const masterBnb: bigint = await provider.getBalance(master.address);
+  let masterBnb: bigint = await provider.getBalance(master.address);
 
 
   const results: any[] = [];
@@ -122,7 +122,20 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
       }
       if (!picked) { entry.action = "no_balance"; results.push(entry); continue; }
 
-      const derivedNative: bigint = await provider.getBalance(derived.address);
+      let derivedNative: bigint = await provider.getBalance(derived.address);
+      if (derivedNative < tokenGasCost && row.gas_tx_hash) {
+        const receipt = await provider.getTransactionReceipt(row.gas_tx_hash).catch(() => null);
+        if (!receipt) {
+          entry.action = "awaiting_gas";
+          entry.gasTx = row.gas_tx_hash;
+          results.push(entry);
+          continue;
+        }
+        if (receipt.status === 1) {
+          derivedNative = await provider.getBalance(derived.address);
+        }
+      }
+
       if (derivedNative < tokenGasCost) {
         if (masterBnb < gasTopUp + bnbGasCost) {
           entry.action = "master_underfunded"; entry.masterBnb = ethers.formatEther(masterBnb);
@@ -131,8 +144,25 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
         const tx = await masterWallet.sendTransaction({
           to: derived.address, value: gasTopUp, gasLimit: BNB_TRANSFER_GAS, gasPrice, nonce: masterNonce++,
         });
-        entry.action = "gas_funded"; entry.gasTx = tx.hash;
-        results.push(entry); continue;
+        masterBnb -= (gasTopUp + bnbGasCost);
+        await supabase.from("bep20_reserved_addresses").update({
+          sweep_status: "needs_gas",
+          gas_tx_hash: tx.hash,
+          sweep_last_try_at: new Date().toISOString(),
+          sweep_last_error: null,
+        }).eq("id", row.id);
+
+        const receipt = await provider.waitForTransaction(tx.hash, 1, 45_000).catch(() => null);
+        if (!receipt || receipt.status !== 1) {
+          entry.action = "gas_funded"; entry.gasTx = tx.hash;
+          results.push(entry); continue;
+        }
+
+        derivedNative = await provider.getBalance(derived.address);
+        if (derivedNative < tokenGasCost) {
+          entry.action = "gas_funded"; entry.gasTx = tx.hash; entry.native = ethers.formatEther(derivedNative);
+          results.push(entry); continue;
+        }
       }
 
       const tokenContract = new ethers.Contract(picked.tok.address, ERC20_ABI, derivedWallet);
@@ -200,7 +230,7 @@ Deno.serve(async (req) => {
 
     const { data: rows, error: rowsErr } = await supabase
       .from("bep20_reserved_addresses")
-      .select("id, address, derivation_index, token, received_amount, received_chains, sweep_status, sweep_attempts")
+      .select("id, address, derivation_index, token, received_amount, received_chains, sweep_status, sweep_attempts, gas_tx_hash")
       .eq("status", "paid")
       .or(orFilter)
       .lt("sweep_attempts", 8)
