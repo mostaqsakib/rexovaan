@@ -128,18 +128,22 @@ async function sweepOnChain(chain: ChainCfg, rows: any[], xprv: string, destinat
       if (derivedNative < tokenGasCost && row.gas_tx_hash) {
         const receipt = await provider.getTransactionReceipt(row.gas_tx_hash).catch(() => null);
         if (!receipt) {
-          const lastTryAt = row.sweep_last_try_at ? new Date(row.sweep_last_try_at).getTime() : 0;
-          const staleGasTx = opts.force || !lastTryAt || Date.now() - lastTryAt > 10 * 60_000;
           const pendingTx = await provider.getTransaction(row.gas_tx_hash).catch(() => null);
-          if (!staleGasTx || !pendingTx) {
+          const pendingGas = pendingTx?.gasPrice ?? 0n;
+          const lastTryAt = row.sweep_last_try_at ? new Date(row.sweep_last_try_at).getTime() : 0;
+          const oldEnough = !lastTryAt || Date.now() - lastTryAt > 10 * 60_000;
+          const underpriced = pendingGas > 0n && pendingGas < gasPrice;
+          const shouldReplace = !!pendingTx && (oldEnough || underpriced);
+          if (!shouldReplace) {
             entry.action = "awaiting_gas";
             entry.gasTx = row.gas_tx_hash;
+            if (pendingGas > 0n) entry.gasPrice = ethers.formatUnits(pendingGas, "gwei") + " gwei";
             results.push(entry);
             continue;
           }
 
-          const replacementGas = pendingTx.gasPrice && pendingTx.gasPrice > gasPrice
-            ? (pendingTx.gasPrice * 150n) / 100n
+          const replacementGas = pendingTx.gasPrice && pendingTx.gasPrice >= gasPrice
+            ? (pendingTx.gasPrice * 120n) / 100n
             : gasPrice;
           const replacementTopUp = gasTopUp > (TOKEN_TRANSFER_GAS * replacementGas * 12n) / 10n
             ? gasTopUp
