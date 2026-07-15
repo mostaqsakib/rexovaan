@@ -6464,14 +6464,22 @@ async function handleMessage(message, emojiMap) {
 
   // Custom quantity
   if (customer.pending_action?.startsWith("customqty_")) {
-    const productId = customer.pending_action.replace("customqty_", "");
+    const rest = customer.pending_action.replace("customqty_", "");
+    const [productId, promptMsgIdStr] = rest.split("#");
+    const promptMsgId = parseInt(promptMsgIdStr, 10);
     const qty = parseInt(text);
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    // Delete the prompt so the "Type the quantity" message with Cancel button
+    // does not linger in the chat after the user replies.
+    if (promptMsgId && Number.isFinite(promptMsgId)) {
+      await deleteMessage(chatId, promptMsgId).catch(() => {});
+    }
     if (isNaN(qty) || qty < 1) { await sendMessage(chatId, "❌ Invalid quantity. Please enter a number greater than 0.", mainMenuKeyboard()); return; }
     if (qty > 10000) { await sendMessage(chatId, "❌ Maximum quantity is 10,000.", mainMenuKeyboard()); return; }
     await showBuyConfirmation(chatId, customer, productId, qty, emojiMap);
     return;
   }
+
 
   // Product emoji setting (admin)
   if (customer.pending_action?.startsWith("set_prod_emoji_") && isAdmin(chatId)) {
@@ -8579,12 +8587,24 @@ async function handleCallback(callbackQuery, emojiMap) {
 
   if (data.startsWith("customqty_")) {
     const productId = data.replace("customqty_", "");
-    await supabase.from("bot_customers").update({ pending_action: `customqty_${productId}` }).eq("id", customer.id);
     // Remove the previous "Select Quantity" message so only the reply prompt remains
     if (msgId) await deleteMessage(chatId, msgId).catch(() => {});
-    await sendMessage(chatId, "✏️ Type the quantity you want to buy:", { force_reply: true, selective: true });
+    // Use inline Cancel button instead of ForceReply so the prompt does not
+    // stay pinned in the user's reply bar when they leave and re-open the chat.
+    const sent = await sendMessage(chatId, "✏️ Type the quantity you want to buy:", {
+      inline_keyboard: [[{ text: "❌ Cancel", callback_data: `cancelqty_${productId}` }]],
+    });
+    const promptMsgId = sent?.result?.message_id || "";
+    await supabase.from("bot_customers").update({ pending_action: `customqty_${productId}#${promptMsgId}` }).eq("id", customer.id);
     return;
   }
+
+  if (data.startsWith("cancelqty_")) {
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    if (msgId) await deleteMessage(chatId, msgId).catch(() => {});
+    return;
+  }
+
 
   if (data.startsWith("dl_txt_") || data.startsWith("dl_csv_")) {
     const isCsv = data.startsWith("dl_csv_");
