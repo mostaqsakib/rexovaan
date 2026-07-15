@@ -509,6 +509,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   type ReviewState = {
     totalSubmitted: number;
     duplicateInPaste: number;
+    duplicateLines: string[];
+    pasteDuplicateAction: 'skip' | 'add';
     newLines: string[];
     buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }>;
     actions: Record<ReviewBucketKey, 'skip' | 'readd'>;
@@ -736,12 +738,13 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const handleAdd = async () => {
     const rawLines = value.split('\n').map((line) => line.trim()).filter(Boolean);
     const seen = new Set<string>();
-    const duplicateInPaste = rawLines.length - rawLines.filter((line) => {
+    const duplicateLines: string[] = [];
+    for (const line of rawLines) {
       const key = line.toLowerCase();
-      if (seen.has(key)) return false;
+      if (seen.has(key)) { duplicateLines.push(line); continue; }
       seen.add(key);
-      return true;
-    }).length;
+    }
+    const duplicateInPaste = duplicateLines.length;
     const lines = Array.from(seen).map((key) => rawLines.find((line) => line.toLowerCase() === key) as string);
     if (lines.length === 0) return;
     setSaving(true);
@@ -793,6 +796,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     setReview({
       totalSubmitted: rawLines.length,
       duplicateInPaste,
+      duplicateLines,
+      pasteDuplicateAction: 'skip',
       newLines,
       buckets,
       actions: { available: 'skip', reserved: 'skip', sold: 'skip', external: 'skip', invalid: 'skip' },
@@ -831,7 +836,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       }
     }
 
-    const newPayloads = newLines.map((line) => ({
+    const extraDuplicateLines = review.pasteDuplicateAction === 'add' ? review.duplicateLines : [];
+    const newPayloads = [...newLines, ...extraDuplicateLines].map((line) => ({
       product_id: product.id,
       data: { [product.detailColumns[0] || 'Delivery Info']: line },
     }));
@@ -1362,7 +1368,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
               { key: 'external', label: 'External', icon: Globe2, color: 'text-info border-info/30 bg-info/5' },
               { key: 'invalid', label: 'Deleted', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
             ];
-            const newCount = review.newLines.length;
+            const extraDupCount = review.pasteDuplicateAction === 'add' ? review.duplicateLines.length : 0;
+            const newCount = review.newLines.length + extraDupCount;
             let willReadd = 0;
             (Object.keys(review.buckets) as ReviewBucketKey[]).forEach((k) => {
               if (review.actions[k] === 'readd' && k !== 'available') willReadd += review.buckets[k].ids.length;
@@ -1370,7 +1377,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
             const willSkip = (Object.keys(review.buckets) as ReviewBucketKey[]).reduce((acc, k) => {
               if (review.actions[k] === 'skip' || k === 'available') acc += review.buckets[k].ids.length;
               return acc;
-            }, 0);
+            }, 0) + (review.pasteDuplicateAction === 'skip' ? review.duplicateLines.length : 0);
             return (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1395,7 +1402,29 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                 </div>
 
                 {review.duplicateInPaste > 0 && (
-                  <div className="text-xs text-muted-foreground">{review.duplicateInPaste} duplicate line(s) in your paste were merged.</div>
+                  <div className="rounded-md border border-info/30 bg-info/5 p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs">
+                      <span className="font-medium">{review.duplicateInPaste}</span> duplicate line(s) inside your paste.
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={review.pasteDuplicateAction === 'skip'}
+                          onChange={() => setReview((r) => r ? { ...r, pasteDuplicateAction: 'skip' } : r)}
+                        />
+                        Skip (merge)
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={review.pasteDuplicateAction === 'add'}
+                          onChange={() => setReview((r) => r ? { ...r, pasteDuplicateAction: 'add' } : r)}
+                        />
+                        Add as duplicates
+                      </label>
+                    </div>
+                  </div>
                 )}
 
                 <div className="space-y-2">
