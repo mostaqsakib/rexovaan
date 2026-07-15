@@ -509,6 +509,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   type ReviewState = {
     totalSubmitted: number;
     duplicateInPaste: number;
+    duplicateLines: string[];
+    pasteDuplicateAction: 'skip' | 'add';
     newLines: string[];
     buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }>;
     actions: Record<ReviewBucketKey, 'skip' | 'readd'>;
