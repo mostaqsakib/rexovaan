@@ -6464,14 +6464,22 @@ async function handleMessage(message, emojiMap) {
 
   // Custom quantity
   if (customer.pending_action?.startsWith("customqty_")) {
-    const productId = customer.pending_action.replace("customqty_", "");
+    const rest = customer.pending_action.replace("customqty_", "");
+    const [productId, promptMsgIdStr] = rest.split("#");
+    const promptMsgId = parseInt(promptMsgIdStr, 10);
     const qty = parseInt(text);
     await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    // Delete the prompt so the "Type the quantity" message with Cancel button
+    // does not linger in the chat after the user replies.
+    if (promptMsgId && Number.isFinite(promptMsgId)) {
+      await deleteMessage(chatId, promptMsgId).catch(() => {});
+    }
     if (isNaN(qty) || qty < 1) { await sendMessage(chatId, "❌ Invalid quantity. Please enter a number greater than 0.", mainMenuKeyboard()); return; }
     if (qty > 10000) { await sendMessage(chatId, "❌ Maximum quantity is 10,000.", mainMenuKeyboard()); return; }
     await showBuyConfirmation(chatId, customer, productId, qty, emojiMap);
     return;
   }
+
 
   // Product emoji setting (admin)
   if (customer.pending_action?.startsWith("set_prod_emoji_") && isAdmin(chatId)) {
