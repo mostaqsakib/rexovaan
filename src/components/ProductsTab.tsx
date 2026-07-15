@@ -738,12 +738,13 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const handleAdd = async () => {
     const rawLines = value.split('\n').map((line) => line.trim()).filter(Boolean);
     const seen = new Set<string>();
-    const duplicateInPaste = rawLines.length - rawLines.filter((line) => {
+    const duplicateLines: string[] = [];
+    for (const line of rawLines) {
       const key = line.toLowerCase();
-      if (seen.has(key)) return false;
+      if (seen.has(key)) { duplicateLines.push(line); continue; }
       seen.add(key);
-      return true;
-    }).length;
+    }
+    const duplicateInPaste = duplicateLines.length;
     const lines = Array.from(seen).map((key) => rawLines.find((line) => line.toLowerCase() === key) as string);
     if (lines.length === 0) return;
     setSaving(true);
