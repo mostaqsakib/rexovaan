@@ -1254,7 +1254,8 @@ function simplifyTelegramHtml(text) {
 async function sendMessage(chatId, text, replyMarkup) {
   text = prepareTelegramHtml(text);
   const body = { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true };
-  if (replyMarkup) body.reply_markup = replyMarkup;
+  const safeReplyMarkup = sanitizeReplyMarkup(replyMarkup);
+  if (safeReplyMarkup) body.reply_markup = safeReplyMarkup;
   const isChannel = Number(chatId) < 0 && String(chatId).startsWith("-100");
   const hasCustomEmoji = text.includes("<tg-emoji");
   let result = await tgFetch("sendMessage", body);
@@ -1297,7 +1298,8 @@ async function editMessageText(chatId, messageId, text, replyMarkup) {
   }
   text = prepareTelegramHtml(text);
   const body = { chat_id: chatId, message_id: messageId, text, parse_mode: "HTML", disable_web_page_preview: true };
-  if (replyMarkup) body.reply_markup = replyMarkup;
+  const safeReplyMarkup = sanitizeReplyMarkup(replyMarkup);
+  if (safeReplyMarkup) body.reply_markup = safeReplyMarkup;
   const isNotModified = (res) => !res?.ok && String(res?.description || "").toLowerCase().includes("message is not modified");
   try {
     let result = await tgFetch("editMessageText", body);
@@ -1335,6 +1337,31 @@ async function deleteMessage(chatId, messageId) {
     console.error("deleteMessage error:", e.message);
     return { ok: false };
   }
+}
+
+function sanitizeReplyMarkup(replyMarkup) {
+  if (!replyMarkup) return replyMarkup;
+  // Never send ForceReply. Telegram keeps ForceReply attached to the original
+  // bot message on their server, so closing the reply bar only hides it locally
+  // and it can reappear when the chat is opened again.
+  if (replyMarkup.force_reply) {
+    return { inline_keyboard: [[{ text: "❌ Cancel", callback_data: "cancel_pending" }]] };
+  }
+  return replyMarkup;
+}
+
+async function cleanupStaleReplyPrompt(chatId, message) {
+  const prompt = message?.reply_to_message;
+  if (!prompt?.message_id || !prompt?.from?.is_bot) return;
+  const promptText = String(prompt.text || prompt.caption || "").toLowerCase();
+  const looksLikeInputPrompt = Boolean(prompt.reply_markup?.force_reply)
+    || promptText.includes("type the quantity")
+    || promptText.includes("enter the amount")
+    || promptText.includes("enter the price")
+    || promptText.includes("now enter")
+    || promptText.includes("send message to");
+  if (!looksLikeInputPrompt) return;
+  await deleteMessage(chatId, prompt.message_id).catch(() => {});
 }
 
 async function sendPhoto(chatId, photoUrl, caption, replyMarkup) {
@@ -5173,6 +5200,7 @@ async function handleMediaMessage(message, emojiMap) {
   }
 
   const customer = await getOrCreateCustomer(chatId, message.from?.first_name, message.from?.username);
+  await cleanupStaleReplyPrompt(chatId, message).catch(() => {});
 
   // Banned user guard
   if (customer.is_banned && !isAdmin(chatId)) {
@@ -6599,6 +6627,18 @@ async function handleCallback(callbackQuery, emojiMap) {
 
   const customer = await getOrCreateCustomer(chatId, callbackQuery.from?.first_name, callbackQuery.from?.username);
   const msgId = callbackQuery.message?.message_id;
+
+  if (data === "cancel_pending") {
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    if (msgId) await deleteMessage(chatId, msgId).catch(() => {});
+    return;
+  }
+
+  if (customer.pending_action?.startsWith("customqty_") && !data.startsWith("customqty_") && !data.startsWith("cancelqty_")) {
+    const promptMsgId = parseInt(String(customer.pending_action).split("#")[1] || "", 10);
+    if (promptMsgId && Number.isFinite(promptMsgId)) await deleteMessage(chatId, promptMsgId).catch(() => {});
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+  }
 
   // Banned user guard
   if (customer.is_banned && !isAdmin(chatId)) {
