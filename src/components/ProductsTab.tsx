@@ -796,6 +796,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     setReview({
       totalSubmitted: rawLines.length,
       duplicateInPaste,
+      duplicateLines,
+      pasteDuplicateAction: 'skip',
       newLines,
       buckets,
       actions: { available: 'skip', reserved: 'skip', sold: 'skip', external: 'skip', invalid: 'skip' },
