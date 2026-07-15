@@ -585,6 +585,9 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 }
 
 function sanitizeTgBody(body) {
+  if (body?.reply_markup?.force_reply) {
+    return { ...body, reply_markup: sanitizeReplyMarkup(body.reply_markup) };
+  }
   return body;
 }
 
@@ -599,7 +602,19 @@ function isIgnorableTelegramError(method, data) {
       || description.includes("query id is invalid");
   }
   if (method === "editMessageText" || method === "editMessageReplyMarkup") {
-    return description.includes("message is not modified");
+    return description.includes("message is not modified")
+      || description.includes("message to edit not found")
+      || description.includes("message can't be edited")
+      || description.includes("message identifier is not specified")
+      || description.includes("chat not found")
+      || description.includes("bot was blocked");
+  }
+  if (method === "deleteMessage") {
+    return description.includes("message to delete not found")
+      || description.includes("message can't be deleted")
+      || description.includes("message identifier is not specified")
+      || description.includes("chat not found")
+      || description.includes("bot was blocked");
   }
   return false;
 }
