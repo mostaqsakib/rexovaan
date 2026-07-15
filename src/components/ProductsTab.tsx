@@ -836,7 +836,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       }
     }
 
-    const newPayloads = newLines.map((line) => ({
+    const extraDuplicateLines = review.pasteDuplicateAction === 'add' ? review.duplicateLines : [];
+    const newPayloads = [...newLines, ...extraDuplicateLines].map((line) => ({
       product_id: product.id,
       data: { [product.detailColumns[0] || 'Delivery Info']: line },
     }));
