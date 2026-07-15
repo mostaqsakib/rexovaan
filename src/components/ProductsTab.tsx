@@ -1368,7 +1368,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
               { key: 'external', label: 'External', icon: Globe2, color: 'text-info border-info/30 bg-info/5' },
               { key: 'invalid', label: 'Deleted', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
             ];
-            const newCount = review.newLines.length;
+            const extraDupCount = review.pasteDuplicateAction === 'add' ? review.duplicateLines.length : 0;
+            const newCount = review.newLines.length + extraDupCount;
             let willReadd = 0;
             (Object.keys(review.buckets) as ReviewBucketKey[]).forEach((k) => {
               if (review.actions[k] === 'readd' && k !== 'available') willReadd += review.buckets[k].ids.length;
@@ -1376,7 +1377,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
             const willSkip = (Object.keys(review.buckets) as ReviewBucketKey[]).reduce((acc, k) => {
               if (review.actions[k] === 'skip' || k === 'available') acc += review.buckets[k].ids.length;
               return acc;
-            }, 0);
+            }, 0) + (review.pasteDuplicateAction === 'skip' ? review.duplicateLines.length : 0);
             return (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
