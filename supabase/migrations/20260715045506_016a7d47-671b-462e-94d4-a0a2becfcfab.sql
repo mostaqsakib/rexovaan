@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS public.uniq_bot_stock_items_product_fingerprint_available;
