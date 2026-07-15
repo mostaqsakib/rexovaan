@@ -5200,6 +5200,7 @@ async function handleMediaMessage(message, emojiMap) {
   }
 
   const customer = await getOrCreateCustomer(chatId, message.from?.first_name, message.from?.username);
+  await cleanupStaleReplyPrompt(chatId, message).catch(() => {});
 
   // Banned user guard
   if (customer.is_banned && !isAdmin(chatId)) {
@@ -6626,6 +6627,18 @@ async function handleCallback(callbackQuery, emojiMap) {
 
   const customer = await getOrCreateCustomer(chatId, callbackQuery.from?.first_name, callbackQuery.from?.username);
   const msgId = callbackQuery.message?.message_id;
+
+  if (data === "cancel_pending") {
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+    if (msgId) await deleteMessage(chatId, msgId).catch(() => {});
+    return;
+  }
+
+  if (customer.pending_action?.startsWith("customqty_") && !data.startsWith("customqty_") && !data.startsWith("cancelqty_")) {
+    const promptMsgId = parseInt(String(customer.pending_action).split("#")[1] || "", 10);
+    if (promptMsgId && Number.isFinite(promptMsgId)) await deleteMessage(chatId, promptMsgId).catch(() => {});
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+  }
 
   // Banned user guard
   if (customer.is_banned && !isAdmin(chatId)) {
