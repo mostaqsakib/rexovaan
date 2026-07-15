@@ -264,22 +264,40 @@ Deno.serve(async (req) => {
 
       const qty = deposit.pending_quantity;
 
-      // Get tiered price
-      const { data: tiers } = await supabase.from("bot_product_pricing").select("*").eq("product_id", product.id).order("min_quantity");
-      let unitPrice = Number(product.price);
+      // Get lowest applicable price: base, tier, customer special, active flash sale
+      const nowIso = new Date().toISOString();
+      const [tiersRes, flashRes, specialRes] = await Promise.all([
+        supabase.from("bot_product_pricing").select("*").eq("product_id", product.id).order("min_quantity"),
+        supabase.from("bot_flash_sales").select("sale_price, ends_at, is_active").eq("product_id", product.id).eq("is_active", true).gt("ends_at", nowIso).maybeSingle(),
+        supabase.from("bot_customer_pricing").select("price, min_quantity, max_quantity").eq("customer_id", customer.id).eq("product_id", product.id),
+      ]);
+      const tiers = tiersRes.data;
+      let tierPrice: number | null = null;
       if (tiers && tiers.length > 0) {
         for (const tier of tiers) {
           if (qty >= tier.min_quantity && (tier.max_quantity === null || qty <= tier.max_quantity)) {
-            unitPrice = Number(tier.price);
+            tierPrice = Number(tier.price);
             break;
           }
         }
-        if (!tiers.some(t => qty >= t.min_quantity && (t.max_quantity === null || qty <= t.max_quantity))) {
-          unitPrice = Number(tiers[tiers.length - 1].price);
+        if (tierPrice === null) tierPrice = Number(tiers[tiers.length - 1].price);
+      }
+      let specialPrice: number | null = null;
+      if (specialRes.data && specialRes.data.length > 0) {
+        for (const s of specialRes.data as any[]) {
+          if (qty >= (s.min_quantity ?? 1) && (s.max_quantity == null || qty <= s.max_quantity)) {
+            const p = Number(s.price);
+            if (specialPrice === null || p < specialPrice) specialPrice = p;
+          }
         }
       }
+      const candidates: number[] = [Number(product.price)];
+      if (tierPrice !== null) candidates.push(tierPrice);
+      if (specialPrice !== null) candidates.push(specialPrice);
+      if (flashRes.data?.sale_price != null) candidates.push(Number(flashRes.data.sale_price));
+      const unitPrice = Math.min(...candidates.filter((v) => Number.isFinite(v) && v >= 0));
 
-      const totalPrice = unitPrice * qty;
+      const totalPrice = Math.round(unitPrice * qty * 10000) / 10000;
       const currentBalance = Number(customer.balance);
       const totalAvailable = amount + currentBalance;
 
