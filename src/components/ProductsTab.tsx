@@ -1402,7 +1402,29 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                 </div>
 
                 {review.duplicateInPaste > 0 && (
-                  <div className="text-xs text-muted-foreground">{review.duplicateInPaste} duplicate line(s) in your paste were merged.</div>
+                  <div className="rounded-md border border-info/30 bg-info/5 p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs">
+                      <span className="font-medium">{review.duplicateInPaste}</span> duplicate line(s) inside your paste.
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={review.pasteDuplicateAction === 'skip'}
+                          onChange={() => setReview((r) => r ? { ...r, pasteDuplicateAction: 'skip' } : r)}
+                        />
+                        Skip (merge)
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={review.pasteDuplicateAction === 'add'}
+                          onChange={() => setReview((r) => r ? { ...r, pasteDuplicateAction: 'add' } : r)}
+                        />
+                        Add as duplicates
+                      </label>
+                    </div>
+                  </div>
                 )}
 
                 <div className="space-y-2">
