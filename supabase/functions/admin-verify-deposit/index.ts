@@ -3,6 +3,7 @@ import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/b
 import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
 import { applyDepositCredit } from "../_shared/apply-deposit-credit.ts";
+import { awardReferralCommission } from "../_shared/referral-commission.ts";
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 const BULK_TXT_THRESHOLD = 20;
@@ -474,6 +475,8 @@ Deno.serve(async (req) => {
         }
 
         await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
+
+        awardReferralCommission(supabase, customer.id, totalPrice, orderRow.id).catch(() => {});
 
         return new Response(JSON.stringify({ success: true, action: "delivered", product: product.name, qty }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
