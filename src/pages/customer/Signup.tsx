@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, UserPlus, Mail, Lock, User } from 'lucide-react';
+import { Loader2, UserPlus, Mail, Lock, User, Gift } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,7 +15,15 @@ export default function Signup() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = params.get('next') || '/';
+  const refFromUrl = (params.get('ref') || '').toLowerCase().trim();
   const { user } = useCustomerAuth();
+
+  // Persist referral code so it survives email-verification round-trip
+  useEffect(() => {
+    if (refFromUrl && /^[a-f0-9]{8}$/.test(refFromUrl)) {
+      try { localStorage.setItem('pending_ref_code', refFromUrl); } catch {}
+    }
+  }, [refFromUrl]);
 
   useEffect(() => { if (user) navigate(next, { replace: true }); }, [user]);
 
@@ -31,6 +39,7 @@ export default function Signup() {
 
     // bot_customers row is created automatically by a server-side trigger
     // on auth.users insert (handle_new_auth_user_create_customer).
+    // Referral code will be applied by CustomerAuthContext once the customer row loads.
 
     setLoading(false);
     if (data.session) { toast.success('Account created'); navigate(next, { replace: true }); }
@@ -45,6 +54,12 @@ export default function Signup() {
           <h1 className="font-heading text-2xl font-bold gradient-text">Create account</h1>
           <p className="text-sm text-muted-foreground">Start shopping in seconds</p>
         </div>
+        {refFromUrl && /^[a-f0-9]{8}$/.test(refFromUrl) && (
+          <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs flex items-center gap-2">
+            <Gift className="h-4 w-4 text-primary shrink-0" />
+            <span>Referred by <code className="bg-background/40 px-1 rounded">{refFromUrl}</code> — bonus applies on first purchase.</span>
+          </div>
+        )}
         <form onSubmit={submit} className="space-y-3">
           <div className="relative">
             <User className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />

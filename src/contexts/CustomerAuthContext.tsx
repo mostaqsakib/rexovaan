@@ -36,6 +36,17 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     if (!uid) { setCustomer(null); return; }
     const { data } = await supabase.from('bot_customers').select('id,chat_id,first_name,username,balance,referral_balance,pay_later_enabled,pay_later_limit,pay_later_used,is_banned').eq('auth_user_id', uid).maybeSingle();
     setCustomer(data as any || null);
+
+    // Apply pending referral code (from ?ref=<code> on signup) once customer row exists
+    if (data?.id) {
+      try {
+        const pending = localStorage.getItem('pending_ref_code');
+        if (pending && /^[a-f0-9]{8}$/.test(pending)) {
+          const { error } = await supabase.functions.invoke('apply-referral-code', { body: { code: pending } });
+          if (!error) localStorage.removeItem('pending_ref_code');
+        }
+      } catch (e) { console.warn('apply-referral-code failed', e); }
+    }
   };
 
   useEffect(() => {

@@ -2,6 +2,7 @@
 //   bot_settings.use_atomic_checkout = 'true'  → new atomic single-RPC path (shadow rollout)
 //   anything else (default 'false')           → legacy multi-step path (current production)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { awardReferralCommission } from '../_shared/referral-commission.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,6 +112,8 @@ Deno.serve(async (req) => {
         // @ts-ignore
         if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(p);
       }
+      // Fire-and-forget referral commission
+      awardReferralCommission(admin, customer.id, Number(row.total_price) || 0, row.order_id).catch(() => {});
       return jsonRes({
         orderId: row.order_id,
         details: row.details,
@@ -171,6 +174,8 @@ Deno.serve(async (req) => {
     }
 
     await admin.from('bot_orders').update({ details, delivered_at: new Date().toISOString() }).eq('id', orderRow.id);
+
+    awardReferralCommission(admin, customer.id, totalPrice, orderRow.id).catch(() => {});
 
     const p = notifyWebSale(admin, product, quantity).catch((e) => console.error('[WebSalesFeed]', e?.message || e));
     // @ts-ignore
