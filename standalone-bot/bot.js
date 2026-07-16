@@ -2573,7 +2573,7 @@ async function showReferralMenu(chatId, customer, emojiMap = {}, editMessageId =
 
   const buttons = {
     inline_keyboard: [
-      [{ text: "📋 Copy Referral Link", copy_text: { text: referralLink } }],
+      [{ ...applyEmoji({ text: "📋 Copy Referral Link", callback_data: "ref_copy", style: "primary" }, "ref_copy", emojiMap), callback_data: undefined, copy_text: { text: referralLink } }],
       [applyEmoji({ text: "💰 Transfer to Wallet", callback_data: "ref_transfer" }, "ref_transfer", emojiMap)],
       [applyEmoji({ text: "◀️ Back", callback_data: "menu_main" }, "back", emojiMap)],
     ],
