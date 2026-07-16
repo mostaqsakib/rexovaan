@@ -30,7 +30,7 @@ export default function Referrals() {
     if (!customer?.id || !customer.chat_id) return;
     setSiteUrl(window.location.origin);
     (async () => {
-      const c = await refCodeFromChatId(customer.chat_id!);
+      const c = refCodeFromChatId(customer.chat_id!);
       setCode(c);
 
       const now = new Date();
