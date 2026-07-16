@@ -1,5 +1,5 @@
 import { useNavigate, Link } from 'react-router-dom';
-import { Wallet, ArrowDownToLine, ArrowUpFromLine, ClipboardList, Users, LogOut, MessageCircle, Loader2 } from 'lucide-react';
+import { Wallet, ArrowDownToLine, ArrowUpFromLine, ClipboardList, Users, LogOut, MessageCircle, Loader2, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCustomerAuth } from '@/contexts/CustomerAuthContext';
 import { useEffect, useState } from 'react';
@@ -61,6 +61,7 @@ export default function Account() {
         <Button asChild variant="outline" className="h-auto py-4 justify-start gap-3"><Link to="/account/deposits"><ClipboardList className="h-5 w-5 text-primary" /> Deposit history</Link></Button>
         <Button asChild variant="outline" className="h-auto py-4 justify-start gap-3"><Link to="/account/deposit"><ArrowDownToLine className="h-5 w-5 text-primary" /> Deposit</Link></Button>
         <Button asChild variant="outline" className="h-auto py-4 justify-start gap-3"><Link to="/account/withdraw"><ArrowUpFromLine className="h-5 w-5 text-primary" /> Withdraw</Link></Button>
+        <Button asChild variant="outline" className="h-auto py-4 justify-start gap-3 sm:col-span-2"><Link to="/account/referrals"><Gift className="h-5 w-5 text-primary" /> Refer & Earn</Link></Button>
         <Button asChild variant="outline" className="h-auto py-4 justify-start gap-3"><a href={botUrl} target="_blank" rel="noreferrer"><MessageCircle className="h-5 w-5 text-primary" /> Open Telegram bot</a></Button>
       </div>
 

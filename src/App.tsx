@@ -23,6 +23,7 @@ import Orders from "@/pages/customer/Orders";
 import Deposit from "@/pages/customer/Deposit";
 import Deposits from "@/pages/customer/Deposits";
 import Withdraw from "@/pages/customer/Withdraw";
+import Referrals from "@/pages/customer/Referrals";
 import OAuthConsent from "@/pages/OAuthConsent";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
                   <Route path="/account/deposit" element={<Deposit />} />
                   <Route path="/account/deposits" element={<Deposits />} />
                   <Route path="/account/withdraw" element={<Withdraw />} />
+                  <Route path="/account/referrals" element={<Referrals />} />
                 </Route>
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
