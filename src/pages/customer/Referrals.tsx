@@ -6,18 +6,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useCustomerAuth } from '@/contexts/CustomerAuthContext';
 import { toast } from 'sonner';
 
+import { md5 } from 'js-md5';
+
 // Mirrors bot's generateReferralCode: md5(chat_id).slice(0, 8)
-async function refCodeFromChatId(chatId: number | string): Promise<string> {
-  const buf = new TextEncoder().encode(String(chatId));
-  const digest = await crypto.subtle.digest('MD5' as any, buf).catch(async () => {
-    // Web Crypto has no MD5 — fall back to a tiny pure-JS md5
-    const md5 = (await import('crypto-js/md5')).default;
-    const wa = (await import('crypto-js/enc-hex')).default;
-    const hash = md5(String(chatId)).toString(wa);
-    return new TextEncoder().encode(hash).buffer;
-  });
-  const hex = Array.from(new Uint8Array(digest as ArrayBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
-  return hex.slice(0, 8).toLowerCase();
+function refCodeFromChatId(chatId: number | string): string {
+  return md5(String(chatId)).slice(0, 8).toLowerCase();
 }
 
 export default function Referrals() {
