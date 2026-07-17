@@ -6,6 +6,7 @@ import { Bot, InputFile } from 'grammy';
 import { checkUrls, prewarm } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
 import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from './formatter.js';
+import { acquire as acquireLock, release as releaseLock } from './priority-lock.js';
 
 const {
   BOT_TOKEN,
