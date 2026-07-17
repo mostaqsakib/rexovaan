@@ -2379,7 +2379,10 @@ export type Database = {
       clear_old_link_check_jobs: {
         Args: never
         Returns: {
+          deleted_items: number
           deleted_jobs: number
+          remaining_items: number
+          remaining_jobs: number
         }[]
       }
       create_withdrawal_atomic: {

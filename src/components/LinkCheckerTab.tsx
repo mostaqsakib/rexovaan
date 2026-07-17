@@ -23,6 +23,7 @@ export default function LinkCheckerTab() {
   const [invalidStock, setInvalidStock] = useState<InvalidStock[]>([]);
   const [productId, setProductId] = useState<string>('');
   const [starting, setStarting] = useState(false);
+  const [clearingOld, setClearingOld] = useState(false);
 
   // Only allow this specific product in the Link Checker UI.
   const isAllowedProduct = (name: string) => {
@@ -124,6 +125,42 @@ export default function LinkCheckerTab() {
     void loadAll();
   };
 
+  const clearOldJobs = async () => {
+    if (!confirm('Delete ALL completed / cancelled / failed jobs?')) return;
+    setClearingOld(true);
+
+    let deletedJobs = 0;
+    let deletedItems = 0;
+    let remainingJobs = 0;
+    let remainingItems = 0;
+
+    try {
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const { data, error } = await (supabase as any).rpc('clear_old_link_check_jobs');
+        if (error) throw error;
+
+        const row = Array.isArray(data) ? data[0] : data;
+        const batchJobs = Number(row?.deleted_jobs ?? 0);
+        const batchItems = Number(row?.deleted_items ?? 0);
+        remainingJobs = Number(row?.remaining_jobs ?? 0);
+        remainingItems = Number(row?.remaining_items ?? 0);
+        deletedJobs += batchJobs;
+        deletedItems += batchItems;
+
+        toast.info(`Clearing old jobs… ${remainingJobs} jobs / ${remainingItems} links left`);
+        if (remainingJobs === 0 && remainingItems === 0) break;
+        if (batchJobs === 0 && batchItems === 0) break;
+      }
+
+      toast.success(`Cleared ${deletedJobs} old jobs and ${deletedItems} checked links`);
+      void loadAll();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to clear old jobs');
+    } finally {
+      setClearingOld(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="check" className="w-full">
@@ -203,14 +240,9 @@ export default function LinkCheckerTab() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Other Jobs</CardTitle>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={async () => {
-                  if (!confirm('Delete ALL completed / cancelled / failed jobs?')) return;
-                  const { data, error } = await (supabase as any).rpc('clear_old_link_check_jobs');
-                  if (error) { toast.error(error.message); return; }
-                  const deleted = Array.isArray(data) ? (data[0]?.deleted_jobs ?? 0) : 0;
-                  toast.success(`Cleared ${deleted} old jobs`);
-                  void loadAll();
-                }}><Trash2 className="h-4 w-4 mr-1" /> Clear Old</Button>
+                <Button size="sm" variant="outline" onClick={clearOldJobs} disabled={clearingOld}>
+                  <Trash2 className="h-4 w-4 mr-1" /> {clearingOld ? 'Clearing…' : 'Clear Old'}
+                </Button>
                 <Button size="sm" variant="ghost" onClick={loadAll}><RefreshCw className="h-4 w-4" /></Button>
               </div>
             </CardHeader>
