@@ -3,10 +3,43 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Bot, InputFile } from 'grammy';
+import { createClient } from '@supabase/supabase-js';
 import { checkUrls, prewarm } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
 import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from './formatter.js';
 import { acquire as acquireLock, release as releaseLock } from './priority-lock.js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  : null;
+if (!supabase) {
+  console.warn('⚠️  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing — dashboard logging disabled');
+}
+
+async function logJobToDashboard(ctx, { label, total, valid, invalid, errors, durationMs }) {
+  if (!supabase) return;
+  try {
+    const from = ctx.from || {};
+    await supabase.from('bot_link_check_logs').insert({
+      tg_user_id: from.id,
+      tg_username: from.username || null,
+      tg_first_name: from.first_name || null,
+      tg_last_name: from.last_name || null,
+      chat_id: ctx.chat?.id || null,
+      label: label?.slice(0, 200) || null,
+      total,
+      valid_count: valid,
+      invalid_count: invalid,
+      error_count: errors,
+      duration_ms: durationMs,
+    });
+  } catch (e) {
+    console.error('dashboard log failed:', e?.message || e);
+  }
+}
+
 
 const {
   BOT_TOKEN,
@@ -179,6 +212,15 @@ async function runJob(ctx, progressMsgId, urls, label) {
     total: urls.length, valid: valid.length, invalid: invalid.length,
     errors: errors.length, durationMs,
   }));
+
+  await logJobToDashboard(ctx, {
+    label,
+    total: urls.length,
+    valid: valid.length,
+    invalid: invalid.length,
+    errors: errors.length,
+    durationMs,
+  });
 }
 
 async function safeReply(ctx, text) {
