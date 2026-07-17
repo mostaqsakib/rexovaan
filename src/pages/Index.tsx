@@ -30,6 +30,7 @@ import SourcesTab from '@/components/SourcesTab';
 import FlashSalesTab from '@/components/FlashSalesTab';
 import AnnouncementsTab from '@/components/AnnouncementsTab';
 import LinkCheckerTab from '@/components/LinkCheckerTab';
+import WorkersStatusTab from '@/components/WorkersStatusTab';
 import BroadcastDialog from '@/components/BroadcastDialog';
 import AddProductDialog from '@/components/AddProductDialog';
 import { useProductStore } from '@/store/useProductStore';
@@ -46,6 +47,7 @@ const TAB_TITLES: Record<string, string> = {
   pending: 'Pending Deliveries',
   inputs: 'Customer Inputs',
   'link-checker': 'Link Checker',
+  'workers': 'Workers Status',
   history: 'Order History',
   
   customers: 'Customers',
@@ -183,6 +185,7 @@ const Index = () => {
             {activeTab === 'pending' && <PendingDeliveriesTab />}
             {activeTab === 'inputs' && <CustomerInputsTab />}
             {activeTab === 'link-checker' && <LinkCheckerTab />}
+            {activeTab === 'workers' && <WorkersStatusTab />}
             {activeTab === 'history' && <HistoryTab orders={orderHistory} onRestore={async (order) => { try { await restoreOrder(order); toast.success(`${order.productName} - ${order.quantity} item(s) restored!`); } catch (err) { toast.error(err instanceof Error ? err.message : 'Restore failed'); } }} />}
             
             {activeTab === 'customers' && <CustomersTab />}
