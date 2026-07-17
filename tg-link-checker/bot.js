@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Bot, InputFile } from 'grammy';
 import { createClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { checkUrls, prewarm } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
 import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from './formatter.js';
