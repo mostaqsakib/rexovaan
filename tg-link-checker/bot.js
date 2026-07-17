@@ -6,6 +6,7 @@ import { Bot, InputFile } from 'grammy';
 import { checkUrls, prewarm } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
 import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from './formatter.js';
+import { acquire as acquireLock, release as releaseLock } from './priority-lock.js';
 
 const {
   BOT_TOKEN,
@@ -131,10 +132,17 @@ async function runJob(ctx, progressMsgId, urls, label) {
 
   await editProgress({ checked: 0, total: urls.length, valid: 0, invalid: 0, errors: 0 }, true);
 
-  const results = await checkUrls(urls, {
-    concurrency: maxConc,
-    onProgress: (s) => { editProgress(s).catch(() => {}); },
-  });
+  // Priority lock — site's VPS link-checker pauses while this runs.
+  acquireLock(label);
+  let results;
+  try {
+    results = await checkUrls(urls, {
+      concurrency: maxConc,
+      onProgress: (s) => { editProgress(s).catch(() => {}); },
+    });
+  } finally {
+    releaseLock();
+  }
 
   const valid = results.filter((r) => r.result === 'valid').map((r) => r.url);
   const invalid = results.filter((r) => r.result === 'invalid').map((r) => r.url);
