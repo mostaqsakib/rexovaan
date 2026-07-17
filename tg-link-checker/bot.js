@@ -212,6 +212,15 @@ async function runJob(ctx, progressMsgId, urls, label) {
     total: urls.length, valid: valid.length, invalid: invalid.length,
     errors: errors.length, durationMs,
   }));
+
+  await logJobToDashboard(ctx, {
+    label,
+    total: urls.length,
+    valid: valid.length,
+    invalid: invalid.length,
+    errors: errors.length,
+    durationMs,
+  });
 }
 
 async function safeReply(ctx, text) {
