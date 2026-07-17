@@ -783,6 +783,54 @@ export type Database = {
           },
         ]
       }
+      bot_link_check_logs: {
+        Row: {
+          chat_id: number | null
+          created_at: string
+          duration_ms: number
+          error_count: number
+          id: string
+          invalid_count: number
+          label: string | null
+          tg_first_name: string | null
+          tg_last_name: string | null
+          tg_user_id: number
+          tg_username: string | null
+          total: number
+          valid_count: number
+        }
+        Insert: {
+          chat_id?: number | null
+          created_at?: string
+          duration_ms?: number
+          error_count?: number
+          id?: string
+          invalid_count?: number
+          label?: string | null
+          tg_first_name?: string | null
+          tg_last_name?: string | null
+          tg_user_id: number
+          tg_username?: string | null
+          total?: number
+          valid_count?: number
+        }
+        Update: {
+          chat_id?: number | null
+          created_at?: string
+          duration_ms?: number
+          error_count?: number
+          id?: string
+          invalid_count?: number
+          label?: string | null
+          tg_first_name?: string | null
+          tg_last_name?: string | null
+          tg_user_id?: number
+          tg_username?: string | null
+          total?: number
+          valid_count?: number
+        }
+        Relationships: []
+      }
       bot_notification_settings: {
         Row: {
           created_at: string
