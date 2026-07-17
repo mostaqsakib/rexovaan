@@ -5,6 +5,8 @@ import path from 'node:path';
 import { Bot, InputFile } from 'grammy';
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
+// Polyfill for Node < 22: supabase-js realtime requires a global WebSocket
+if (!globalThis.WebSocket) globalThis.WebSocket = WebSocket;
 import { checkUrls, prewarm } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
 import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from './formatter.js';
