@@ -12,7 +12,11 @@ import { acquire as acquireLock, release as releaseLock } from './priority-lock.
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
-  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { params: { eventsPerSecond: 0 } },
+      global: { headers: { 'X-Client-Info': 'tg-link-checker' } },
+    })
   : null;
 if (!supabase) {
   console.warn('⚠️  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing — dashboard logging disabled');
