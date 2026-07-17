@@ -33,12 +33,12 @@ export default function LinkCheckerTab() {
 
   const loadAll = async () => {
     const [c, p, j, inv] = await Promise.all([
-      supabase.from('google_account_cookies').select('*').order('created_at', { ascending: false }),
+      supabase.functions.invoke('admin-list-google-cookies'),
       supabase.from('bot_products').select('id, name, is_manual_delivery, link_check_auto').eq('is_active', true).order('name'),
       supabase.from('link_check_jobs').select('*').order('created_at', { ascending: false }).limit(20),
       supabase.from('bot_product_stock_items').select('id, product_id, data, invalid_reason, invalidated_at, invalidated_job_id').eq('status', 'invalid').order('invalidated_at', { ascending: false }).limit(500),
     ]);
-    setCookies((c.data as Cookie[]) || []);
+    setCookies(((c.data as { cookies?: Cookie[] } | null)?.cookies) || []);
     setProducts(((p.data as Product[]) || []).filter(prod => isAllowedProduct(prod.name)));
     setJobs((j.data as Job[]) || []);
     setInvalidStock((inv.data as InvalidStock[]) || []);
