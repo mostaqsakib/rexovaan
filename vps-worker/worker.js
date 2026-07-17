@@ -15,6 +15,7 @@ import './polyfill.js'; // MUST be before @supabase import — sets globalThis.W
 import WebSocket from 'ws';
 import { createClient } from '@supabase/supabase-js';
 import { chromium } from 'playwright';
+import { waitUntilFree as waitForBotLock, isBotBusy } from './priority-lock.js';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -337,6 +338,8 @@ async function runWorker(job, ctx, signal) {
   while (!signal.cancelled) {
     let item = null;
     try {
+      // Bot checker has priority — pause between claims while it runs.
+      await waitForBotLock();
       const { data: claimed, error } = await sb.rpc('claim_next_link_check_item', { _job_id: job.id });
       if (error) { console.error('claim error:', error.message); await sleep(2000); continue; }
       item = Array.isArray(claimed) ? claimed[0] : claimed;
@@ -491,6 +494,8 @@ async function pollLoop() {
   while (true) {
     try {
       if (!busy) {
+        // Skip poll cycles while the bot checker is active.
+        if (isBotBusy()) { await sleep(pollMs); continue; }
         await recoverStaleJobs();
         await autoEnqueueIfNeeded();
         const { data: jobs } = await sb
