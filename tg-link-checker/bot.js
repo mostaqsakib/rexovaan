@@ -63,7 +63,7 @@ if (!BOT_TOKEN) {
   process.exit(1);
 }
 
-const hardMaxConc = Math.max(1, parseInt(HARD_MAX_CONCURRENCY, 10) || 25);
+const hardMaxConc = Math.max(1, parseInt(HARD_MAX_CONCURRENCY, 10) || 15);
 const maxConc = Math.max(1, Math.min(parseInt(MAX_CONCURRENCY, 10) || hardMaxConc, hardMaxConc));
 const inlineLimit = parseInt(INLINE_LIMIT, 10);
 const progressInterval = parseInt(PROGRESS_EDIT_INTERVAL_MS, 10);
