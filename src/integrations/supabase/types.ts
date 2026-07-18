@@ -1092,6 +1092,7 @@ export type Database = {
         Row: {
           created_at: string
           data: Json
+          data_values_lower: string[] | null
           id: string
           invalid_reason: string | null
           invalidated_at: string | null
@@ -1107,6 +1108,7 @@ export type Database = {
         Insert: {
           created_at?: string
           data?: Json
+          data_values_lower?: string[] | null
           id?: string
           invalid_reason?: string | null
           invalidated_at?: string | null
@@ -1122,6 +1124,7 @@ export type Database = {
         Update: {
           created_at?: string
           data?: Json
+          data_values_lower?: string[] | null
           id?: string
           invalid_reason?: string | null
           invalidated_at?: string | null
