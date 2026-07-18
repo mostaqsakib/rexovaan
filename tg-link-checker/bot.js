@@ -50,8 +50,8 @@ async function logJobToDashboard(ctx, { label, total, valid, invalid, errors, du
 
 const {
   BOT_TOKEN,
-  MAX_CONCURRENCY = '25',
-  HARD_MAX_CONCURRENCY = '25',
+  MAX_CONCURRENCY = '12',
+  HARD_MAX_CONCURRENCY = '15',
   INLINE_LIMIT = '50',
   PROGRESS_EDIT_INTERVAL_MS = '2000',
   ALLOWED_USER_IDS = '',
@@ -63,7 +63,7 @@ if (!BOT_TOKEN) {
   process.exit(1);
 }
 
-const hardMaxConc = Math.max(1, parseInt(HARD_MAX_CONCURRENCY, 10) || 25);
+const hardMaxConc = Math.max(1, parseInt(HARD_MAX_CONCURRENCY, 10) || 15);
 const maxConc = Math.max(1, Math.min(parseInt(MAX_CONCURRENCY, 10) || hardMaxConc, hardMaxConc));
 const inlineLimit = parseInt(INLINE_LIMIT, 10);
 const progressInterval = parseInt(PROGRESS_EDIT_INTERVAL_MS, 10);
