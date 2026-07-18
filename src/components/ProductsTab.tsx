@@ -1409,7 +1409,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
               { key: 'reserved', label: 'Reserved', icon: ShieldCheck, color: 'text-primary border-primary/30 bg-primary/5' },
               { key: 'sold', label: 'Sold', icon: ShoppingCart, color: 'text-success border-success/30 bg-success/5' },
               { key: 'external', label: 'External', icon: Globe2, color: 'text-info border-info/30 bg-info/5' },
-              { key: 'invalid', label: 'Deleted', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
+              { key: 'invalid', label: 'Previously invalidated', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
             ];
             const extraDupCount = review.pasteDuplicateAction === 'add' ? review.duplicateLines.length : 0;
             const newCount = review.newLines.length + extraDupCount;
