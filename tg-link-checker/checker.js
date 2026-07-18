@@ -247,6 +247,17 @@ export async function prewarm() {
 }
 
 const STALL_TIMEOUT_MS = parseInt(process.env.STALL_TIMEOUT_MS || '90000', 10);
+const RECYCLE_AFTER_CHECKS = Math.max(200, parseInt(process.env.RECYCLE_AFTER_CHECKS || '1500', 10));
+
+async function recycleBrowser(reason = 'recycle') {
+  const dying = browserCtx;
+  browserCtx = null;
+  browserLaunchPromise = null;
+  if (dying) {
+    console.log(`♻️ Recycling Chrome (${reason})`);
+    try { await dying.close(); } catch {}
+  }
+}
 
 export async function checkUrls(urls, { concurrency = 50, onProgress, signal } = {}) {
   const total = urls.length;
@@ -255,6 +266,8 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
   let checked = 0, valid = 0, invalid = 0, errors = 0;
   let lastProgressAt = Date.now();
   let stallRecoveries = 0;
+  let checksSinceRecycle = 0;
+  let recycling = false;
 
   // Throttle progress callbacks to reduce per-check overhead (bot edits etc.).
   let lastTick = 0;
