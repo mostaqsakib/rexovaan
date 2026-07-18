@@ -738,10 +738,24 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   const handleAdd = async () => {
     // Postgres jsonb rejects actual NULL/control characters as unsupported Unicode escapes.
     // Sanitize before duplicate review AND before insert so the exact same safe values are used end-to-end.
-    const sanitizeStockLine = (line: string) => line
-      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
-      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
-      .trim();
+    const sanitizeStockLine = (line: string) => {
+      const withoutControls = line.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+      let safe = '';
+      for (let i = 0; i < withoutControls.length; i += 1) {
+        const code = withoutControls.charCodeAt(i);
+        if (code >= 0xd800 && code <= 0xdbff) {
+          const next = withoutControls.charCodeAt(i + 1);
+          if (next >= 0xdc00 && next <= 0xdfff) {
+            safe += withoutControls[i] + withoutControls[i + 1];
+            i += 1;
+          }
+          continue;
+        }
+        if (code >= 0xdc00 && code <= 0xdfff) continue;
+        safe += withoutControls[i];
+      }
+      return safe.trim();
+    };
     const rawLines = value.split('\n').map(sanitizeStockLine).filter(Boolean);
     const seen = new Set<string>();
     const duplicateLines: string[] = [];
