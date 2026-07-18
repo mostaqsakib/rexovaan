@@ -101,6 +101,7 @@ bot.command('start', (ctx) => ctx.reply(
   + `Concurrency: <b>${maxConc}</b>   •   Max links / job: <b>${maxLinks}</b>`,
   { parse_mode: 'HTML' },
 ));
+bot.command('ping', (ctx) => ctx.reply('pong'));
 bot.command('help', (ctx) => ctx.reply('Just send a .txt file or paste links. I handle the rest.'));
 bot.command('status', (ctx) => {
   const p = pendingCount(ctx.from.id);
@@ -298,13 +299,62 @@ function safeName(s) {
 }
 
 bot.catch((err) => {
-  console.error('bot error:', err);
+  const error = err?.error || err;
+  const code = error?.error_code || error?.code;
+  const description = error?.description || error?.message || String(error);
+  console.error('bot error:', { code, description });
+
+  if (code === 409 || /terminated by other getUpdates request|webhook is active/i.test(description)) {
+    console.error('❌ Telegram polling conflict. Stop every other process using this same BOT_TOKEN (Railway/VPS/old PM2), then restart tg-link-checker.');
+  }
+  if (code === 401 || /unauthorized/i.test(description)) {
+    console.error('❌ BOT_TOKEN is invalid/rotated. Update .env BOT_TOKEN, then run: pm2 restart tg-link-checker --update-env');
+  }
 });
 
-console.log(`🚀 tg-link-checker starting (concurrency=${maxConc}, inline_limit=${inlineLimit})`);
-prewarm().catch(() => {});
-bot.start({
-  drop_pending_updates: true,
-  onStart: (me) => console.log(`✅ @${me.username} online`),
+process.on('unhandledRejection', (err) => {
+  console.error('unhandled rejection:', err?.message || err);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('uncaught exception:', err?.message || err);
+  process.exit(1);
+});
+
+async function main() {
+  console.log(`🚀 tg-link-checker starting (concurrency=${maxConc}, inline_limit=${inlineLimit}, hard_cap=${hardMaxConc})`);
+
+  try {
+    const me = await bot.api.getMe();
+    console.log(`🔐 Telegram token OK: @${me.username}`);
+  } catch (error) {
+    const code = error?.error_code || error?.code;
+    const description = error?.description || error?.message || String(error);
+    console.error('❌ Telegram token check failed:', { code, description });
+    process.exit(1);
+  }
+
+  try {
+    await bot.api.deleteWebhook({ drop_pending_updates: true });
+    console.log('🧹 Telegram webhook cleared; polling mode enabled');
+  } catch (error) {
+    console.error('⚠️ Could not clear Telegram webhook:', error?.description || error?.message || error);
+  }
+
+  prewarm().catch((error) => console.warn('⚠️ Browser prewarm failed:', error?.message || error));
+  await bot.start({
+    drop_pending_updates: true,
+    onStart: (me) => console.log(`✅ @${me.username} online`),
+  });
+}
+
+main().catch((error) => {
+  const code = error?.error_code || error?.code;
+  const description = error?.description || error?.message || String(error);
+  console.error('❌ Bot stopped during startup:', { code, description });
+  if (code === 409 || /terminated by other getUpdates request|webhook is active/i.test(description)) {
+    console.error('Fix: stop the duplicate bot instance that uses the same BOT_TOKEN, then restart this PM2 process with --update-env.');
+  }
+  process.exit(1);
 });
 
