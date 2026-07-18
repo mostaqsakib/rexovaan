@@ -762,7 +762,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         p_values: chunk,
       });
       if (rpcErr) {
-        toast.error('Failed to check duplicate stock');
+        console.error('find_stock_duplicates failed:', rpcErr);
+        toast.error(`Failed to check duplicate stock: ${rpcErr.message}`);
         setSaving(false);
         return;
       }
