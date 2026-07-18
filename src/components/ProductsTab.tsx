@@ -1529,7 +1529,12 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                         {expanded && (
                           <div className="border-t border-border/60 bg-background/40 px-3 py-2 max-h-40 overflow-y-auto font-mono text-[11px] leading-relaxed">
                             {bucket.lines.slice(0, 500).map((l, i) => (
-                              <div key={i} className="truncate">{l}</div>
+                              <div key={i} className="flex items-start gap-2 py-0.5">
+                                <span className="truncate flex-1">{l}</span>
+                                {b.key === 'invalid' && review.invalidReasonByLine[l] && (
+                                  <span className="shrink-0 text-destructive/80 italic">— {review.invalidReasonByLine[l]}</span>
+                                )}
+                              </div>
                             ))}
                             {bucket.lines.length > 500 && (
                               <div className="text-muted-foreground italic">…and {bucket.lines.length - 500} more</div>
