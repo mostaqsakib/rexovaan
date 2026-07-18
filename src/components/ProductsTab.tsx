@@ -518,6 +518,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   };
   const [review, setReview] = useState<ReviewState | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const confirmInFlightRef = useRef(false);
 
 
   const formatBytes = (b: number) => {
@@ -829,6 +830,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
   const confirmAdd = async () => {
     if (!review) return;
+    if (confirmInFlightRef.current) return;
+    confirmInFlightRef.current = true;
     setConfirming(true);
     const newLines = review.newLines;
     const readdIds: string[] = [];
@@ -851,6 +854,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         if (srcErr) {
           toast.error(`Re-add fetch failed: ${srcErr.message}`);
           setConfirming(false);
+          confirmInFlightRef.current = false;
           return;
         }
         readdPayloads.push(...(srcRows || []).map((r: any) => ({ product_id: product.id, data: r.data })));
@@ -877,6 +881,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         if (error) {
           toast.error(`Failed to add stock: ${error.message}`);
           setConfirming(false);
+          confirmInFlightRef.current = false;
           return;
         }
         const ids = (insertedRows || []).map((r) => r.id);
@@ -892,6 +897,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     if (totalAdded === 0) {
       toast.message('Nothing to add — all items skipped');
       setConfirming(false);
+      confirmInFlightRef.current = false;
       setReview(null);
       setValue('');
       return;
@@ -932,8 +938,10 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     await loadStock('available');
     onStockChanged?.(product.id);
     setConfirming(false);
+    confirmInFlightRef.current = false;
     setReview(null);
   };
+
 
 
   const cleanupStorageFiles = async (itemIds: string[]) => {
