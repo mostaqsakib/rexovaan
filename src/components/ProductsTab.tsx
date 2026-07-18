@@ -515,6 +515,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }>;
     actions: Record<ReviewBucketKey, 'skip' | 'readd'>;
     expanded: Record<ReviewBucketKey, boolean>;
+    invalidReasonByLine: Record<string, string | null>;
+    invalidReasonSummary: Array<{ reason: string; count: number }>;
   };
   const [review, setReview] = useState<ReviewState | null>(null);
   const [confirming, setConfirming] = useState(false);

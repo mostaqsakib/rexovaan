@@ -2478,6 +2478,7 @@ export type Database = {
         Args: { p_product_id: string; p_values: string[] }
         Returns: {
           id: string
+          invalid_reason: string
           matched_value: string
           status: string
         }[]
