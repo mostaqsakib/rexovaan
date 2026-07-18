@@ -736,7 +736,27 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   }, [items]);
 
   const handleAdd = async () => {
-    const rawLines = value.split('\n').map((line) => line.trim()).filter(Boolean);
+    // Postgres jsonb rejects actual NULL/control characters as unsupported Unicode escapes.
+    // Sanitize before duplicate review AND before insert so the exact same safe values are used end-to-end.
+    const sanitizeStockLine = (line: string) => {
+      const withoutControls = line.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+      let safe = '';
+      for (let i = 0; i < withoutControls.length; i += 1) {
+        const code = withoutControls.charCodeAt(i);
+        if (code >= 0xd800 && code <= 0xdbff) {
+          const next = withoutControls.charCodeAt(i + 1);
+          if (next >= 0xdc00 && next <= 0xdfff) {
+            safe += withoutControls[i] + withoutControls[i + 1];
+            i += 1;
+          }
+          continue;
+        }
+        if (code >= 0xdc00 && code <= 0xdfff) continue;
+        safe += withoutControls[i];
+      }
+      return safe.trim();
+    };
+    const rawLines = value.split('\n').map(sanitizeStockLine).filter(Boolean);
     const seen = new Set<string>();
     const duplicateLines: string[] = [];
     for (const line of rawLines) {
@@ -750,9 +770,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     setSaving(true);
 
     // Server-side duplicate detection — sends only the submitted values, no full table download.
-    // Strip NULL bytes and other control chars that Postgres rejects as "unsupported Unicode escape sequence".
-    const sanitize = (s: string) => s.replace(/\u0000/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-    const valuesLower = lines.map((l) => sanitize(l.toLowerCase()));
+    const valuesLower = lines.map((l) => l.toLowerCase());
     const matches: Array<{ matched_value: string; id: string; status: string }> = [];
     const RPC_CHUNK = 2000;
     for (let i = 0; i < valuesLower.length; i += RPC_CHUNK) {
