@@ -774,7 +774,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
     // Server-side duplicate detection — sends only the submitted values, no full table download.
     const valuesLower = lines.map((l) => l.toLowerCase());
-    const matches: Array<{ matched_value: string; id: string; status: string }> = [];
+    const matches: Array<{ matched_value: string; id: string; status: string; invalid_reason: string | null }> = [];
     const RPC_CHUNK = 2000;
     for (let i = 0; i < valuesLower.length; i += RPC_CHUNK) {
       const chunk = valuesLower.slice(i, i + RPC_CHUNK);
@@ -788,12 +788,12 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         setSaving(false);
         return;
       }
-      matches.push(...((rpcRows || []) as Array<{ matched_value: string; id: string; status: string }>));
+      matches.push(...((rpcRows || []) as Array<{ matched_value: string; id: string; status: string; invalid_reason: string | null }>));
     }
 
-    const valueIndex = new Map<string, { id: string; status: string }>();
+    const valueIndex = new Map<string, { id: string; status: string; invalid_reason: string | null }>();
     for (const m of matches) {
-      if (!valueIndex.has(m.matched_value)) valueIndex.set(m.matched_value, { id: m.id, status: m.status });
+      if (!valueIndex.has(m.matched_value)) valueIndex.set(m.matched_value, { id: m.id, status: m.status, invalid_reason: m.invalid_reason });
     }
 
     const buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }> = {
@@ -804,6 +804,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       invalid: { ids: [], lines: [] },
     };
     const newLines: string[] = [];
+    const invalidReasonByLine: Record<string, string | null> = {};
+    const reasonCounts = new Map<string, number>();
     for (const line of lines) {
       const hit = valueIndex.get(line.toLowerCase());
       if (!hit) { newLines.push(line); continue; }
@@ -815,7 +817,15 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         'invalid';
       buckets[key].ids.push(hit.id);
       buckets[key].lines.push(line);
+      if (key === 'invalid') {
+        const reason = (hit.invalid_reason || '').trim() || 'Unknown reason';
+        invalidReasonByLine[line] = reason;
+        reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
+      }
     }
+    const invalidReasonSummary = Array.from(reasonCounts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
 
     setReview({
       totalSubmitted: rawLines.length,
@@ -826,6 +836,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       buckets,
       actions: { available: 'skip', reserved: 'skip', sold: 'skip', external: 'skip', invalid: 'skip' },
       expanded: { available: false, reserved: false, sold: false, external: false, invalid: false },
+      invalidReasonByLine,
+      invalidReasonSummary,
     });
     setSaving(false);
   };
