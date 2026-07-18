@@ -1435,10 +1435,16 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   {bucketMeta.map((b) => {
                     const Icon = b.icon;
                     const n = review.buckets[b.key].ids.length;
+                    const reasonTip = b.key === 'invalid' && review.invalidReasonSummary.length > 0
+                      ? review.invalidReasonSummary.map((r) => `${r.reason} (${r.count})`).join(' · ')
+                      : undefined;
                     return (
-                      <div key={b.key} className={`rounded-md border p-2.5 ${b.color}`}>
+                      <div key={b.key} className={`rounded-md border p-2.5 ${b.color}`} title={reasonTip}>
                         <div className="text-[10px] uppercase tracking-wide flex items-center gap-1"><Icon className="h-3 w-3" /> {b.label}</div>
                         <div className="text-xl font-bold tabular-nums">{n}</div>
+                        {reasonTip && (
+                          <div className="text-[10px] mt-1 opacity-80 line-clamp-2">{reasonTip}</div>
+                        )}
                       </div>
                     );
                   })}
