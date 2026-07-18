@@ -318,11 +318,18 @@ export async function checkUrls(urls, { concurrency = 50, onProgress, signal } =
       }
       results[i] = { url, ...judgement };
       checked++;
+      checksSinceRecycle++;
       lastProgressAt = Date.now();
       if (judgement.result === 'valid') valid++;
       else if (judgement.result === 'invalid') invalid++;
       else errors++;
       tick();
+      if (checksSinceRecycle >= RECYCLE_AFTER_CHECKS && !recycling && checked < total) {
+        recycling = true;
+        checksSinceRecycle = 0;
+        try { await recycleBrowser(`after ${RECYCLE_AFTER_CHECKS} checks`); }
+        finally { recycling = false; }
+      }
     }
   };
 
