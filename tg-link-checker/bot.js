@@ -1,7 +1,8 @@
-import 'dotenv/config';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import { Bot, InputFile } from 'grammy';
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
@@ -11,6 +12,19 @@ import { checkUrls, prewarm } from './checker.js';
 import { enqueue, pendingCount } from './queue.js';
 import { buildSummary, buildProgressText, extractUrls, dedupe, escapeHtml } from './formatter.js';
 import { acquire as acquireLock, release as releaseLock } from './priority-lock.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const localEnvPath = path.join(__dirname, '.env');
+const cwdEnvPath = path.join(process.cwd(), '.env');
+
+const loadedEnvFiles = [];
+for (const envPath of [...new Set([localEnvPath, cwdEnvPath])]) {
+  if (fs.existsSync(envPath)) {
+    const result = dotenv.config({ path: envPath, override: false });
+    if (!result.error) loadedEnvFiles.push(envPath);
+  }
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,8 +62,8 @@ async function logJobToDashboard(ctx, { label, total, valid, invalid, errors, du
 }
 
 
+const BOT_TOKEN = (process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const {
-  BOT_TOKEN,
   MAX_CONCURRENCY = '25',
   HARD_MAX_CONCURRENCY = '25',
   INLINE_LIMIT = '50',
@@ -59,7 +73,13 @@ const {
 } = process.env;
 
 if (!BOT_TOKEN) {
-  console.error('Missing BOT_TOKEN in .env');
+  console.error('Missing BOT_TOKEN in .env', {
+    cwd: process.cwd(),
+    botDir: __dirname,
+    loadedEnvFiles,
+    checked: [localEnvPath, cwdEnvPath],
+    hint: 'Add BOT_TOKEN=123456:ABC... to tg-link-checker/.env, or set TELEGRAM_BOT_TOKEN.',
+  });
   process.exit(1);
 }
 
