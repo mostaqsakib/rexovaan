@@ -938,8 +938,10 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     await loadStock('available');
     onStockChanged?.(product.id);
     setConfirming(false);
+    confirmInFlightRef.current = false;
     setReview(null);
   };
+
 
 
   const cleanupStorageFiles = async (itemIds: string[]) => {
