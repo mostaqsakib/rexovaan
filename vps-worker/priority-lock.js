@@ -15,7 +15,8 @@ export function isBotBusy() {
   try {
     const raw = fs.readFileSync(LOCK_PATH, 'utf8');
     const info = JSON.parse(raw);
-    const age = Date.now() - Number(info?.startedAt || 0);
+    const lastSeen = Number(info?.heartbeatAt || info?.updatedAt || info?.startedAt || 0);
+    const age = Date.now() - lastSeen;
     if (age > STALE_MS) {
       // Stale — bot likely crashed. Remove so we stop waiting.
       try { fs.unlinkSync(LOCK_PATH); } catch {}

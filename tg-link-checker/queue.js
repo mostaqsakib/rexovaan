@@ -1,37 +1,32 @@
-// Per-user FIFO job queue. Different users run in parallel; the same
-// user's submissions are processed one-at-a-time.
+// Global FIFO job queue. The checker uses one shared Chrome profile/context,
+// so running multiple Telegram jobs in parallel can overload Chrome/Google and
+// make both the bot checker and site checker look stuck.
 
-const userQueues = new Map(); // userId -> { running, tasks: [] }
+const queue = { running: false, tasks: [] };
 
 export function enqueue(userId, task) {
-  let q = userQueues.get(userId);
-  if (!q) { q = { running: false, tasks: [] }; userQueues.set(userId, q); }
   return new Promise((resolve, reject) => {
-    q.tasks.push({ task, resolve, reject });
-    drain(userId);
+    queue.tasks.push({ userId, task, resolve, reject });
+    drain();
   });
 }
 
 export function pendingCount(userId) {
-  const q = userQueues.get(userId);
-  if (!q) return 0;
-  return q.tasks.length + (q.running ? 1 : 0);
+  return queue.tasks.length + (queue.running ? 1 : 0);
 }
 
-async function drain(userId) {
-  const q = userQueues.get(userId);
-  if (!q || q.running) return;
-  const next = q.tasks.shift();
+async function drain() {
+  if (queue.running) return;
+  const next = queue.tasks.shift();
   if (!next) return;
-  q.running = true;
+  queue.running = true;
   try {
     const result = await next.task();
     next.resolve(result);
   } catch (e) {
     next.reject(e);
   } finally {
-    q.running = false;
-    if (q.tasks.length === 0) userQueues.delete(userId);
-    else drain(userId);
+    queue.running = false;
+    if (queue.tasks.length > 0) drain();
   }
 }
