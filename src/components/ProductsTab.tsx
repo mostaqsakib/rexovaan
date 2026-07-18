@@ -515,6 +515,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }>;
     actions: Record<ReviewBucketKey, 'skip' | 'readd'>;
     expanded: Record<ReviewBucketKey, boolean>;
+    invalidReasonByLine: Record<string, string | null>;
+    invalidReasonSummary: Array<{ reason: string; count: number }>;
   };
   const [review, setReview] = useState<ReviewState | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -772,7 +774,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
     // Server-side duplicate detection — sends only the submitted values, no full table download.
     const valuesLower = lines.map((l) => l.toLowerCase());
-    const matches: Array<{ matched_value: string; id: string; status: string }> = [];
+    const matches: Array<{ matched_value: string; id: string; status: string; invalid_reason: string | null }> = [];
     const RPC_CHUNK = 2000;
     for (let i = 0; i < valuesLower.length; i += RPC_CHUNK) {
       const chunk = valuesLower.slice(i, i + RPC_CHUNK);
@@ -786,12 +788,12 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         setSaving(false);
         return;
       }
-      matches.push(...((rpcRows || []) as Array<{ matched_value: string; id: string; status: string }>));
+      matches.push(...((rpcRows || []) as Array<{ matched_value: string; id: string; status: string; invalid_reason: string | null }>));
     }
 
-    const valueIndex = new Map<string, { id: string; status: string }>();
+    const valueIndex = new Map<string, { id: string; status: string; invalid_reason: string | null }>();
     for (const m of matches) {
-      if (!valueIndex.has(m.matched_value)) valueIndex.set(m.matched_value, { id: m.id, status: m.status });
+      if (!valueIndex.has(m.matched_value)) valueIndex.set(m.matched_value, { id: m.id, status: m.status, invalid_reason: m.invalid_reason });
     }
 
     const buckets: Record<ReviewBucketKey, { ids: string[]; lines: string[] }> = {
@@ -802,6 +804,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       invalid: { ids: [], lines: [] },
     };
     const newLines: string[] = [];
+    const invalidReasonByLine: Record<string, string | null> = {};
+    const reasonCounts = new Map<string, number>();
     for (const line of lines) {
       const hit = valueIndex.get(line.toLowerCase());
       if (!hit) { newLines.push(line); continue; }
@@ -813,7 +817,15 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         'invalid';
       buckets[key].ids.push(hit.id);
       buckets[key].lines.push(line);
+      if (key === 'invalid') {
+        const reason = (hit.invalid_reason || '').trim() || 'Unknown reason';
+        invalidReasonByLine[line] = reason;
+        reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
+      }
     }
+    const invalidReasonSummary = Array.from(reasonCounts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
 
     setReview({
       totalSubmitted: rawLines.length,
@@ -824,6 +836,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       buckets,
       actions: { available: 'skip', reserved: 'skip', sold: 'skip', external: 'skip', invalid: 'skip' },
       expanded: { available: false, reserved: false, sold: false, external: false, invalid: false },
+      invalidReasonByLine,
+      invalidReasonSummary,
     });
     setSaving(false);
   };
@@ -1395,7 +1409,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
               { key: 'reserved', label: 'Reserved', icon: ShieldCheck, color: 'text-primary border-primary/30 bg-primary/5' },
               { key: 'sold', label: 'Sold', icon: ShoppingCart, color: 'text-success border-success/30 bg-success/5' },
               { key: 'external', label: 'External', icon: Globe2, color: 'text-info border-info/30 bg-info/5' },
-              { key: 'invalid', label: 'Deleted', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
+              { key: 'invalid', label: 'Previously invalidated', icon: Trash2, color: 'text-destructive border-destructive/30 bg-destructive/5' },
             ];
             const extraDupCount = review.pasteDuplicateAction === 'add' ? review.duplicateLines.length : 0;
             const newCount = review.newLines.length + extraDupCount;
@@ -1421,10 +1435,16 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                   {bucketMeta.map((b) => {
                     const Icon = b.icon;
                     const n = review.buckets[b.key].ids.length;
+                    const reasonTip = b.key === 'invalid' && review.invalidReasonSummary.length > 0
+                      ? review.invalidReasonSummary.map((r) => `${r.reason} (${r.count})`).join(' · ')
+                      : undefined;
                     return (
-                      <div key={b.key} className={`rounded-md border p-2.5 ${b.color}`}>
+                      <div key={b.key} className={`rounded-md border p-2.5 ${b.color}`} title={reasonTip}>
                         <div className="text-[10px] uppercase tracking-wide flex items-center gap-1"><Icon className="h-3 w-3" /> {b.label}</div>
                         <div className="text-xl font-bold tabular-nums">{n}</div>
+                        {reasonTip && (
+                          <div className="text-[10px] mt-1 opacity-80 line-clamp-2">{reasonTip}</div>
+                        )}
                       </div>
                     );
                   })}
@@ -1509,7 +1529,12 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                         {expanded && (
                           <div className="border-t border-border/60 bg-background/40 px-3 py-2 max-h-40 overflow-y-auto font-mono text-[11px] leading-relaxed">
                             {bucket.lines.slice(0, 500).map((l, i) => (
-                              <div key={i} className="truncate">{l}</div>
+                              <div key={i} className="flex items-start gap-2 py-0.5">
+                                <span className="truncate flex-1">{l}</span>
+                                {b.key === 'invalid' && review.invalidReasonByLine[l] && (
+                                  <span className="shrink-0 text-destructive/80 italic">— {review.invalidReasonByLine[l]}</span>
+                                )}
+                              </div>
                             ))}
                             {bucket.lines.length > 500 && (
                               <div className="text-muted-foreground italic">…and {bucket.lines.length - 500} more</div>
