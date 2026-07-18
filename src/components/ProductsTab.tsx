@@ -897,6 +897,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     if (totalAdded === 0) {
       toast.message('Nothing to add — all items skipped');
       setConfirming(false);
+      confirmInFlightRef.current = false;
       setReview(null);
       setValue('');
       return;
