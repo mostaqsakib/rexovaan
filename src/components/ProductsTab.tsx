@@ -830,6 +830,8 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
 
   const confirmAdd = async () => {
     if (!review) return;
+    if (confirmInFlightRef.current) return;
+    confirmInFlightRef.current = true;
     setConfirming(true);
     const newLines = review.newLines;
     const readdIds: string[] = [];
