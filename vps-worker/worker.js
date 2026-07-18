@@ -89,6 +89,7 @@ const browserFallbackStatuses = new Set(
     .filter(Number.isFinite),
 );
 const STALL_TIMEOUT_MS = parseInt(process.env.STALL_TIMEOUT_MS || '90000', 10);
+const RECYCLE_AFTER_CHECKS = Math.max(200, parseInt(process.env.RECYCLE_AFTER_CHECKS || '1500', 10));
 
 let cooldownUntil = 0;
 function triggerCooldown(ms) {
@@ -103,7 +104,26 @@ async function awaitCooldown() {
 let browserCtx = null;
 let browserLaunchPromise = null;
 let busy = false;
+let checksSinceRecycle = 0;
+let recyclingBrowser = false;
 const QUEUED_STATUSES = ['vps_queued', 'queued'];
+
+async function recycleBrowser(reason = 'recycle') {
+  if (recyclingBrowser) return;
+  recyclingBrowser = true;
+  try {
+    const dying = browserCtx;
+    browserCtx = null;
+    browserLaunchPromise = null;
+    checksSinceRecycle = 0;
+    if (dying) {
+      console.log(`♻️ Recycling Chrome (${reason})`);
+      try { await dying.close(); } catch {}
+    }
+  } finally {
+    recyclingBrowser = false;
+  }
+}
 
 async function isProfileInUse(profileDir) {
   try {
@@ -359,7 +379,11 @@ async function runWorker(job, signal) {
   while (!signal.cancelled) {
     let item = null;
     try {
-      // Bot checker has priority — pause between claims while it runs.
+      // Bot checker has priority — pause between claims while it runs, and
+      // proactively free Chrome RAM so the bot's browser has headroom.
+      if (isBotBusy() && browserCtx) {
+        await recycleBrowser('bot checker took priority');
+      }
       await waitForBotLock();
       const { data: claimed, error } = await sb.rpc('claim_next_link_check_item', { _job_id: job.id });
       if (error) { console.error('claim error:', error.message); await sleep(2000); continue; }
@@ -371,6 +395,10 @@ async function runWorker(job, signal) {
         .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
       await safeMark(item.id, judgement.result, judgement.reason);
       signal.lastProgressAt = Date.now();
+      checksSinceRecycle++;
+      if (checksSinceRecycle >= RECYCLE_AFTER_CHECKS) {
+        await recycleBrowser(`after ${RECYCLE_AFTER_CHECKS} checks`);
+      }
       if (perJobDelay > 0) await sleep(perJobDelay);
     } catch (e) {
       console.error('worker iteration error:', e?.message || e);
