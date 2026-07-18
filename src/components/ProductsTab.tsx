@@ -881,6 +881,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         if (error) {
           toast.error(`Failed to add stock: ${error.message}`);
           setConfirming(false);
+          confirmInFlightRef.current = false;
           return;
         }
         const ids = (insertedRows || []).map((r) => r.id);
