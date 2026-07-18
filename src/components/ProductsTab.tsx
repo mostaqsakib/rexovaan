@@ -736,7 +736,13 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   }, [items]);
 
   const handleAdd = async () => {
-    const rawLines = value.split('\n').map((line) => line.trim()).filter(Boolean);
+    // Postgres jsonb rejects actual NULL/control characters as unsupported Unicode escapes.
+    // Sanitize before duplicate review AND before insert so the exact same safe values are used end-to-end.
+    const sanitizeStockLine = (line: string) => line
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+      .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+      .trim();
+    const rawLines = value.split('\n').map(sanitizeStockLine).filter(Boolean);
     const seen = new Set<string>();
     const duplicateLines: string[] = [];
     for (const line of rawLines) {
@@ -750,9 +756,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
     setSaving(true);
 
     // Server-side duplicate detection — sends only the submitted values, no full table download.
-    // Strip NULL bytes and other control chars that Postgres rejects as "unsupported Unicode escape sequence".
-    const sanitize = (s: string) => s.replace(/\u0000/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-    const valuesLower = lines.map((l) => sanitize(l.toLowerCase()));
+    const valuesLower = lines.map((l) => l.toLowerCase());
     const matches: Array<{ matched_value: string; id: string; status: string }> = [];
     const RPC_CHUNK = 2000;
     for (let i = 0; i < valuesLower.length; i += RPC_CHUNK) {
