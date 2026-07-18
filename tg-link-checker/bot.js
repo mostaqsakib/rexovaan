@@ -50,8 +50,8 @@ async function logJobToDashboard(ctx, { label, total, valid, invalid, errors, du
 
 const {
   BOT_TOKEN,
-  MAX_CONCURRENCY = '25',
-  HARD_MAX_CONCURRENCY = '25',
+  MAX_CONCURRENCY = '12',
+  HARD_MAX_CONCURRENCY = '15',
   INLINE_LIMIT = '50',
   PROGRESS_EDIT_INTERVAL_MS = '2000',
   ALLOWED_USER_IDS = '',
