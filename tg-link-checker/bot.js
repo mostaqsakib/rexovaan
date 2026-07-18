@@ -205,13 +205,18 @@ async function runJob(ctx, progressMsgId, urls, label) {
     await safeReply(ctx, `⚠️ <b>ERRORS (${errors.length})</b>\n${escapeHtml(lines)}`);
   } else if (errors.length > 20) {
     try {
-      await withRetry(() => ctx.replyWithDocument(
-        new InputFile(Buffer.from(errors.map((e) => `${e.url}\t${e.reason}`).join('\n'), 'utf8'),
-          { filename: `errors-${safeName(label)}.txt` }),
-        { caption: `⚠️ ${errors.length} errors` },
-      ), 'errors doc');
+      const content = errors.map((e) => `${e.url}\t${e.reason}`).join('\n');
+      await sendDocFromString(
+        ctx,
+        content,
+        `errors-${safeName(label)}.txt`,
+        `⚠️ <b>ERRORS (${errors.length})</b>`,
+      );
     } catch (e) {
       await safeReply(ctx, `⚠️ Could not send errors file: ${escapeHtml(String(e?.message || e))}`);
+      // Fallback: send first 20 inline so user still sees something actionable
+      const lines = errors.slice(0, 20).map((e) => `${e.url} — ${e.reason}`).join('\n');
+      await safeReply(ctx, `⚠️ <b>ERRORS preview (first 20 of ${errors.length})</b>\n${escapeHtml(lines)}`);
     }
   }
 
