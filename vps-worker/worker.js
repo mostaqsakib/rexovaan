@@ -89,6 +89,7 @@ const browserFallbackStatuses = new Set(
     .filter(Number.isFinite),
 );
 const STALL_TIMEOUT_MS = parseInt(process.env.STALL_TIMEOUT_MS || '90000', 10);
+const RECYCLE_AFTER_CHECKS = Math.max(200, parseInt(process.env.RECYCLE_AFTER_CHECKS || '1500', 10));
 
 let cooldownUntil = 0;
 function triggerCooldown(ms) {
