@@ -379,12 +379,9 @@ async function runWorker(job, signal) {
   while (!signal.cancelled) {
     let item = null;
     try {
-      // Bot checker has priority — pause between claims while it runs, and
-      // proactively free Chrome RAM so the bot's browser has headroom.
-      if (isBotBusy() && browserCtx) {
-        await recycleBrowser('bot checker took priority');
-      }
+      // Bot checker has priority — pause between claims while it runs.
       await waitForBotLock();
+
       const { data: claimed, error } = await sb.rpc('claim_next_link_check_item', { _job_id: job.id });
       if (error) { console.error('claim error:', error.message); await sleep(2000); continue; }
       item = Array.isArray(claimed) ? claimed[0] : claimed;
