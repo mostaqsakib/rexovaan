@@ -854,6 +854,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         if (srcErr) {
           toast.error(`Re-add fetch failed: ${srcErr.message}`);
           setConfirming(false);
+          confirmInFlightRef.current = false;
           return;
         }
         readdPayloads.push(...(srcRows || []).map((r: any) => ({ product_id: product.id, data: r.data })));
