@@ -9,7 +9,7 @@ import {
   Calendar, TrendingUp, Link2, Users,
 } from 'lucide-react';
 
-const BOT_CONCURRENCY_CAP = 50;
+const BOT_CONCURRENCY_CAP = 25;
 
 type LogRow = {
   id: string;

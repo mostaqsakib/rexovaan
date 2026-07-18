@@ -83,11 +83,22 @@ const perJobDelay = parseInt(DELAY_BETWEEN_JOBS_MS, 10);
 const fetchByteLimit = Math.max(0, parseInt(FETCH_BYTE_LIMIT, 10) || 0);
 const autoRetryFailedCooldownMs = parseInt(process.env.AUTO_RETRY_FAILED_COOLDOWN_MS || '300000', 10);
 const browserFallbackStatuses = new Set(
-  (process.env.BROWSER_FALLBACK_HTTP_STATUSES || '401,403,429')
+  (process.env.BROWSER_FALLBACK_HTTP_STATUSES || '401,403')
     .split(',')
     .map((s) => parseInt(s.trim(), 10))
     .filter(Number.isFinite),
 );
+const STALL_TIMEOUT_MS = parseInt(process.env.STALL_TIMEOUT_MS || '90000', 10);
+
+let cooldownUntil = 0;
+function triggerCooldown(ms) {
+  const until = Date.now() + ms;
+  if (until > cooldownUntil) cooldownUntil = until;
+}
+async function awaitCooldown() {
+  const wait = cooldownUntil - Date.now();
+  if (wait > 0) await sleep(wait);
+}
 
 let browserCtx = null;
 let browserLaunchPromise = null;
@@ -196,6 +207,14 @@ function classifyPage(finalUrl, bodyText) {
 async function judgeUrlInBrowser(ctx, url, reasonPrefix = 'browser fallback') {
   const page = await ctx.newPage();
   try {
+    await page.route('**/*', (route) => {
+      const t = route.request().resourceType();
+      if (t === 'image' || t === 'media' || t === 'font' || t === 'stylesheet') {
+        return route.abort();
+      }
+      return route.continue();
+    }).catch(() => {});
+
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout });
     await page.waitForLoadState('networkidle', { timeout: Math.min(navTimeout, 8000) }).catch(() => {});
     const status = response?.status?.() || 0;
@@ -229,6 +248,7 @@ async function judgeUrl(ctx, url) {
 
   for (let attempt = 1; attempt <= retries + 1; attempt++) {
     try {
+      await awaitCooldown();
       const res = await ctx.request.get(url, {
         timeout: navTimeout,
         maxRedirects: 10,
@@ -239,6 +259,7 @@ async function judgeUrl(ctx, url) {
 
       // Transient — retry with backoff.
       if ((status === 429 || status === 408 || status >= 500) && attempt <= retries) {
+        if (status === 429) triggerCooldown(2500);
         await sleep(status === 429 ? 3000 : 1000 * attempt);
         continue;
       }
@@ -334,7 +355,7 @@ async function safeMark(itemId, result, reason) {
   }
 }
 
-async function runWorker(job, ctx, signal) {
+async function runWorker(job, signal) {
   while (!signal.cancelled) {
     let item = null;
     try {
@@ -345,9 +366,11 @@ async function runWorker(job, ctx, signal) {
       item = Array.isArray(claimed) ? claimed[0] : claimed;
       if (!item) return;
       // Hard-cap any single URL judgement so one stuck page can't hang the worker.
+      const ctx = await getBrowser();
       const judgement = await withHardTimeout(judgeUrl(ctx, item.url), navTimeout * 3 + 5000, 'judgeUrl')
         .catch((e) => ({ result: 'error', reason: String(e?.message || e).slice(0, 240) }));
       await safeMark(item.id, judgement.result, judgement.reason);
+      signal.lastProgressAt = Date.now();
       if (perJobDelay > 0) await sleep(perJobDelay);
     } catch (e) {
       console.error('worker iteration error:', e?.message || e);
@@ -361,15 +384,16 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function processJob(job) {
   console.log(`\n📋 Job ${job.id.slice(0, 8)} starting (concurrency=${job.concurrency})`);
-  const signal = { cancelled: false };
+  const signal = { cancelled: false, lastProgressAt: Date.now(), stallRecoveries: 0 };
   let cancelWatcher = null;
+  let stallWatcher = null;
 
   await sb.from('link_check_jobs')
     .update({ status: 'running', started_at: new Date().toISOString() })
     .eq('id', job.id);
 
   try {
-    const ctx = await getBrowser();
+    await getBrowser();
     const total = await populateItems(job);
     await sb.from('link_check_jobs').update({ total }).eq('id', job.id);
     console.log(`   → ${total} URLs to check`);
@@ -388,7 +412,24 @@ async function processJob(job) {
       if (data?.status === 'cancelled') signal.cancelled = true;
     }, 3000);
 
-    const workers = Array.from({ length: conc }, () => runWorker(job, ctx, signal));
+    stallWatcher = setInterval(async () => {
+      if (signal.cancelled) return;
+      if (isBotBusy()) {
+        signal.lastProgressAt = Date.now();
+        return;
+      }
+      const idle = Date.now() - signal.lastProgressAt;
+      if (idle < STALL_TIMEOUT_MS) return;
+      signal.stallRecoveries += 1;
+      console.warn(`⚠️ Stall detected (${Math.round(idle / 1000)}s no progress). Relaunching Chrome...`);
+      signal.lastProgressAt = Date.now();
+      const dying = browserCtx;
+      browserCtx = null;
+      browserLaunchPromise = null;
+      try { await dying?.close(); } catch {}
+    }, Math.max(5000, Math.floor(STALL_TIMEOUT_MS / 3)));
+
+    const workers = Array.from({ length: conc }, () => runWorker(job, signal));
     const results = await Promise.allSettled(workers);
     const failed = results.find((r) => r.status === 'rejected');
     if (failed) throw failed.reason;
@@ -406,6 +447,7 @@ async function processJob(job) {
   } finally {
     signal.cancelled = true;
     if (cancelWatcher) clearInterval(cancelWatcher);
+    if (stallWatcher) clearInterval(stallWatcher);
   }
 }
 
