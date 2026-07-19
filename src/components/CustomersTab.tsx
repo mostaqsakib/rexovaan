@@ -52,6 +52,9 @@ const CustomersTab = () => {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositNote, setDepositNote] = useState('');
   const [depositing, setDepositing] = useState(false);
+  const [deductCustomer, setDeductCustomer] = useState<Customer | null>(null);
+  const [deductAmount, setDeductAmount] = useState('');
+  const [deductNote, setDeductNote] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [creditCustomer, setCreditCustomer] = useState<Customer | null>(null);
