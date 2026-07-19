@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Users, Pencil, Plus, CreditCard, Ban, Activity, Tag, Globe, Send } from 'lucide-react';
+import { Loader2, Users, Pencil, Plus, Minus, CreditCard, Ban, Activity, Tag, Globe, Send } from 'lucide-react';
 import CustomerActivityDialog from './CustomerActivityDialog';
 import SpecialPricingDialog from './SpecialPricingDialog';
 import { Switch } from '@/components/ui/switch';
@@ -52,6 +52,9 @@ const CustomersTab = () => {
   const [depositAmount, setDepositAmount] = useState('');
   const [depositNote, setDepositNote] = useState('');
   const [depositing, setDepositing] = useState(false);
+  const [deductCustomer, setDeductCustomer] = useState<Customer | null>(null);
+  const [deductAmount, setDeductAmount] = useState('');
+  const [deductNote, setDeductNote] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [creditCustomer, setCreditCustomer] = useState<Customer | null>(null);
@@ -217,6 +220,29 @@ const CustomersTab = () => {
     }
   };
 
+  const handleDeduct = async () => {
+    if (!deductCustomer || !deductAmount || Number(deductAmount) <= 0 || !deductNote.trim()) return;
+    setSaving(true);
+    try {
+      const amt = Number(deductAmount);
+      const newBal = Number(deductCustomer.balance) - amt;
+      const { data, error } = await supabase.functions.invoke('admin-edit-balance', {
+        body: { customer_id: deductCustomer.id, new_balance: newBal, note: deductNote.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`${amt.toFixed(2)} USDT deducted from ${getLabel(deductCustomer)}`);
+      setDeductCustomer(null);
+      setDeductAmount('');
+      setDeductNote('');
+      fetchCustomers(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Deduct failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveCredit = async () => {
     if (!creditCustomer) return;
     setSavingCredit(true);
@@ -369,6 +395,15 @@ const CustomersTab = () => {
                     size="sm"
                     variant="outline"
                     className="gap-1 text-xs"
+                    onClick={() => { setDeductCustomer(c); setDeductAmount(''); setDeductNote(''); }}
+                  >
+                    <Minus className="h-3 w-3" />
+                    Deduct
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-xs"
                     onClick={() => { setEditCustomer(c); setNewBalance(Number(c.balance).toFixed(2)); setNote(''); }}
                   >
                     <Pencil className="h-3 w-3" />
@@ -511,6 +546,61 @@ const CustomersTab = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Deduct Dialog */}
+      <Dialog open={!!deductCustomer} onOpenChange={(open) => { if (!open) setDeductCustomer(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manual Deduct — {deductCustomer && getLabel(deductCustomer)}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              Current Balance: <span className="font-semibold text-foreground">{deductCustomer && Number(deductCustomer.balance).toFixed(2)} USDT</span>
+            </div>
+            {deductCustomer && deductAmount && Number(deductAmount) > 0 && (
+              <div className="rounded-md bg-muted p-2 text-xs">
+                After deduct: <span className="font-semibold">{(Number(deductCustomer.balance) - Number(deductAmount)).toFixed(2)} USDT</span>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium">Deduct Amount (USDT)</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Enter amount to deduct"
+                value={deductAmount}
+                onChange={(e) => setDeductAmount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Balance can go negative (due). Customer will be notified.
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Note (required) <span className="text-destructive">*</span></label>
+              <Textarea
+                placeholder="e.g. Product delivered manually, Refund reversal, Correction..."
+                value={deductNote}
+                onChange={(e) => setDeductNote(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeductCustomer(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeduct}
+              disabled={saving || !deductAmount || Number(deductAmount) <= 0 || !deductNote.trim()}
+            >
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Deduct & Notify
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
 
       {/* Pay Later / Credit Dialog */}
       <Dialog open={!!creditCustomer} onOpenChange={(open) => { if (!open) setCreditCustomer(null); }}>
