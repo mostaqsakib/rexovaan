@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Users, Pencil, Plus, CreditCard, Ban, Activity, Tag, Globe, Send } from 'lucide-react';
+import { Loader2, Users, Pencil, Plus, Minus, CreditCard, Ban, Activity, Tag, Globe, Send } from 'lucide-react';
 import CustomerActivityDialog from './CustomerActivityDialog';
 import SpecialPricingDialog from './SpecialPricingDialog';
 import { Switch } from '@/components/ui/switch';
