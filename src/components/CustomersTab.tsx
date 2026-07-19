@@ -395,6 +395,15 @@ const CustomersTab = () => {
                     size="sm"
                     variant="outline"
                     className="gap-1 text-xs"
+                    onClick={() => { setDeductCustomer(c); setDeductAmount(''); setDeductNote(''); }}
+                  >
+                    <Minus className="h-3 w-3" />
+                    Deduct
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-xs"
                     onClick={() => { setEditCustomer(c); setNewBalance(Number(c.balance).toFixed(2)); setNote(''); }}
                   >
                     <Pencil className="h-3 w-3" />
