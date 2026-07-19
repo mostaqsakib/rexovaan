@@ -220,6 +220,29 @@ const CustomersTab = () => {
     }
   };
 
+  const handleDeduct = async () => {
+    if (!deductCustomer || !deductAmount || Number(deductAmount) <= 0 || !deductNote.trim()) return;
+    setSaving(true);
+    try {
+      const amt = Number(deductAmount);
+      const newBal = Number(deductCustomer.balance) - amt;
+      const { data, error } = await supabase.functions.invoke('admin-edit-balance', {
+        body: { customer_id: deductCustomer.id, new_balance: newBal, note: deductNote.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`${amt.toFixed(2)} USDT deducted from ${getLabel(deductCustomer)}`);
+      setDeductCustomer(null);
+      setDeductAmount('');
+      setDeductNote('');
+      fetchCustomers(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Deduct failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveCredit = async () => {
     if (!creditCustomer) return;
     setSavingCredit(true);
