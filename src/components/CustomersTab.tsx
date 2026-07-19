@@ -547,6 +547,61 @@ const CustomersTab = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Deduct Dialog */}
+      <Dialog open={!!deductCustomer} onOpenChange={(open) => { if (!open) setDeductCustomer(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manual Deduct — {deductCustomer && getLabel(deductCustomer)}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              Current Balance: <span className="font-semibold text-foreground">{deductCustomer && Number(deductCustomer.balance).toFixed(2)} USDT</span>
+            </div>
+            {deductCustomer && deductAmount && Number(deductAmount) > 0 && (
+              <div className="rounded-md bg-muted p-2 text-xs">
+                After deduct: <span className="font-semibold">{(Number(deductCustomer.balance) - Number(deductAmount)).toFixed(2)} USDT</span>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium">Deduct Amount (USDT)</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Enter amount to deduct"
+                value={deductAmount}
+                onChange={(e) => setDeductAmount(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Balance can go negative (due). Customer will be notified.
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Note (required) <span className="text-destructive">*</span></label>
+              <Textarea
+                placeholder="e.g. Product delivered manually, Refund reversal, Correction..."
+                value={deductNote}
+                onChange={(e) => setDeductNote(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeductCustomer(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeduct}
+              disabled={saving || !deductAmount || Number(deductAmount) <= 0 || !deductNote.trim()}
+            >
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Deduct & Notify
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+
       {/* Pay Later / Credit Dialog */}
       <Dialog open={!!creditCustomer} onOpenChange={(open) => { if (!open) setCreditCustomer(null); }}>
         <DialogContent className="sm:max-w-md">
