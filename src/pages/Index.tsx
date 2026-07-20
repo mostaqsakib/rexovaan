@@ -15,6 +15,7 @@ import HistoryTab from '@/components/HistoryTab';
 import CustomersTab from '@/components/CustomersTab';
 import WithdrawalsTab from '@/components/WithdrawalsTab';
 import DepositsTab from '@/components/DepositsTab';
+import BkashActivityTab from '@/components/BkashActivityTab';
 
 import OnChainActivityTab from '@/components/OnChainActivityTab';
 import PricingTab from '@/components/PricingTab';
@@ -56,6 +57,7 @@ const TAB_TITLES: Record<string, string> = {
   payments: 'Payment Methods',
   
   onchain: 'On-Chain Transactions',
+  bkash: 'bKash Activity',
   emojis: 'Button Emojis',
   referrals: 'Referrals',
   resellers: 'Resellers',
@@ -194,6 +196,7 @@ const Index = () => {
             {activeTab === 'payments' && <PaymentMethodsTab />}
             
             {activeTab === 'onchain' && <OnChainActivityTab />}
+            {activeTab === 'bkash' && <BkashActivityTab />}
             {activeTab === 'emojis' && <ButtonEmojisTab />}
             {activeTab === 'referrals' && <ReferralStatsTab />}
             {activeTab === 'resellers' && <ResellersTab />}
