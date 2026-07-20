@@ -1421,7 +1421,11 @@ async function sendDocumentBuffer(chatId, fileBuffer, filename, caption, replyMa
     headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
     body: combined,
   });
-  if (!res.ok) console.error("sendDocument failed:", await res.text());
+  if (!res.ok) {
+    console.error("sendDocument failed:", await res.text());
+    return null;
+  }
+  try { return await res.json(); } catch { return null; }
 }
 
 async function sendDocumentByUrl(chatId, url, caption, replyMarkup) {
