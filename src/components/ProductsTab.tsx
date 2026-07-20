@@ -520,6 +520,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   };
   const [review, setReview] = useState<ReviewState | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [broadcastOnAdd, setBroadcastOnAdd] = useState(false);
   const confirmInFlightRef = useRef(false);
 
 
@@ -595,18 +596,22 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         .from('bot_products')
         .update({ stock_source: 'internal', last_known_stock: availableTotal })
         .eq('id', product.id);
-      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
-        body: { productId: product.id, addedCount: success },
-      });
-      toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
-      if (broadcastError) {
-        await supabase
-          .from('bot_products')
-          .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
-          .eq('id', product.id);
-        toast.error('Files added, but broadcast could not be started');
+      if (broadcastOnAdd) {
+        const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+          body: { productId: product.id, addedCount: success },
+        });
+        toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
+        if (broadcastError) {
+          await supabase
+            .from('bot_products')
+            .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+            .eq('id', product.id);
+          toast.error('Files added, but broadcast could not be started');
+        } else {
+          toast.success('Stock alert broadcast started');
+        }
       } else {
-        toast.success('Stock alert broadcast started');
+        toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
       }
       void loadStock('available');
       onStockChanged?.(product.id);
@@ -934,18 +939,22 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       .from('bot_products')
       .update({ stock_source: 'internal', last_known_stock: availableTotal })
       .eq('id', product.id);
-    const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
-      body: { productId: product.id, addedCount: totalAdded, stockItemIds: insertedRowIds },
-    });
-    toast.success(`${newInsertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
-    if (broadcastError) {
-      await supabase
-        .from('bot_products')
-        .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
-        .eq('id', product.id);
-      toast.error('Stock added, but broadcast could not be started');
+    if (broadcastOnAdd) {
+      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+        body: { productId: product.id, addedCount: totalAdded, stockItemIds: insertedRowIds },
+      });
+      toast.success(`${newInsertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
+      if (broadcastError) {
+        await supabase
+          .from('bot_products')
+          .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+          .eq('id', product.id);
+        toast.error('Stock added, but broadcast could not be started');
+      } else {
+        toast.success('Stock alert broadcast started');
+      }
     } else {
-      toast.success('Stock alert broadcast started');
+      toast.success(`${newInsertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
     }
     setValue('');
     setStatusFilter('available');
@@ -1147,8 +1156,17 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                       : 'Upload files'}
                   </Button>
                 </div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 hover:bg-muted/50">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={broadcastOnAdd}
+                    onChange={(e) => setBroadcastOnAdd(e.target.checked)}
+                  />
+                  📣 Broadcast stock alert to customers after adding
+                </label>
                 <Button className="w-full" onClick={handleAdd} disabled={saving || uploadingFiles || !value.trim()}>
-                  {saving ? 'Adding...' : '+ Add Stock'}
+                  {saving ? 'Adding...' : broadcastOnAdd ? '+ Add Stock & Broadcast' : '+ Add Stock'}
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground">
