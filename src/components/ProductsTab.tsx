@@ -596,18 +596,22 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
         .from('bot_products')
         .update({ stock_source: 'internal', last_known_stock: availableTotal })
         .eq('id', product.id);
-      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
-        body: { productId: product.id, addedCount: success },
-      });
-      toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
-      if (broadcastError) {
-        await supabase
-          .from('bot_products')
-          .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
-          .eq('id', product.id);
-        toast.error('Files added, but broadcast could not be started');
+      if (broadcastOnAdd) {
+        const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+          body: { productId: product.id, addedCount: success },
+        });
+        toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
+        if (broadcastError) {
+          await supabase
+            .from('bot_products')
+            .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+            .eq('id', product.id);
+          toast.error('Files added, but broadcast could not be started');
+        } else {
+          toast.success('Stock alert broadcast started');
+        }
       } else {
-        toast.success('Stock alert broadcast started');
+        toast.success(`Uploaded ${success} file(s)${failed ? `, ${failed} failed` : ''}`);
       }
       void loadStock('available');
       onStockChanged?.(product.id);
