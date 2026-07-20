@@ -1959,6 +1959,34 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
     // File-only delivery: send a single header so user knows what's coming
     await trackSend(chatId, headerInfo + `\n${productHeader}\n\n📎 Sending ${fileItems.length} file(s)…`);
   }
+
+  // Deliver file-stock items as Telegram documents (bundles / file products)
+  if (fileItems.length > 0) {
+    for (let i = 0; i < fileItems.length; i++) {
+      const it = fileItems[i];
+      const fname = it._file_name || `file_${i + 1}`;
+      try {
+        const { data: blob, error: dlErr } = await supabase.storage
+          .from("product-files")
+          .download(it._file_path);
+        if (dlErr || !blob) {
+          console.error("deliverOrder file download failed:", dlErr?.message, "path:", it._file_path);
+          const warn = await sendMessage(chatId, `⚠️ Could not prepare file: <code>${fname}</code>. Please contact support.`);
+          if (warn?.result?.message_id) deliveredMsgIds.push(warn.result.message_id);
+          continue;
+        }
+        const buf = Buffer.from(await blob.arrayBuffer());
+        const cap = fileItems.length > 1 ? `${i + 1} / ${fileItems.length}` : undefined;
+        const sent = await sendDocumentBuffer(chatId, buf, fname, cap);
+        const mid = sent?.result?.message_id;
+        if (mid) deliveredMsgIds.push(mid);
+      } catch (e) {
+        console.error("deliverOrder file delivery failed:", e?.message, "path:", it._file_path);
+        const warn = await sendMessage(chatId, `⚠️ Failed to send: <code>${fname}</code>`);
+        if (warn?.result?.message_id) deliveredMsgIds.push(warn.result.message_id);
+      }
+    }
+  }
   // Bulk selection prompt removed — bulk text orders auto-delivered as TXT above
 
   if (product.delivery_instruction) {
