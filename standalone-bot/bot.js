@@ -1849,7 +1849,7 @@ async function getOrCreateCustomer(chatId, firstName, username) {
 // ── Delivery ──
 
 const MAX_MSG_LENGTH = 4000; // Telegram limit is 4096, keep margin
-const BULK_DOWNLOAD_THRESHOLD = 20;
+const BULK_DOWNLOAD_THRESHOLD = 10;
 
 async function deliverOrderItems(chatId, product, orderDetails, orderId, headerInfo, emojiMap) {
   const qty = orderDetails.length;
