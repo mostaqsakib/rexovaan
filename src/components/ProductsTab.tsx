@@ -520,6 +520,7 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
   };
   const [review, setReview] = useState<ReviewState | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [broadcastOnAdd, setBroadcastOnAdd] = useState(false);
   const confirmInFlightRef = useRef(false);
 
 
