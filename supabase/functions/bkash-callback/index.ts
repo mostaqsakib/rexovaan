@@ -110,7 +110,11 @@ Deno.serve(async (req) => {
     // Payment cancelled or failed
     await supabase
       .from("bot_deposits")
-      .update({ status: status === "cancel" ? "bkash_cancelled" : "rejected" })
+      .update({
+        status: status === "cancel" ? "bkash_cancelled" : "rejected",
+        payment_method: "bKash",
+        via: "bKash",
+      })
       .eq("id", deposit.id)
       .neq("status", "verified");
 
@@ -149,7 +153,11 @@ Deno.serve(async (req) => {
   console.log(`[bKash Execute] Response:`, JSON.stringify(execData));
 
   if (execData.statusCode !== "0000" && execData.transactionStatus !== "Completed") {
-    await supabase.from("bot_deposits").update({ status: "rejected" }).eq("id", deposit.id);
+    await supabase.from("bot_deposits").update({
+      status: "rejected",
+      payment_method: "bKash",
+      via: "bKash",
+    }).eq("id", deposit.id);
 
     const chatId = customer?.chat_id;
     if (chatId) {
@@ -207,6 +215,7 @@ Deno.serve(async (req) => {
         txn_hash: trxID,
         amount: usdtAmount,
         payment_method: "bKash",
+        via: "bKash Auto",
       })
       .eq("id", deposit.id)
       .neq("status", "verified")
@@ -266,6 +275,8 @@ Deno.serve(async (req) => {
         txn_hash: trxID,
         amount: usdtAmount,
         verified_at: new Date().toISOString(),
+        payment_method: "bKash",
+        via: "bKash Auto",
       })
       .eq("id", deposit.id)
       .neq("status", "verified")

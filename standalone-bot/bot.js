@@ -3721,6 +3721,9 @@ async function createBkashPayment(amountBDT, customerId, pendingProductId = null
       amount: 0, // will be updated on callback
       status: "bkash_pending",
       txn_hash: `bkash_${parsed.paymentID}`,
+      source: "bot",
+      payment_method: "bKash",
+      via: "bKash",
       pending_product_id: pendingProductId,
       pending_quantity: pendingQuantity,
     });
