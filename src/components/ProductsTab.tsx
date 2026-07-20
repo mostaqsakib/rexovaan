@@ -939,18 +939,22 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
       .from('bot_products')
       .update({ stock_source: 'internal', last_known_stock: availableTotal })
       .eq('id', product.id);
-    const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
-      body: { productId: product.id, addedCount: totalAdded, stockItemIds: insertedRowIds },
-    });
-    toast.success(`${newInsertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
-    if (broadcastError) {
-      await supabase
-        .from('bot_products')
-        .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
-        .eq('id', product.id);
-      toast.error('Stock added, but broadcast could not be started');
+    if (broadcastOnAdd) {
+      const { error: broadcastError } = await supabase.functions.invoke('stock-broadcast', {
+        body: { productId: product.id, addedCount: totalAdded, stockItemIds: insertedRowIds },
+      });
+      toast.success(`${newInsertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
+      if (broadcastError) {
+        await supabase
+          .from('bot_products')
+          .update({ last_known_stock: Math.min(previousKnownStock, fallbackKnownStock) })
+          .eq('id', product.id);
+        toast.error('Stock added, but broadcast could not be started');
+      } else {
+        toast.success('Stock alert broadcast started');
+      }
     } else {
-      toast.success('Stock alert broadcast started');
+      toast.success(`${newInsertedCount} new + ${restoredCount} re-added = ${totalAdded} stock item(s)`);
     }
     setValue('');
     setStatusFilter('available');
