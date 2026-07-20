@@ -153,7 +153,11 @@ Deno.serve(async (req) => {
   console.log(`[bKash Execute] Response:`, JSON.stringify(execData));
 
   if (execData.statusCode !== "0000" && execData.transactionStatus !== "Completed") {
-    await supabase.from("bot_deposits").update({ status: "rejected" }).eq("id", deposit.id);
+    await supabase.from("bot_deposits").update({
+      status: "rejected",
+      payment_method: "bKash",
+      via: "bKash",
+    }).eq("id", deposit.id);
 
     const chatId = customer?.chat_id;
     if (chatId) {
