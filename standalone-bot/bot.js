@@ -4706,21 +4706,41 @@ async function executeInternalStockDelivery(chatId, customer, product, qty, tota
       return orderRow; // swallow error — flow handled via manual delivery
     }
   } else {
-    // ── Internal stock path (existing) ──
-    const { data: reserved, error: reserveError } = await supabase.rpc("reserve_internal_stock_items", {
-      _product_id: product.id,
-      _quantity: qty,
-      _order_id: orderRow.id,
-    });
+    // ── Internal stock path with retry-on-transient-lock ──
+    let reserved = null;
+    let reserveError = null;
+    let lastAvailableCount = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const res = await supabase.rpc("reserve_internal_stock_items", {
+        _product_id: product.id,
+        _quantity: qty,
+        _order_id: orderRow.id,
+      });
+      reserved = res.data;
+      reserveError = res.error;
+      if (!reserveError && reserved && reserved.length >= qty) break;
+
+      // Check whether stock is actually empty or just transiently locked
+      const { count: availCount } = await supabase
+        .from("bot_product_stock_items")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", product.id)
+        .eq("status", "available");
+      lastAvailableCount = Number(availCount || 0);
+      if (lastAvailableCount < qty) break; // truly empty — stop retrying
+      // transient failure — brief backoff and retry
+      await new Promise((r) => setTimeout(r, 250 + attempt * 350));
+    }
     if (reserveError || !reserved || reserved.length < qty) {
       await supabase.from("bot_orders").update({ status: "pending_delivery" }).eq("id", orderRow.id);
       const orderShort = orderRow.id.slice(0, 8);
+      const availLine = lastAvailableCount !== null ? `\n📊 Available at fail: <b>${lastAvailableCount}</b>` : "";
       sendMessage(chatId,
         `⏳ <b>Order Placed — Pending Manual Delivery</b>\n\nProduct: <b>${product.name}</b>\nQuantity: <b>${qty}</b>\nTotal: <b>${totalPrice.toFixed(2)} ${product.currency}</b>\n\nStock temporarily unavailable. Admin will deliver manually.\n⏱ Delivery Time: <b>30 min — 12 hours</b>.`,
         mainMenuKeyboard(emojiMap)
       ).catch(() => {});
       notifyAdmin(
-        `🔔 <b>Stock Empty → Manual Delivery Needed</b>\n\n👤 ${getCustomerLabel(customer)}\n📦 Product: <b>${escapeHtml(product.name)}</b> x${qty}\n💰 Total: <b>${totalPrice.toFixed(2)} ${product.currency}</b>\n💳 Payment: <b>${escapeHtml(formatVerificationVia(paymentLabel))}</b>${txnHash ? `\n🔗 TxID: <code>${escapeHtml(txnHash)}</code>` : ""}`,
+        `🔔 <b>Stock Empty → Manual Delivery Needed</b>\n\n👤 ${getCustomerLabel(customer)}\n📦 Product: <b>${escapeHtml(product.name)}</b> x${qty}\n💰 Total: <b>${totalPrice.toFixed(2)} ${product.currency}</b>\n💳 Payment: <b>${escapeHtml(formatVerificationVia(paymentLabel))}</b>${txnHash ? `\n🔗 TxID: <code>${escapeHtml(txnHash)}</code>` : ""}${availLine}${reserveError ? `\n⚠️ <code>${escapeHtml(String(reserveError.message || reserveError))}</code>` : ""}`,
         { inline_keyboard: [[{ text: "📦 Deliver", callback_data: `mdlvr_${orderShort}` }], [{ text: "❌ Cancel & Refund", callback_data: `mdcancel_${orderShort}` }]] }
       ).catch(() => {});
       return orderRow;
