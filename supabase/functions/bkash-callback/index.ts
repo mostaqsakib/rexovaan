@@ -215,6 +215,7 @@ Deno.serve(async (req) => {
         txn_hash: trxID,
         amount: usdtAmount,
         payment_method: "bKash",
+        via: "bKash Auto",
       })
       .eq("id", deposit.id)
       .neq("status", "verified")
