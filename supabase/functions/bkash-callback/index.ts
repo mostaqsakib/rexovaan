@@ -110,7 +110,11 @@ Deno.serve(async (req) => {
     // Payment cancelled or failed
     await supabase
       .from("bot_deposits")
-      .update({ status: status === "cancel" ? "bkash_cancelled" : "rejected" })
+      .update({
+        status: status === "cancel" ? "bkash_cancelled" : "rejected",
+        payment_method: "bKash",
+        via: "bKash",
+      })
       .eq("id", deposit.id)
       .neq("status", "verified");
 
