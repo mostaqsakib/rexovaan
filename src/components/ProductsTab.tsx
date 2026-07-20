@@ -1156,8 +1156,17 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                       : 'Upload files'}
                   </Button>
                 </div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 hover:bg-muted/50">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={broadcastOnAdd}
+                    onChange={(e) => setBroadcastOnAdd(e.target.checked)}
+                  />
+                  📣 Broadcast stock alert to customers after adding
+                </label>
                 <Button className="w-full" onClick={handleAdd} disabled={saving || uploadingFiles || !value.trim()}>
-                  {saving ? 'Adding...' : '+ Add Stock'}
+                  {saving ? 'Adding...' : broadcastOnAdd ? '+ Add Stock & Broadcast' : '+ Add Stock'}
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground">
