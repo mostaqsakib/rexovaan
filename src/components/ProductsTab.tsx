@@ -1262,17 +1262,68 @@ const InternalStockCell = ({ product, onStockChanged, onBack }: { product: Produ
                     variant="outline"
                     className="h-7 gap-1 text-xs"
                     disabled={filteredItems.length === 0}
-                    onClick={() => {
-                      const lines = filteredItems.map((item) => Object.values(item.data || {}).join(' | '));
-                      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
+                    onClick={async () => {
+                      const fileItems = filteredItems.filter((it) => (it.data as any)?._file_path);
+                      const textItems = filteredItems.filter((it) => !(it.data as any)?._file_path);
                       const range = dateFrom || dateTo ? `-${dateFrom || 'start'}_to_${dateTo || 'end'}` : '';
-                      a.download = `${product.name}-${statusFilter}${range}-${Date.now()}.txt`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                      toast.success(`Exported ${filteredItems.length} item(s)`);
+                      const baseName = `${product.name}-${statusFilter}${range}-${Date.now()}`;
+
+                      // Text-only stock → original .txt export
+                      if (fileItems.length === 0) {
+                        const lines = textItems.map((item) => Object.values(item.data || {}).join(' | '));
+                        const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${baseName}.txt`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        toast.success(`Exported ${textItems.length} item(s)`);
+                        return;
+                      }
+
+                      // File-based stock → zip original files as they were uploaded
+                      const tid = toast.loading(`Preparing ${fileItems.length} file(s)...`);
+                      try {
+                        const zip = new JSZip();
+                        const usedNames = new Set<string>();
+                        let done = 0;
+                        for (const it of fileItems) {
+                          const d = it.data as any;
+                          const { data: signed, error } = await supabase.storage
+                            .from('product-files')
+                            .createSignedUrl(d._file_path, 300);
+                          if (error || !signed?.signedUrl) { done++; continue; }
+                          const resp = await fetch(signed.signedUrl);
+                          const blob = await resp.blob();
+                          let name = d._file_name || 'file';
+                          let n = name;
+                          let i = 1;
+                          while (usedNames.has(n)) {
+                            const dot = name.lastIndexOf('.');
+                            n = dot > 0 ? `${name.slice(0, dot)} (${i})${name.slice(dot)}` : `${name} (${i})`;
+                            i++;
+                          }
+                          usedNames.add(n);
+                          zip.file(n, blob);
+                          done++;
+                          toast.loading(`Preparing files... ${done}/${fileItems.length}`, { id: tid });
+                        }
+                        if (textItems.length > 0) {
+                          const lines = textItems.map((item) => Object.values(item.data || {}).join(' | '));
+                          zip.file('text-items.txt', lines.join('\n'));
+                        }
+                        const out = await zip.generateAsync({ type: 'blob' });
+                        const url = URL.createObjectURL(out);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${baseName}.zip`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        toast.success(`Exported ${filteredItems.length} item(s)`, { id: tid });
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : 'Export failed', { id: tid });
+                      }
                     }}
 
                   >
