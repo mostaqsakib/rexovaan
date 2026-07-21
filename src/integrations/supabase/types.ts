@@ -621,6 +621,8 @@ export type Database = {
           payment_method: string | null
           pending_product_id: string | null
           pending_quantity: number | null
+          prompt_chat_id: number | null
+          prompt_message_id: number | null
           source: string
           status: string
           txn_hash: string | null
@@ -640,6 +642,8 @@ export type Database = {
           payment_method?: string | null
           pending_product_id?: string | null
           pending_quantity?: number | null
+          prompt_chat_id?: number | null
+          prompt_message_id?: number | null
           source?: string
           status?: string
           txn_hash?: string | null
@@ -659,6 +663,8 @@ export type Database = {
           payment_method?: string | null
           pending_product_id?: string | null
           pending_quantity?: number | null
+          prompt_chat_id?: number | null
+          prompt_message_id?: number | null
           source?: string
           status?: string
           txn_hash?: string | null

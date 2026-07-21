@@ -4503,8 +4503,21 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
           [applyEmoji({ text: "◀️ Back", callback_data: `backpay_${shortProdId}_qty_${qty}` }, "back", emojiMap)],
           [applyEmoji({ text: "❌ Cancel Order", callback_data: "cancel_order" }, "cancel_order", emojiMap)],
         ] };
-        if (editMessageId) await editMessageText(chatId, editMessageId, msg, payBtn);
-        else await sendMessage(chatId, msg, payBtn);
+        let promptMsgId = editMessageId || null;
+        if (editMessageId) {
+          await editMessageText(chatId, editMessageId, msg, payBtn);
+        } else {
+          const sent = await sendMessage(chatId, msg, payBtn);
+          promptMsgId = sent?.result?.message_id || null;
+        }
+        // Remember which message to remove once the payment completes/cancels
+        if (promptMsgId) {
+          try {
+            await supabase.from("bot_deposits")
+              .update({ prompt_message_id: promptMsgId, prompt_chat_id: chatId })
+              .eq("txn_hash", `bkash_${bkashResult.paymentID}`);
+          } catch (e) { console.error("[bKash] failed to save prompt_message_id:", e?.message); }
+        }
         return;
       }
 
