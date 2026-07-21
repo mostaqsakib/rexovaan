@@ -147,10 +147,12 @@ const BkashActivityTab = () => {
   const stats = useMemo(() => {
     const verified = rows.filter((r) => r.status === 'verified');
     const total = verified.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const totalBdt = verified.reduce((s, r) => s + (parseBdt(r.via).bdt || 0), 0);
     const today = verified.filter((r) => new Date(r.created_at).toDateString() === new Date().toDateString());
     const todayAmt = today.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const todayBdt = today.reduce((s, r) => s + (parseBdt(r.via).bdt || 0), 0);
     const visible = rows.filter((r) => r.status !== 'pending' && r.status !== 'bkash_pending').length;
-    return { total, count: verified.length, todayAmt, todayCount: today.length, visible };
+    return { total, totalBdt, count: verified.length, todayAmt, todayBdt, todayCount: today.length, visible };
   }, [rows]);
 
   if (loading) {
