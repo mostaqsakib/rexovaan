@@ -266,6 +266,10 @@ Deno.serve(async (req) => {
   const json = (b: unknown, s = 200) =>
     new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+  const { requireServiceRoleOrAdmin } = await import("../_shared/require-caller.ts");
+  const authz = await requireServiceRoleOrAdmin(req);
+  if (!authz.ok) return json({ error: authz.error }, authz.status);
+
   try {
     // Parse force flag (from body OR ?force=1) — force=true bypasses the small-deposit threshold
     // and also re-picks previously deferred rows.
