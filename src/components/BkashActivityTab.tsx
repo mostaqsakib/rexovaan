@@ -54,7 +54,7 @@ const BkashActivityTab = () => {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [q, setQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'pending' | 'rejected'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'rejected'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'web' | 'bot'>('all');
 
   const load = async () => {
@@ -115,9 +115,10 @@ const BkashActivityTab = () => {
   useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => rows.filter((r) => {
+    // Hide pending/awaiting-pay entries entirely — only verified or rejected/cancelled matter
+    if (r.status === 'pending' || r.status === 'bkash_pending') return false;
     if (sourceFilter !== 'all' && (r.source || 'bot') !== sourceFilter) return false;
     if (statusFilter !== 'all') {
-      if (statusFilter === 'pending' && !(r.status === 'pending' || r.status === 'bkash_pending')) return false;
       if (statusFilter === 'verified' && r.status !== 'verified') return false;
       if (statusFilter === 'rejected' && !(r.status === 'rejected' || r.status === 'bkash_cancelled')) return false;
     }
@@ -139,8 +140,8 @@ const BkashActivityTab = () => {
     const total = verified.reduce((s, r) => s + Number(r.amount || 0), 0);
     const today = verified.filter((r) => new Date(r.created_at).toDateString() === new Date().toDateString());
     const todayAmt = today.reduce((s, r) => s + Number(r.amount || 0), 0);
-    const pending = rows.filter((r) => r.status === 'pending' || r.status === 'bkash_pending').length;
-    return { total, count: verified.length, todayAmt, todayCount: today.length, pending };
+    const visible = rows.filter((r) => r.status !== 'pending' && r.status !== 'bkash_pending').length;
+    return { total, count: verified.length, todayAmt, todayCount: today.length, visible };
   }, [rows]);
 
   if (loading) {
@@ -154,7 +155,7 @@ const BkashActivityTab = () => {
   return (
     <div className="space-y-4">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="rounded-lg border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80"><TrendingUp className="h-3 w-3" /> Total Received</div>
           <div className="mt-1 font-mono text-xl font-bold text-emerald-300">${stats.total.toFixed(2)}</div>
@@ -165,14 +166,9 @@ const BkashActivityTab = () => {
           <div className="mt-1 font-mono text-xl font-bold text-pink-300">${stats.todayAmt.toFixed(2)}</div>
           <div className="text-[10px] text-muted-foreground">{stats.todayCount} deposits</div>
         </div>
-        <div className="rounded-lg border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 p-3">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-amber-400/80"><Clock className="h-3 w-3" /> Pending</div>
-          <div className="mt-1 font-mono text-xl font-bold text-amber-300">{stats.pending}</div>
-          <div className="text-[10px] text-muted-foreground">Awaiting completion</div>
-        </div>
         <div className="rounded-lg border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-sky-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-sky-400/80"><Package className="h-3 w-3" /> Total Records</div>
-          <div className="mt-1 font-mono text-xl font-bold text-sky-300">{rows.length}</div>
+          <div className="mt-1 font-mono text-xl font-bold text-sky-300">{stats.visible}</div>
           <div className="text-[10px] text-muted-foreground">All time</div>
         </div>
       </div>
@@ -197,7 +193,7 @@ const BkashActivityTab = () => {
           ))}
         </div>
         <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
-          {(['all', 'verified', 'pending', 'rejected'] as const).map((s) => (
+          {(['all', 'verified', 'rejected'] as const).map((s) => (
             <button key={s} type="button" onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 text-xs font-medium rounded capitalize transition-colors ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
               {s}
@@ -210,7 +206,7 @@ const BkashActivityTab = () => {
       </div>
 
       <div className="text-xs text-muted-foreground px-1">
-        {filtered.length} of {rows.length} records
+        {filtered.length} of {stats.visible} records
       </div>
 
       {filtered.length === 0 ? (
