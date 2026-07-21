@@ -276,7 +276,7 @@ Deno.serve(async (req) => {
         amount: usdtAmount,
         verified_at: new Date().toISOString(),
         payment_method: "bKash",
-        via: "bKash Auto",
+        via: `bKash Auto · ৳${bdtAmount.toFixed(2)} @ ${rate}`,
       })
       .eq("id", deposit.id)
       .neq("status", "verified")
