@@ -425,7 +425,11 @@ Deno.serve(async (req) => {
           details: [],
           row_numbers: [],
           status: "completed",
+          payment_method: deposit.payment_method || "bKash",
+          txn_hash: deposit.txn_hash || null,
+          source: deposit.source || "bot",
         }).select("id").single();
+
 
         if (!orderRow?.id) throw new Error("Order create failed");
 
