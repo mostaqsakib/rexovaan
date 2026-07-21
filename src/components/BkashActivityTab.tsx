@@ -206,7 +206,7 @@ const BkashActivityTab = () => {
       </div>
 
       <div className="text-xs text-muted-foreground px-1">
-        {filtered.length} of {rows.length} records
+        {filtered.length} of {stats.visible} records
       </div>
 
       {filtered.length === 0 ? (
