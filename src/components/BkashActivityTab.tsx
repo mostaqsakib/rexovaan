@@ -198,7 +198,7 @@ const BkashActivityTab = () => {
           ))}
         </div>
         <div className="flex items-center gap-1 rounded-md border border-border bg-card p-0.5">
-          {(['all', 'verified', 'pending', 'rejected'] as const).map((s) => (
+          {(['all', 'verified', 'rejected'] as const).map((s) => (
             <button key={s} type="button" onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 text-xs font-medium rounded capitalize transition-colors ${statusFilter === s ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
               {s}
