@@ -170,12 +170,12 @@ const BkashActivityTab = () => {
         <div className="rounded-lg border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80"><TrendingUp className="h-3 w-3" /> Total Received</div>
           <div className="mt-1 font-mono text-xl font-bold text-emerald-300">${stats.total.toFixed(2)}</div>
-          <div className="text-[10px] text-muted-foreground">{stats.count} verified</div>
+          <div className="text-[10px] text-muted-foreground">৳{stats.totalBdt.toFixed(2)} BDT · {stats.count} verified</div>
         </div>
         <div className="rounded-lg border border-pink-500/20 bg-gradient-to-br from-pink-500/10 to-pink-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-pink-400/80"><Smartphone className="h-3 w-3" /> Today</div>
           <div className="mt-1 font-mono text-xl font-bold text-pink-300">${stats.todayAmt.toFixed(2)}</div>
-          <div className="text-[10px] text-muted-foreground">{stats.todayCount} deposits</div>
+          <div className="text-[10px] text-muted-foreground">৳{stats.todayBdt.toFixed(2)} BDT · {stats.todayCount} deposits</div>
         </div>
         <div className="rounded-lg border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-sky-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-sky-400/80"><Package className="h-3 w-3" /> Total Records</div>
