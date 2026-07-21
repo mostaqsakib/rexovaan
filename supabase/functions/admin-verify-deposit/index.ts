@@ -551,7 +551,11 @@ Deno.serve(async (req) => {
         details: [],
         row_numbers: [],
         status: "pending_delivery",
+        payment_method: deposit.payment_method || "bKash",
+        txn_hash: deposit.txn_hash || null,
+        source: deposit.source || "bot",
       }).select("id").single();
+
 
       await sendTelegramMessage(customer.chat_id,
         `✅ <b>Payment Verified & Order Placed!</b>\n\nProduct: <b>${product.name}</b>\nQuantity: <b>${qty}</b>\nTotal: <b>${totalPrice.toFixed(2)} ${product.currency}</b>\n\n⏳ <b>Your order is being processed.</b>\nAdmin will deliver it manually.`,
