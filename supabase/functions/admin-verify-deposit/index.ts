@@ -142,6 +142,9 @@ async function notifyRecentSale(supabase: any, product: any, qty: number, source
   } catch (e) {
     console.error("[admin-verify-deposit] notifyRecentSale failed:", (e as Error)?.message || e);
   }
+}
+
+
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
