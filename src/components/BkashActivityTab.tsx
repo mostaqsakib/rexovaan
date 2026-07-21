@@ -115,9 +115,10 @@ const BkashActivityTab = () => {
   useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => rows.filter((r) => {
+    // Hide pending/awaiting-pay entries entirely — only verified or rejected/cancelled matter
+    if (r.status === 'pending' || r.status === 'bkash_pending') return false;
     if (sourceFilter !== 'all' && (r.source || 'bot') !== sourceFilter) return false;
     if (statusFilter !== 'all') {
-      if (statusFilter === 'pending' && !(r.status === 'pending' || r.status === 'bkash_pending')) return false;
       if (statusFilter === 'verified' && r.status !== 'verified') return false;
       if (statusFilter === 'rejected' && !(r.status === 'rejected' || r.status === 'bkash_cancelled')) return false;
     }
