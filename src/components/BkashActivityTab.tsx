@@ -270,6 +270,9 @@ const BkashActivityTab = () => {
                       {cust?.chat_id && <div><span className="text-muted-foreground">Chat ID: </span><span className="font-mono">{cust.chat_id}</span></div>}
                       {cust?.balance != null && <div><span className="text-muted-foreground">Current Balance: </span><span className="font-mono font-semibold">${Number(cust.balance).toFixed(2)}</span></div>}
                       <div><span className="text-muted-foreground">Amount (USDT): </span><span className="font-mono font-semibold">${Number(r.amount || 0).toFixed(2)}</span></div>
+                      {bdt != null && (
+                        <div><span className="text-muted-foreground">Paid (BDT): </span><span className="font-mono font-semibold text-pink-300">৳{bdt.toFixed(2)}{rate ? ` @ ${rate}` : ''}</span></div>
+                      )}
                       <div><span className="text-muted-foreground">Method: </span><span className="font-medium">{r.payment_method || 'bKash'}</span></div>
                       {r.via && <div><span className="text-muted-foreground">Via: </span><span className="font-medium">{r.via}</span></div>}
                       {r.txn_hash && (
