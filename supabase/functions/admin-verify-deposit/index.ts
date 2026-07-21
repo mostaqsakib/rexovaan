@@ -384,7 +384,11 @@ Deno.serve(async (req) => {
           details: [],
           row_numbers: [],
           status: "pending_delivery",
+          payment_method: deposit.payment_method || "bKash",
+          txn_hash: deposit.txn_hash || null,
+          source: deposit.source || "bot",
         }).select("id").single();
+
 
         const orderId = orderRow?.id || "unknown";
         const orderShort = orderId.slice(0, 8);
