@@ -155,7 +155,7 @@ const BkashActivityTab = () => {
   return (
     <div className="space-y-4">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="rounded-lg border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80"><TrendingUp className="h-3 w-3" /> Total Received</div>
           <div className="mt-1 font-mono text-xl font-bold text-emerald-300">${stats.total.toFixed(2)}</div>
@@ -166,14 +166,9 @@ const BkashActivityTab = () => {
           <div className="mt-1 font-mono text-xl font-bold text-pink-300">${stats.todayAmt.toFixed(2)}</div>
           <div className="text-[10px] text-muted-foreground">{stats.todayCount} deposits</div>
         </div>
-        <div className="rounded-lg border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5 p-3">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-amber-400/80"><Clock className="h-3 w-3" /> Pending</div>
-          <div className="mt-1 font-mono text-xl font-bold text-amber-300">{stats.pending}</div>
-          <div className="text-[10px] text-muted-foreground">Awaiting completion</div>
-        </div>
         <div className="rounded-lg border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-sky-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-sky-400/80"><Package className="h-3 w-3" /> Total Records</div>
-          <div className="mt-1 font-mono text-xl font-bold text-sky-300">{rows.length}</div>
+          <div className="mt-1 font-mono text-xl font-bold text-sky-300">{stats.visible}</div>
           <div className="text-[10px] text-muted-foreground">All time</div>
         </div>
       </div>
