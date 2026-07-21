@@ -41,6 +41,15 @@ const fmtDate = (s: string) => {
     ', ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
+const parseBdt = (via: string | null): { bdt: number | null; rate: number | null } => {
+  if (!via) return { bdt: null, rate: null };
+  const m = via.match(/৳\s*([\d.]+)(?:\s*@\s*([\d.]+))?/);
+  if (!m) return { bdt: null, rate: null };
+  const bdt = parseFloat(m[1]);
+  const rate = m[2] ? parseFloat(m[2]) : null;
+  return { bdt: Number.isFinite(bdt) ? bdt : null, rate: Number.isFinite(rate as number) ? rate : null };
+};
+
 const STATUS_META: Record<string, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
   verified: { label: 'Verified', cls: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10', icon: CheckCircle2 },
   pending: { label: 'Pending', cls: 'border-amber-500/40 text-amber-300 bg-amber-500/10', icon: Clock },
@@ -138,10 +147,12 @@ const BkashActivityTab = () => {
   const stats = useMemo(() => {
     const verified = rows.filter((r) => r.status === 'verified');
     const total = verified.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const totalBdt = verified.reduce((s, r) => s + (parseBdt(r.via).bdt || 0), 0);
     const today = verified.filter((r) => new Date(r.created_at).toDateString() === new Date().toDateString());
     const todayAmt = today.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const todayBdt = today.reduce((s, r) => s + (parseBdt(r.via).bdt || 0), 0);
     const visible = rows.filter((r) => r.status !== 'pending' && r.status !== 'bkash_pending').length;
-    return { total, count: verified.length, todayAmt, todayCount: today.length, visible };
+    return { total, totalBdt, count: verified.length, todayAmt, todayBdt, todayCount: today.length, visible };
   }, [rows]);
 
   if (loading) {
@@ -159,12 +170,12 @@ const BkashActivityTab = () => {
         <div className="rounded-lg border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80"><TrendingUp className="h-3 w-3" /> Total Received</div>
           <div className="mt-1 font-mono text-xl font-bold text-emerald-300">${stats.total.toFixed(2)}</div>
-          <div className="text-[10px] text-muted-foreground">{stats.count} verified</div>
+          <div className="text-[10px] text-muted-foreground">৳{stats.totalBdt.toFixed(2)} BDT · {stats.count} verified</div>
         </div>
         <div className="rounded-lg border border-pink-500/20 bg-gradient-to-br from-pink-500/10 to-pink-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-pink-400/80"><Smartphone className="h-3 w-3" /> Today</div>
           <div className="mt-1 font-mono text-xl font-bold text-pink-300">${stats.todayAmt.toFixed(2)}</div>
-          <div className="text-[10px] text-muted-foreground">{stats.todayCount} deposits</div>
+          <div className="text-[10px] text-muted-foreground">৳{stats.todayBdt.toFixed(2)} BDT · {stats.todayCount} deposits</div>
         </div>
         <div className="rounded-lg border border-sky-500/20 bg-gradient-to-br from-sky-500/10 to-sky-500/5 p-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-sky-400/80"><Package className="h-3 w-3" /> Total Records</div>
@@ -225,6 +236,7 @@ const BkashActivityTab = () => {
             const meta = STATUS_META[r.status] || { label: r.status, cls: 'border-muted-foreground/30 text-muted-foreground', icon: Clock };
             const Icon = meta.icon;
             const src = (r.source || 'bot') as 'web' | 'bot';
+            const { bdt, rate } = parseBdt(r.via);
             return (
               <div key={r.id} className="rounded-lg border border-border bg-card overflow-hidden">
                 <button
@@ -235,6 +247,9 @@ const BkashActivityTab = () => {
                   {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   <Smartphone className="h-4 w-4 text-pink-400 shrink-0" />
                   <span className="text-sm font-mono font-semibold">${Number(r.amount || 0).toFixed(2)}</span>
+                  {bdt != null && (
+                    <span className="text-xs font-mono text-pink-300/90">৳{bdt.toFixed(2)}</span>
+                  )}
                   <Badge variant="outline" className={`text-[10px] uppercase gap-1 ${meta.cls}`}>
                     <Icon className="h-3 w-3" />{meta.label}
                   </Badge>
@@ -255,6 +270,9 @@ const BkashActivityTab = () => {
                       {cust?.chat_id && <div><span className="text-muted-foreground">Chat ID: </span><span className="font-mono">{cust.chat_id}</span></div>}
                       {cust?.balance != null && <div><span className="text-muted-foreground">Current Balance: </span><span className="font-mono font-semibold">${Number(cust.balance).toFixed(2)}</span></div>}
                       <div><span className="text-muted-foreground">Amount (USDT): </span><span className="font-mono font-semibold">${Number(r.amount || 0).toFixed(2)}</span></div>
+                      {bdt != null && (
+                        <div><span className="text-muted-foreground">Paid (BDT): </span><span className="font-mono font-semibold text-pink-300">৳{bdt.toFixed(2)}{rate ? ` @ ${rate}` : ''}</span></div>
+                      )}
                       <div><span className="text-muted-foreground">Method: </span><span className="font-medium">{r.payment_method || 'bKash'}</span></div>
                       {r.via && <div><span className="text-muted-foreground">Via: </span><span className="font-medium">{r.via}</span></div>}
                       {r.txn_hash && (
