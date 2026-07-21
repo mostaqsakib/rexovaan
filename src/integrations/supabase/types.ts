@@ -2385,6 +2385,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      auto_cleanup_link_check_history: { Args: never; Returns: undefined }
       bep20_next_index: { Args: never; Returns: number }
       bind_telegram_to_customer: {
         Args: {
