@@ -35,19 +35,35 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    const { requireCustomerAuth } = await import("../_shared/require-caller.ts");
+    const authz = await requireCustomerAuth(req);
+    if (!authz.ok) return json({ error: authz.error }, authz.status);
+
     const body = await req.json();
-    const customer_id: string | undefined = body.customer_id;
+    const bodyCustomerId: string | undefined = body.customer_id;
     const expected_amount_usd = Number(body.expected_amount ?? body.expected_usd);
     const pending_product_id: string | null = body.pending_product_id || null;
     const pending_quantity: number | null = body.pending_quantity || null;
-    if (!customer_id || !(expected_amount_usd > 0)) {
-      return json({ error: "customer_id and positive expected_amount required" }, 400);
+    if (!(expected_amount_usd > 0)) {
+      return json({ error: "positive expected_amount required" }, 400);
     }
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    let customer_id: string;
+    if (authz.mode === "user") {
+      const { data: c } = await admin
+        .from("bot_customers").select("id").eq("auth_user_id", authz.authUserId).maybeSingle();
+      if (!c?.id) return json({ error: "Customer not found for this user" }, 404);
+      customer_id = c.id;
+    } else {
+      if (!bodyCustomerId) return json({ error: "customer_id required" }, 400);
+      customer_id = bodyCustomerId;
+    }
+
 
     // Reuse existing pending reservation for same customer+amount (within 5 min old)
     const { data: existing } = await admin
