@@ -236,6 +236,7 @@ const BkashActivityTab = () => {
             const meta = STATUS_META[r.status] || { label: r.status, cls: 'border-muted-foreground/30 text-muted-foreground', icon: Clock };
             const Icon = meta.icon;
             const src = (r.source || 'bot') as 'web' | 'bot';
+            const { bdt, rate } = parseBdt(r.via);
             return (
               <div key={r.id} className="rounded-lg border border-border bg-card overflow-hidden">
                 <button
