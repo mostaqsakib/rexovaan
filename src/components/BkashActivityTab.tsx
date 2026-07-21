@@ -41,6 +41,15 @@ const fmtDate = (s: string) => {
     ', ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 };
 
+const parseBdt = (via: string | null): { bdt: number | null; rate: number | null } => {
+  if (!via) return { bdt: null, rate: null };
+  const m = via.match(/৳\s*([\d.]+)(?:\s*@\s*([\d.]+))?/);
+  if (!m) return { bdt: null, rate: null };
+  const bdt = parseFloat(m[1]);
+  const rate = m[2] ? parseFloat(m[2]) : null;
+  return { bdt: Number.isFinite(bdt) ? bdt : null, rate: Number.isFinite(rate as number) ? rate : null };
+};
+
 const STATUS_META: Record<string, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
   verified: { label: 'Verified', cls: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10', icon: CheckCircle2 },
   pending: { label: 'Pending', cls: 'border-amber-500/40 text-amber-300 bg-amber-500/10', icon: Clock },
