@@ -117,8 +117,39 @@ Deno.serve(async (req) => {
     )
   }
 
+  // Caller authorization: allow service-role callers (internal edge functions,
+  // admin flows) unconditionally; for anon/user callers, require an authenticated
+  // session AND enforce that the recipient matches the caller's own email.
+  // Prevents abuse of the verified sending domain to spam arbitrary addresses.
+  {
+    const { requireCustomerAuth } = await import('../_shared/require-caller.ts')
+    const authz = await requireCustomerAuth(req)
+    if (!authz.ok) {
+      return new Response(JSON.stringify({ error: authz.error }), {
+        status: authz.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    if (authz.mode !== 'service') {
+      // Templates with a hard-coded `to` (e.g. site-owner notifications) are
+      // internal-only and must never be triggered by end users.
+      if (template.to) {
+        return new Response(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      const callerEmail = (authz.email || '').toLowerCase()
+      const target = String(effectiveRecipient).toLowerCase()
+      if (!callerEmail || callerEmail !== target) {
+        return new Response(JSON.stringify({ error: 'Recipient must match authenticated user email' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+  }
+
   // Create Supabase client with service role (bypasses RLS)
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
 
   // 2. Check suppression list (fail-closed: if we can't verify, don't send)
   const { data: suppressed, error: suppressionError } = await supabase
