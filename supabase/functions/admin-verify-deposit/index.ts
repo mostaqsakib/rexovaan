@@ -118,6 +118,34 @@ async function notifyAdmin(text: string, replyMarkup?: unknown) {
   await sendTelegramMessage(adminChatId, text, replyMarkup);
 }
 
+async function notifyRecentSale(supabase: any, product: any, qty: number, source: "web" | "bot") {
+  try {
+    const { data: settings } = await supabase
+      .from("bot_settings")
+      .select("key, value")
+      .in("key", ["recent_sales_group_id", "recent_sales_group_id_web", "msg_recent_sale", "msg_recent_sale_web"]);
+    const map: Record<string, string> = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
+    const webId = map.recent_sales_group_id_web || "";
+    const botId = map.recent_sales_group_id || "";
+    const rawId = source === "web" ? (webId || botId) : (botId || webId);
+    const groupId = rawId ? Number(rawId) : null;
+    if (!groupId) return;
+    const icon = product.custom_emoji_id ? `<tg-emoji emoji-id="${product.custom_emoji_id}">📦</tg-emoji>` : "🛒";
+    const tpl = (source === "web" ? map.msg_recent_sale_web : map.msg_recent_sale) ||
+      (source === "web"
+        ? `🛍️ Someone just bought <b>{quantity}× {product}</b> from the website`
+        : `🛒 Someone just bought <b>{quantity}× {product}</b>`);
+    const text = tpl
+      .replace(/\{product\}/g, `${icon} <b>${escapeHtml(product.name)}</b>`)
+      .replace(/\{quantity\}/g, String(qty));
+    await sendTelegramMessage(groupId, text);
+  } catch (e) {
+    console.error("[admin-verify-deposit] notifyRecentSale failed:", (e as Error)?.message || e);
+  }
+}
+
+
+
 function escapeHtml(value: unknown) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -497,6 +525,10 @@ Deno.serve(async (req) => {
         await notifyAdmin(
           `💰 <b>bKash Order Delivered</b>\n\n👤 ${escapeHtml(custLabel)}\n📦 Product: <b>${escapeHtml(product.name)}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>${escapeHtml(deposit.payment_method || "bKash")}</b>\n🔗 TxID: <code>${escapeHtml(deposit.txn_hash || "—")}</code>`
         );
+
+        // Recent Sales Feed (Web/Bot group)
+        const saleSource: "web" | "bot" = (deposit.source || "bot") === "web" ? "web" : "bot";
+        notifyRecentSale(supabase, product, qty, saleSource).catch(() => {});
 
         return new Response(JSON.stringify({ success: true, action: "delivered", product: product.name, qty }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
