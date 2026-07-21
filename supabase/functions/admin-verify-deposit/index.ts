@@ -495,7 +495,7 @@ Deno.serve(async (req) => {
         // Notify admin — bKash order delivered
         const custLabel = customer.username ? `@${customer.username}` : (customer.first_name || `#${customer.chat_id}`);
         await notifyAdmin(
-          `💰 <b>bKash Order Delivered</b>\n\n👤 Customer: <b>${escapeHtml(custLabel)}</b>\n📦 Product: <b>${escapeHtml(product.name)}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>${escapeHtml(deposit.payment_method || "bKash")}</b>${deposit.via ? `\n🧾 Via: <code>${escapeHtml(deposit.via)}</code>` : ""}`
+          `💰 <b>bKash Order Delivered</b>\n\n👤 ${escapeHtml(custLabel)}\n📦 Product: <b>${escapeHtml(product.name)}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>${escapeHtml(deposit.payment_method || "bKash")}</b>\n🔗 TxID: <code>${escapeHtml(deposit.txn_hash || "—")}</code>`
         );
 
         return new Response(JSON.stringify({ success: true, action: "delivered", product: product.name, qty }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
