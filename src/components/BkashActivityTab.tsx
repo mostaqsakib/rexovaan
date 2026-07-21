@@ -54,7 +54,7 @@ const BkashActivityTab = () => {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [q, setQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'pending' | 'rejected'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'verified' | 'rejected'>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'web' | 'bot'>('all');
 
   const load = async () => {
