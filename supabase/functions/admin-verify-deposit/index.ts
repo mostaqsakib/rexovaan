@@ -441,9 +441,12 @@ Deno.serve(async (req) => {
 
         const detailKeys = Object.keys(orderDetails[0] || {});
         const multiColumn = detailKeys.length > 1;
-        const header = `✅ <b>Order Delivered!</b>\n\nProduct: <b>${escapeHtml(product.name)}</b>\nQuantity: <b>${qty}</b>\nTotal Paid: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>`;
+        const productHeader = `📦 <b>${escapeHtml(product.name)} × ${qty}</b>`;
 
         if (orderDetails.length > BULK_TXT_THRESHOLD) {
+          // Bulk order — deliver as TXT file only (no middle "Order Delivered" header)
+          paymentMsg += `\n\n⏳ Delivering your order as file…`;
+          await sendTelegramMessage(customer.chat_id, paymentMsg);
           let txt = "";
           for (let i = 0; i < orderDetails.length; i++) {
             const text = itemText(orderDetails[i], multiColumn);
@@ -451,20 +454,31 @@ Deno.serve(async (req) => {
           }
           const orderNum = String(orderRow.id).slice(0, 4).toUpperCase();
           const filename = `Order-${orderNum}-${safeFilename(product.name)}-${orderDetails.length}items.txt`;
-          await sendTelegramDocument(customer.chat_id, txt, filename, header, mainMenuKeyboard());
+          const fileCaption = `📄 <b>${escapeHtml(product.name)}</b>\n🧾 Order: <b>#${orderNum}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total Paid: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>`;
+          await sendTelegramDocument(customer.chat_id, txt, filename, fileCaption, mainMenuKeyboard());
         } else {
           paymentMsg += `\n\n⏳ Delivering your order...`;
           await sendTelegramMessage(customer.chat_id, paymentMsg);
-          await sendTelegramMessage(customer.chat_id, header);
-
+          // No middle "Order Delivered!" header — jump straight into product/items block
           const CHUNK_SIZE = 30;
           for (let i = 0; i < orderDetails.length; i += CHUNK_SIZE) {
             const chunk = orderDetails.slice(i, i + CHUNK_SIZE);
-            let msg = `📦 <b>Items${orderDetails.length > CHUNK_SIZE ? ` (${i + 1}-${i + chunk.length} of ${qty})` : ''}:</b>\n\n`;
+            const rangeSuffix = orderDetails.length > CHUNK_SIZE ? ` (${i + 1}-${i + chunk.length} of ${qty})` : '';
+            let msg = `${productHeader}${rangeSuffix}\n\n`;
             for (let j = 0; j < chunk.length; j++) {
               const item = chunk[j];
+              const entries = Object.entries(item || {}).filter(([, v]) => v != null && String(v).trim());
               const numPrefix = orderDetails.length > 1 ? `${i + j + 1}. ` : '';
-              msg += `<code>${escapeHtml(`${numPrefix}${Object.values(item).join(" | ")}`)}</code>\n`;
+              if (multiColumn && entries.length > 1) {
+                msg += `<b>${numPrefix.trim() || '•'}</b>`;
+                for (const [k, v] of entries) {
+                  msg += `\n<b>${escapeHtml(k)}:</b> <code>${escapeHtml(String(v))}</code>`;
+                }
+                msg += `\n\n`;
+              } else {
+                const val = entries.find(([, v]) => String(v).startsWith("http"))?.[1] ?? entries[0]?.[1] ?? "";
+                msg += `${numPrefix}<code>${escapeHtml(String(val))}</code>\n`;
+              }
             }
             await sendTelegramMessage(customer.chat_id, msg);
           }
@@ -477,6 +491,12 @@ Deno.serve(async (req) => {
         await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
 
         awardReferralCommission(supabase, customer.id, totalPrice, orderRow.id).catch(() => {});
+
+        // Notify admin — bKash order delivered
+        const custLabel = customer.username ? `@${customer.username}` : (customer.first_name || `#${customer.chat_id}`);
+        await notifyAdmin(
+          `💰 <b>bKash Order Delivered</b>\n\n👤 Customer: <b>${escapeHtml(custLabel)}</b>\n📦 Product: <b>${escapeHtml(product.name)}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>${escapeHtml(deposit.payment_method || "bKash")}</b>${deposit.via ? `\n🧾 Via: <code>${escapeHtml(deposit.via)}</code>` : ""}`
+        );
 
         return new Response(JSON.stringify({ success: true, action: "delivered", product: product.name, qty }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
