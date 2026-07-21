@@ -523,6 +523,10 @@ Deno.serve(async (req) => {
           `💰 <b>bKash Order Delivered</b>\n\n👤 ${escapeHtml(custLabel)}\n📦 Product: <b>${escapeHtml(product.name)}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>${escapeHtml(deposit.payment_method || "bKash")}</b>\n🔗 TxID: <code>${escapeHtml(deposit.txn_hash || "—")}</code>`
         );
 
+        // Recent Sales Feed (Web/Bot group)
+        const saleSource: "web" | "bot" = (deposit.source || "bot") === "web" ? "web" : "bot";
+        notifyRecentSale(supabase, product, qty, saleSource).catch(() => {});
+
         return new Response(JSON.stringify({ success: true, action: "delivered", product: product.name, qty }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
