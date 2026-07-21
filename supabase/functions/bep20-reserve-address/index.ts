@@ -11,9 +11,13 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const { customer_id, expected_amount, token = "ANY", pending_product_id = null, pending_quantity = null } = await req.json();
-    if (!customer_id || !expected_amount || expected_amount <= 0) {
-      return json({ error: "customer_id and positive expected_amount required" }, 400);
+    const { requireCustomerAuth } = await import("../_shared/require-caller.ts");
+    const authz = await requireCustomerAuth(req);
+    if (!authz.ok) return json({ error: authz.error }, authz.status);
+
+    const { customer_id: bodyCustomerId, expected_amount, token = "ANY", pending_product_id = null, pending_quantity = null } = await req.json();
+    if (!expected_amount || expected_amount <= 0) {
+      return json({ error: "positive expected_amount required" }, 400);
     }
     const t = String(token).toUpperCase();
     if (!["USDT", "USDC", "ANY"].includes(t)) return json({ error: "token must be USDT|USDC|ANY" }, 400);
@@ -26,6 +30,20 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Resolve customer_id: for user-token callers, look it up from auth_user_id and
+    // ignore any body-supplied value (prevents targeting another customer's account).
+    let customer_id: string | null = null;
+    if (authz.mode === "user") {
+      const { data: c } = await supabase
+        .from("bot_customers").select("id").eq("auth_user_id", authz.authUserId).maybeSingle();
+      if (!c?.id) return json({ error: "Customer not found for this user" }, 404);
+      customer_id = c.id;
+    } else {
+      if (!bodyCustomerId) return json({ error: "customer_id required" }, 400);
+      customer_id = bodyCustomerId;
+    }
+
 
     // Reuse an existing pending reservation for this customer if still valid + same token/amount
     const { data: existing } = await supabase
