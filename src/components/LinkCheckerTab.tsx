@@ -117,12 +117,25 @@ export default function LinkCheckerTab() {
 
   const clearInvalid = async (pid?: string) => {
     if (!confirm('Permanently delete invalid stock rows? This frees up the slot — re-add fresh links after.')) return;
-    let q = supabase.from('bot_product_stock_items').delete().eq('status', 'invalid');
-    if (pid) q = q.eq('product_id', pid);
-    const { error } = await q;
-    if (error) { toast.error(error.message); return; }
-    toast.success('Cleared');
-    void loadAll();
+    const rows = pid ? invalidStock.filter(s => s.product_id === pid) : invalidStock;
+    const ids = rows.map(r => r.id);
+    if (ids.length === 0) { toast.info('Nothing to clear'); return; }
+    const BATCH = 100;
+    let done = 0;
+    try {
+      for (let i = 0; i < ids.length; i += BATCH) {
+        const chunk = ids.slice(i, i + BATCH);
+        const { error } = await supabase.from('bot_product_stock_items').delete().in('id', chunk);
+        if (error) throw error;
+        done += chunk.length;
+        if (ids.length > BATCH) toast.info(`Clearing… ${done}/${ids.length}`);
+      }
+      toast.success(`Cleared ${done} invalid link(s)`);
+      void loadAll();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to clear');
+      void loadAll();
+    }
   };
 
   const clearOldJobs = async () => {
