@@ -126,6 +126,17 @@ Deno.serve(async (req) => {
     return htmlResp("failed", "Payment not found or already processed.");
   }
 
+  // Clear the "Continue to Pay" prompt in Telegram (issue: leftover order/payment buttons)
+  if (deposit.prompt_message_id && deposit.prompt_chat_id) {
+    await sendTelegram("deleteMessage", {
+      chat_id: deposit.prompt_chat_id,
+      message_id: deposit.prompt_message_id,
+    }).catch(() => {});
+    await supabase.from("bot_deposits")
+      .update({ prompt_message_id: null, prompt_chat_id: null })
+      .eq("id", deposit.id);
+  }
+
   if (deposit.status === "verified") {
     return htmlResp("success", "Payment already processed.");
   }
