@@ -140,8 +140,8 @@ const BkashActivityTab = () => {
     const total = verified.reduce((s, r) => s + Number(r.amount || 0), 0);
     const today = verified.filter((r) => new Date(r.created_at).toDateString() === new Date().toDateString());
     const todayAmt = today.reduce((s, r) => s + Number(r.amount || 0), 0);
-    const pending = rows.filter((r) => r.status === 'pending' || r.status === 'bkash_pending').length;
-    return { total, count: verified.length, todayAmt, todayCount: today.length, pending };
+    const visible = rows.filter((r) => r.status !== 'pending' && r.status !== 'bkash_pending').length;
+    return { total, count: verified.length, todayAmt, todayCount: today.length, visible };
   }, [rows]);
 
   if (loading) {
