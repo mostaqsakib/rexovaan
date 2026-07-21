@@ -247,6 +247,9 @@ const BkashActivityTab = () => {
                   {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   <Smartphone className="h-4 w-4 text-pink-400 shrink-0" />
                   <span className="text-sm font-mono font-semibold">${Number(r.amount || 0).toFixed(2)}</span>
+                  {bdt != null && (
+                    <span className="text-xs font-mono text-pink-300/90">৳{bdt.toFixed(2)}</span>
+                  )}
                   <Badge variant="outline" className={`text-[10px] uppercase gap-1 ${meta.cls}`}>
                     <Icon className="h-3 w-3" />{meta.label}
                   </Badge>
