@@ -19,16 +19,44 @@ async function getTonAddress(): Promise<string | null> {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
+    const { requireCustomerAuth } = await import("../_shared/require-caller.ts");
+    const authz = await requireCustomerAuth(req);
+    if (!authz.ok) {
+      return new Response(JSON.stringify({ error: authz.error }), {
+        status: authz.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json();
-    const customerId: string = body.customer_id;
+    const bodyCustomerId: string | undefined = body.customer_id;
     const expectedAmount: number = Number(body.expected_amount);
     const pendingProductId: string | null = body.pending_product_id || null;
     const pendingQuantity: number | null = body.pending_quantity || null;
-    if (!customerId || !Number.isFinite(expectedAmount) || expectedAmount < 1) {
-      return new Response(JSON.stringify({ error: "customer_id and expected_amount>=1 required" }), {
+    if (!Number.isFinite(expectedAmount) || expectedAmount < 1) {
+      return new Response(JSON.stringify({ error: "expected_amount>=1 required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    let customerId: string;
+    if (authz.mode === "user") {
+      const { data: c } = await supabase
+        .from("bot_customers").select("id").eq("auth_user_id", authz.authUserId).maybeSingle();
+      if (!c?.id) {
+        return new Response(JSON.stringify({ error: "Customer not found for this user" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      customerId = c.id;
+    } else {
+      if (!bodyCustomerId) {
+        return new Response(JSON.stringify({ error: "customer_id required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      customerId = bodyCustomerId;
+    }
+
     const tonAddress = await getTonAddress();
     if (!tonAddress) {
       return new Response(JSON.stringify({ error: "USDT_TON_ADDRESS not configured" }), {
