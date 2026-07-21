@@ -50,6 +50,16 @@ async function sendTelegram(method: string, body: Record<string, unknown>) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  const { requireServiceRoleOrAdmin } = await import("../_shared/require-caller.ts");
+  const authz = await requireServiceRoleOrAdmin(req);
+  if (!authz.ok) {
+    return new Response(JSON.stringify({ ok: false, error: authz.error }), {
+      status: authz.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+
+
   // Parse force flag — force=true bypasses small-deposit threshold + re-picks deferred rows.
   let force = false;
   try {
