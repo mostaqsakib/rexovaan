@@ -119,7 +119,12 @@ Deno.serve(async (req) => {
   const source = deposit?.source ?? "web";
   const htmlResp = (status: "success" | "cancel" | "failed", message: string, extra: Record<string, string> = {}) =>
     new Response(redirectHTML(source, status, message, extra), {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+      },
     });
 
   if (!deposit || !paymentID) {
