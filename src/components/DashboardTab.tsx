@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import type { DateRange } from 'react-day-picker';
 import {
-  Loader2, TrendingUp, DollarSign, ShoppingBag, Users, Calendar, Trophy, Clock,
-  Sparkles, Package, Globe, Bot, Hash, Wallet, UserPlus, Repeat, BarChart3, Target,
+  Loader2, TrendingUp, DollarSign, ShoppingBag, Users, Calendar as CalendarIcon, Trophy, Clock,
+  Sparkles, Package, Globe, Bot, Hash, Wallet, UserPlus, Repeat, BarChart3, Target, Filter, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
