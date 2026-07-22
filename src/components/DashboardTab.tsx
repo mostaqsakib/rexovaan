@@ -406,7 +406,7 @@ const DashboardTab = () => {
               const totalH = (total / chart.maxRev) * 100;
               const botH = total ? (d.bot / total) * 100 : 0;
               const webH = total ? (d.web / total) * 100 : 0;
-              const isToday = i === chart.days.length - 1;
+              const isToday = !rangeBounds && i === chart.days.length - 1;
               return (
                 <div key={i} className="group relative flex h-full flex-1 flex-col items-center justify-end">
                   <div
