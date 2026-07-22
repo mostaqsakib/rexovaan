@@ -384,7 +384,9 @@ const DashboardTab = () => {
         <Card className="lg:col-span-2 p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h3 className="font-heading text-base font-semibold">Revenue · Last 30 days</h3>
+              <h3 className="font-heading text-base font-semibold">
+                Revenue · {rangeBounds ? 'Custom range' : 'Last 30 days'}
+              </h3>
               <p className="text-xs text-muted-foreground">Stacked: Bot + Web daily revenue</p>
             </div>
             <div className="flex items-center gap-3 text-right">
@@ -393,8 +395,8 @@ const DashboardTab = () => {
                 <span className="ml-2 h-2 w-2 rounded-sm bg-blue-400" /> Web
               </div>
               <div>
-                <div className="text-lg font-bold">{fmtUSD(stats.d30.rev)}</div>
-                <div className="text-[11px] text-muted-foreground">{stats.d30.count} orders</div>
+                <div className="text-lg font-bold">{fmtUSD(rangeBounds ? stats.custom.rev : stats.d30.rev)}</div>
+                <div className="text-[11px] text-muted-foreground">{rangeBounds ? stats.custom.count : stats.d30.count} orders</div>
               </div>
             </div>
           </div>
