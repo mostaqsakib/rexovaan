@@ -516,18 +516,26 @@ const DashboardTab = () => {
           </div>
           <div className="space-y-2">
             {topCustomers.length === 0 && <div className="text-sm text-muted-foreground">No data</div>}
-            {topCustomers.map((c, i) => (
-              <div key={c.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-card/50 px-3 py-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{i + 1}</span>
-                  <span className="truncate font-mono text-[11px] text-muted-foreground">{c.id.slice(0, 12)}…</span>
+            {topCustomers.map((c, i) => {
+              const info = customerMap[c.id];
+              const name = info?.first_name?.trim() || (info?.username ? `@${info.username}` : null);
+              const sub = info?.username ? `@${info.username}` : (info?.chat_id ? `ID ${info.chat_id}` : `${c.id.slice(0, 8)}…`);
+              return (
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-card/50 px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{i + 1}</span>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{name || sub}</div>
+                      {name && <div className="truncate text-[10px] text-muted-foreground">{sub}</div>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 pl-2">
+                    <div className="text-sm font-bold text-primary">{fmtUSD(c.rev)}</div>
+                    <div className="text-[10px] text-muted-foreground">{c.orders} orders</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-primary">{fmtUSD(c.rev)}</div>
-                  <div className="text-[10px] text-muted-foreground">{c.orders} orders</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
 
