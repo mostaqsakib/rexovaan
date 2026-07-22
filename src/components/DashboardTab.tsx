@@ -53,6 +53,7 @@ const DashboardTab = () => {
   const [depositTotals, setDepositTotals] = useState({ verified: 0, pending: 0 });
   const [range, setRange] = useState<DateRange | undefined>();
   const [rangeLoading, setRangeLoading] = useState(false);
+  const [customerMap, setCustomerMap] = useState<Record<string, { username: string | null; first_name: string | null; chat_id: string | null }>>({});
 
   const fetchOrdersSince = async (since: Date) => {
     const sinceISO = since.toISOString();
