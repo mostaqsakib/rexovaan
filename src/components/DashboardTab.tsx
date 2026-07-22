@@ -177,15 +177,8 @@ const DashboardTab = () => {
     return [...m.values()].sort((a, b) => b.rev - a.rev).slice(0, 5);
   }, [orders]);
 
-  const hourly = useMemo(() => {
-    const buckets = Array.from({ length: 24 }, () => 0);
-    for (const o of orders) {
-      const h = new Date(o.created_at).getHours();
-      buckets[h] += Number(o.total_price) || 0;
-    }
-    const max = Math.max(1, ...buckets);
-    return { buckets, max };
-  }, [orders]);
+
+
 
   const recent = orders.slice(0, 8);
   const uniqueBuyers = useMemo(() => new Set(orders.map(o => o.customer_id).filter(Boolean)).size, [orders]);
