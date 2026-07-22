@@ -23,6 +23,7 @@ const AppSidebar = ({ activeTab, onChange, pendingCount = 0 }: AppSidebarProps) 
     {
       label: 'Operations',
       items: [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'web-orders', label: 'Orders', icon: Globe },
         { id: 'pending', label: 'Pending', icon: ClipboardList, badge: pendingCount },
         { id: 'history', label: 'History', icon: History },

@@ -40,6 +40,7 @@ import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { toast } from 'sonner';
 
 const TAB_TITLES: Record<string, string> = {
+  dashboard: 'Dashboard',
   'web-orders': 'Orders',
   products: 'Products',
   stock: 'Stock Manager',
@@ -72,7 +73,7 @@ const Index = () => {
   const { isAuthorized, isLoading, user, isTelegramWebApp } = useAdminAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [broadcastOpen, setBroadcastOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('web-orders');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [pendingCount, setPendingCount] = useState(0);
   const { products, orderHistory, addProduct, removeProduct, refreshStock, placeOrder, restoreOrder } = useProductStore();
 
@@ -179,6 +180,7 @@ const Index = () => {
             title={TAB_TITLES[activeTab] || 'Console'}
           />
           <main className="w-full min-w-0 max-w-[1400px] flex-1 overflow-x-auto overscroll-x-contain px-3 py-4 sm:px-4 sm:py-6 md:px-6 md:py-8">
+            {activeTab === 'dashboard' && <DashboardTab />}
             {activeTab === 'web-orders' && <WebOrdersTab />}
             {activeTab === 'products' && <ProductsTab products={products} onRemove={removeProduct} onReorder={(reordered) => useProductStore.setState({ products: reordered })} onStockChanged={(productId) => void refreshStock(productId)} />}
             {activeTab === 'stock' && <ProductsTab products={products} onRemove={removeProduct} onStockChanged={(productId) => void refreshStock(productId)} stockOnly />}
