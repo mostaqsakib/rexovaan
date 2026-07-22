@@ -360,8 +360,8 @@ const DashboardTab = () => {
         </Card>
       </div>
 
-      {/* Hourly + payment breakdown */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* Payment breakdown */}
+      <div className="grid grid-cols-1 gap-4">
         <Card className="p-5">
           <h3 className="mb-4 font-heading text-base font-semibold">Payment Methods</h3>
           <div className="space-y-3">
@@ -377,29 +377,6 @@ const DashboardTab = () => {
                 </div>
               </div>
             ))}
-          </div>
-        </Card>
-
-        <Card className="lg:col-span-2 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-heading text-base font-semibold">Sales by Hour (all time)</h3>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <div className="flex h-40 items-end gap-1">
-            {hourly.buckets.map((v, h) => {
-              const pct = (v / hourly.max) * 100;
-              return (
-                <div key={h} className="group relative flex h-full flex-1 flex-col items-center justify-end">
-                  <div className="w-full rounded-t bg-gradient-to-t from-primary/70 to-primary/20 transition-all hover:from-primary" style={{ height: `${Math.max(2, pct)}%` }} />
-                  <div className="pointer-events-none absolute -top-10 hidden whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] shadow group-hover:block">
-                    {String(h).padStart(2, '0')}:00 · {fmtUSD(v)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-            <span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>23h</span>
           </div>
         </Card>
       </div>
