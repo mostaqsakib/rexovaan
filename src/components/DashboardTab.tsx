@@ -428,7 +428,7 @@ const DashboardTab = () => {
           <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
             <span>{chart.days[0].label}</span>
             <span>{chart.days[Math.floor(chart.days.length / 2)].label}</span>
-            <span>Today</span>
+            <span>{rangeBounds ? chart.days[chart.days.length - 1].label : 'Today'}</span>
           </div>
         </Card>
 
