@@ -238,6 +238,25 @@ const DashboardTab = () => {
     return [...m.values()].sort((a, b) => b.rev - a.rev).slice(0, 5);
   }, [filteredOrders]);
 
+  useEffect(() => {
+    const missing = topCustomers.map(c => c.id).filter(id => id && !customerMap[id]);
+    if (missing.length === 0) return;
+    (async () => {
+      const { data } = await supabase
+        .from('bot_customers')
+        .select('id,username,first_name,chat_id')
+        .in('id', missing);
+      if (!data) return;
+      setCustomerMap(prev => {
+        const next = { ...prev };
+        for (const c of data as any[]) {
+          next[c.id] = { username: c.username, first_name: c.first_name, chat_id: c.chat_id };
+        }
+        return next;
+      });
+    })();
+  }, [topCustomers]);
+
   const recent = filteredOrders.slice(0, 8);
   const uniqueBuyers = useMemo(() => new Set(orders.map(o => o.customer_id).filter(Boolean)).size, [orders]);
   const daysSinceStart = firstOrderAt
