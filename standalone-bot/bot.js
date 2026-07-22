@@ -5067,9 +5067,8 @@ async function showOrders(chatId, customer, page = 0, emojiMap = {}, editMessage
 
   for (const o of orders) {
     const shortId = String(o.id).substring(0, 4).toUpperCase();
-    const priceStr = Number(o.total_price) >= 1000 ? `${Math.round(Number(o.total_price) / 1000)}k` : String(Number(o.total_price));
     const statusPrefix = o.status === "pending_delivery" ? "⏳ " : o.status === "cancelled" ? "❌ " : "";
-    const btnText = `${statusPrefix}#${shortId} • ${o.product_name} x${o.quantity} • ${priceStr}`.trim();
+    const btnText = `${statusPrefix}#${shortId} • ${o.product_name} x${o.quantity}`.trim();
     buttons.push([{ text: btnText, callback_data: `vord_${o.id}` }]);
   }
 
