@@ -128,10 +128,27 @@ const DashboardTab = () => {
     })();
   }, [range, loadedSince]);
 
+  // Custom range: inclusive [from 00:00, to 23:59]
+  const rangeBounds = useMemo(() => {
+    if (!range?.from) return null;
+    const from = new Date(range.from); from.setHours(0, 0, 0, 0);
+    const to = new Date(range.to ?? range.from); to.setHours(23, 59, 59, 999);
+    return { from, to };
+  }, [range]);
+
+  const filteredOrders = useMemo(() => {
+    if (!rangeBounds) return orders;
+    return orders.filter(o => {
+      const at = new Date(o.created_at).getTime();
+      return at >= rangeBounds.from.getTime() && at <= rangeBounds.to.getTime();
+    });
+  }, [orders, rangeBounds]);
 
   const stats = useMemo(() => {
     const today = startOf(0), d7 = startOf(6), d30 = startOf(29);
-    const b = { today: emptyBucket(), d7: emptyBucket(), d30: emptyBucket(), all: emptyBucket() };
+    const b = {
+      today: emptyBucket(), d7: emptyBucket(), d30: emptyBucket(), all: emptyBucket(), custom: emptyBucket(),
+    };
     const add = (bk: Bucket, o: Order) => {
       const rev = Number(o.total_price) || 0;
       const q = Number(o.quantity) || 0;
@@ -146,17 +163,30 @@ const DashboardTab = () => {
       if (at >= d7) add(b.d7, o);
       if (at >= today) add(b.today, o);
     }
+    for (const o of filteredOrders) add(b.custom, o);
     return b;
-  }, [orders]);
+  }, [orders, filteredOrders]);
 
   const chart = useMemo(() => {
-    const days: { date: Date; web: number; bot: number; count: number; label: string }[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = startOf(i);
-      days.push({ date: d, web: 0, bot: 0, count: 0, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) });
+    // If custom range is set, chart spans that range (capped at 60 buckets); else last 30 days
+    let days: { date: Date; web: number; bot: number; count: number; label: string }[] = [];
+    if (rangeBounds) {
+      const start = rangeBounds.from;
+      const end = new Date(rangeBounds.to); end.setHours(0, 0, 0, 0);
+      const spanDays = Math.min(60, Math.floor((end.getTime() - start.getTime()) / 86400000) + 1);
+      for (let i = 0; i < spanDays; i++) {
+        const d = new Date(start); d.setDate(d.getDate() + i);
+        days.push({ date: d, web: 0, bot: 0, count: 0, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) });
+      }
+    } else {
+      for (let i = 29; i >= 0; i--) {
+        const d = startOf(i);
+        days.push({ date: d, web: 0, bot: 0, count: 0, label: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) });
+      }
     }
     const map = new Map(days.map(d => [d.date.toDateString(), d]));
-    for (const o of orders) {
+    const source = rangeBounds ? filteredOrders : orders;
+    for (const o of source) {
       const key = new Date(o.created_at); key.setHours(0, 0, 0, 0);
       const b = map.get(key.toDateString());
       if (!b) continue;
@@ -167,11 +197,11 @@ const DashboardTab = () => {
     }
     const maxRev = Math.max(1, ...days.map(d => d.web + d.bot));
     return { days, maxRev };
-  }, [orders]);
+  }, [orders, filteredOrders, rangeBounds]);
 
   const topProducts = useMemo(() => {
     const m = new Map<string, { name: string; qty: number; rev: number; orders: number }>();
-    for (const o of orders) {
+    for (const o of filteredOrders) {
       const key = o.product_name || 'Unknown';
       const cur = m.get(key) || { name: key, qty: 0, rev: 0, orders: 0 };
       cur.qty += Number(o.quantity) || 0;
@@ -180,11 +210,11 @@ const DashboardTab = () => {
       m.set(key, cur);
     }
     return [...m.values()].sort((a, b) => b.rev - a.rev).slice(0, 8);
-  }, [orders]);
+  }, [filteredOrders]);
 
   const paymentBreakdown = useMemo(() => {
     const m = new Map<string, { method: string; rev: number; count: number }>();
-    for (const o of orders) {
+    for (const o of filteredOrders) {
       const k = (o.payment_method || 'Other').trim() || 'Other';
       const cur = m.get(k) || { method: k, rev: 0, count: 0 };
       cur.rev += Number(o.total_price) || 0;
@@ -193,11 +223,11 @@ const DashboardTab = () => {
     }
     const total = [...m.values()].reduce((s, x) => s + x.rev, 0) || 1;
     return [...m.values()].sort((a, b) => b.rev - a.rev).map(x => ({ ...x, pct: (x.rev / total) * 100 }));
-  }, [orders]);
+  }, [filteredOrders]);
 
   const topCustomers = useMemo(() => {
     const m = new Map<string, { id: string; rev: number; orders: number }>();
-    for (const o of orders) {
+    for (const o of filteredOrders) {
       if (!o.customer_id) continue;
       const cur = m.get(o.customer_id) || { id: o.customer_id, rev: 0, orders: 0 };
       cur.rev += Number(o.total_price) || 0;
@@ -205,12 +235,9 @@ const DashboardTab = () => {
       m.set(o.customer_id, cur);
     }
     return [...m.values()].sort((a, b) => b.rev - a.rev).slice(0, 5);
-  }, [orders]);
+  }, [filteredOrders]);
 
-
-
-
-  const recent = orders.slice(0, 8);
+  const recent = filteredOrders.slice(0, 8);
   const uniqueBuyers = useMemo(() => new Set(orders.map(o => o.customer_id).filter(Boolean)).size, [orders]);
   const daysSinceStart = firstOrderAt
     ? Math.max(1, Math.floor((Date.now() - new Date(firstOrderAt).getTime()) / 86400000))
