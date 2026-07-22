@@ -77,42 +77,48 @@ const DashboardTab = () => {
     return all;
   };
 
+  const loadDashboard = async () => {
+    setLoading(true);
+    const sinceForLoad = rangeBounds ? new Date(Math.min(rangeBounds.from.getTime(), startOf(180).getTime())) : startOf(180);
+    const all = await fetchOrdersSince(sinceForLoad);
+    setOrders(all);
+    setLoadedSince(sinceForLoad);
+
+    const since7 = startOf(6).toISOString();
+    const [{ data: first }, { count: cCount }, { count: pCount }, { count: pendCount }, { count: newC }] = await Promise.all([
+      supabase.from('bot_orders').select('created_at').in('status', ['delivered', 'completed']).order('created_at', { ascending: true }).limit(1).maybeSingle(),
+      supabase.from('bot_customers').select('id', { count: 'exact', head: true }),
+      supabase.from('bot_products').select('id', { count: 'exact', head: true }),
+      supabase.from('bot_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('bot_customers').select('id', { count: 'exact', head: true }).gte('created_at', since7),
+    ]);
+    setFirstOrderAt(first?.created_at ?? null);
+    setCustomerCount(cCount || 0);
+    setProductCount(pCount || 0);
+    setPendingCount(pendCount || 0);
+    setNewCustomers7d(newC || 0);
+
+    const { data: dep } = await supabase
+      .from('bot_deposits')
+      .select('amount_usd,status')
+      .gte('created_at', startOf(30).toISOString());
+    let vSum = 0, pSum = 0;
+    (dep || []).forEach((d: any) => {
+      const v = Number(d.amount_usd) || 0;
+      if (d.status === 'verified' || d.status === 'completed') vSum += v;
+      else if (d.status === 'pending') pSum += v;
+    });
+    setDepositTotals({ verified: vSum, pending: pSum });
+
+    setLoading(false);
+  };
+
   useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const initialSince = startOf(180);
-      const all = await fetchOrdersSince(initialSince);
-      setOrders(all);
-      setLoadedSince(initialSince);
-
-      const since7 = startOf(6).toISOString();
-      const [{ data: first }, { count: cCount }, { count: pCount }, { count: pendCount }, { count: newC }] = await Promise.all([
-        supabase.from('bot_orders').select('created_at').in('status', ['delivered', 'completed']).order('created_at', { ascending: true }).limit(1).maybeSingle(),
-        supabase.from('bot_customers').select('id', { count: 'exact', head: true }),
-        supabase.from('bot_products').select('id', { count: 'exact', head: true }),
-        supabase.from('bot_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('bot_customers').select('id', { count: 'exact', head: true }).gte('created_at', since7),
-      ]);
-      setFirstOrderAt(first?.created_at ?? null);
-      setCustomerCount(cCount || 0);
-      setProductCount(pCount || 0);
-      setPendingCount(pendCount || 0);
-      setNewCustomers7d(newC || 0);
-
-      const { data: dep } = await supabase
-        .from('bot_deposits')
-        .select('amount_usd,status')
-        .gte('created_at', startOf(30).toISOString());
-      let vSum = 0, pSum = 0;
-      (dep || []).forEach((d: any) => {
-        const v = Number(d.amount_usd) || 0;
-        if (d.status === 'verified' || d.status === 'completed') vSum += v;
-        else if (d.status === 'pending') pSum += v;
-      });
-      setDepositTotals({ verified: vSum, pending: pSum });
-
-      setLoading(false);
-    })();
+    void loadDashboard();
+    const onRefresh = () => { void loadDashboard(); };
+    window.addEventListener('dashboard:refresh', onRefresh);
+    return () => window.removeEventListener('dashboard:refresh', onRefresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Expand order fetch when custom range extends earlier than what's loaded
