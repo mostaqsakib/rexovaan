@@ -280,6 +280,53 @@ const DashboardTab = () => {
         </div>
       </div>
 
+      {/* Custom range picker */}
+      <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <div className="rounded-lg bg-primary/15 p-1.5 text-primary">
+            <Filter className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Custom date range</div>
+            <div className="text-sm font-semibold">
+              {rangeBounds
+                ? `${fmtDate(rangeBounds.from)} → ${fmtDate(rangeBounds.to)}`
+                : 'All metrics show default periods'}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {rangeLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <CalendarIcon className="h-4 w-4" />
+                {range?.from
+                  ? range.to && range.to.getTime() !== range.from.getTime()
+                    ? `${format(range.from, 'LLL d')} – ${format(range.to, 'LLL d, y')}`
+                    : format(range.from, 'LLL d, y')
+                  : 'Pick date range'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="range"
+                selected={range}
+                onSelect={setRange}
+                numberOfMonths={2}
+                initialFocus
+                className={cn('p-3 pointer-events-auto')}
+              />
+            </PopoverContent>
+          </Popover>
+          {range && (
+            <Button variant="ghost" size="sm" onClick={() => setRange(undefined)} className="gap-1">
+              <X className="h-4 w-4" /> Clear
+            </Button>
+          )}
+        </div>
+      </Card>
+
       {/* Source split — Web / Bot / Combined */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <SourceCard label="Website Orders" icon={Globe} accent="text-blue-400" tint="from-blue-500/20 to-blue-500/0"
@@ -296,24 +343,31 @@ const DashboardTab = () => {
       {/* KPI — revenue cards */}
       <div>
         <SectionTitle icon={DollarSign}>Revenue</SectionTitle>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className={cn('grid grid-cols-2 gap-4', rangeBounds ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
           <MetricCard label="Today" value={fmtUSD(stats.today.rev)} sub={`Web ${fmtUSD(stats.today.web)} · Bot ${fmtUSD(stats.today.bot)}`} icon={Clock} tint="from-emerald-500/20 to-emerald-500/0" accent="text-emerald-400" />
-          <MetricCard label="Last 7 days" value={fmtUSD(stats.d7.rev)} sub={`Web ${fmtUSD(stats.d7.web)} · Bot ${fmtUSD(stats.d7.bot)}`} icon={Calendar} tint="from-blue-500/20 to-blue-500/0" accent="text-blue-400" />
+          <MetricCard label="Last 7 days" value={fmtUSD(stats.d7.rev)} sub={`Web ${fmtUSD(stats.d7.web)} · Bot ${fmtUSD(stats.d7.bot)}`} icon={CalendarIcon} tint="from-blue-500/20 to-blue-500/0" accent="text-blue-400" />
           <MetricCard label="Last 30 days" value={fmtUSD(stats.d30.rev)} sub={`Web ${fmtUSD(stats.d30.web)} · Bot ${fmtUSD(stats.d30.bot)}`} icon={TrendingUp} tint="from-violet-500/20 to-violet-500/0" accent="text-violet-400" />
           <MetricCard label="All time" value={fmtUSD(stats.all.rev)} sub={`Web ${fmtUSD(stats.all.web)} · Bot ${fmtUSD(stats.all.bot)}`} icon={DollarSign} tint="from-amber-500/20 to-amber-500/0" accent="text-amber-400" />
+          {rangeBounds && (
+            <MetricCard label="Custom range" value={fmtUSD(stats.custom.rev)} sub={`Web ${fmtUSD(stats.custom.web)} · Bot ${fmtUSD(stats.custom.bot)}`} icon={Filter} tint="from-primary/25 to-primary/0" accent="text-primary" />
+          )}
         </div>
       </div>
 
       {/* KPI — order count cards */}
       <div>
         <SectionTitle icon={Hash}>Orders (count)</SectionTitle>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className={cn('grid grid-cols-2 gap-4', rangeBounds ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
           <MetricCard label="Today" value={fmtInt(stats.today.count)} sub={`${fmtInt(stats.today.qty)} units · Web ${stats.today.webCount} · Bot ${stats.today.botCount}`} icon={Clock} tint="from-emerald-500/20 to-emerald-500/0" accent="text-emerald-400" />
-          <MetricCard label="Last 7 days" value={fmtInt(stats.d7.count)} sub={`${fmtInt(stats.d7.qty)} units · Web ${stats.d7.webCount} · Bot ${stats.d7.botCount}`} icon={Calendar} tint="from-blue-500/20 to-blue-500/0" accent="text-blue-400" />
+          <MetricCard label="Last 7 days" value={fmtInt(stats.d7.count)} sub={`${fmtInt(stats.d7.qty)} units · Web ${stats.d7.webCount} · Bot ${stats.d7.botCount}`} icon={CalendarIcon} tint="from-blue-500/20 to-blue-500/0" accent="text-blue-400" />
           <MetricCard label="Last 30 days" value={fmtInt(stats.d30.count)} sub={`${fmtInt(stats.d30.qty)} units · Web ${stats.d30.webCount} · Bot ${stats.d30.botCount}`} icon={TrendingUp} tint="from-violet-500/20 to-violet-500/0" accent="text-violet-400" />
           <MetricCard label="All time" value={fmtInt(stats.all.count)} sub={`${fmtInt(stats.all.qty)} units · Web ${stats.all.webCount} · Bot ${stats.all.botCount}`} icon={ShoppingBag} tint="from-amber-500/20 to-amber-500/0" accent="text-amber-400" />
+          {rangeBounds && (
+            <MetricCard label="Custom range" value={fmtInt(stats.custom.count)} sub={`${fmtInt(stats.custom.qty)} units · Web ${stats.custom.webCount} · Bot ${stats.custom.botCount}`} icon={Filter} tint="from-primary/25 to-primary/0" accent="text-primary" />
+          )}
         </div>
       </div>
+
 
       {/* Business insight strip */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
