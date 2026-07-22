@@ -53,6 +53,7 @@ const DashboardTab = () => {
   const [depositTotals, setDepositTotals] = useState({ verified: 0, pending: 0 });
   const [range, setRange] = useState<DateRange | undefined>();
   const [rangeLoading, setRangeLoading] = useState(false);
+  const [customerMap, setCustomerMap] = useState<Record<string, { username: string | null; first_name: string | null; chat_id: string | null }>>({});
 
   const fetchOrdersSince = async (since: Date) => {
     const sinceISO = since.toISOString();
@@ -236,6 +237,25 @@ const DashboardTab = () => {
     }
     return [...m.values()].sort((a, b) => b.rev - a.rev).slice(0, 5);
   }, [filteredOrders]);
+
+  useEffect(() => {
+    const missing = topCustomers.map(c => c.id).filter(id => id && !customerMap[id]);
+    if (missing.length === 0) return;
+    (async () => {
+      const { data } = await supabase
+        .from('bot_customers')
+        .select('id,username,first_name,chat_id')
+        .in('id', missing);
+      if (!data) return;
+      setCustomerMap(prev => {
+        const next = { ...prev };
+        for (const c of data as any[]) {
+          next[c.id] = { username: c.username, first_name: c.first_name, chat_id: c.chat_id };
+        }
+        return next;
+      });
+    })();
+  }, [topCustomers]);
 
   const recent = filteredOrders.slice(0, 8);
   const uniqueBuyers = useMemo(() => new Set(orders.map(o => o.customer_id).filter(Boolean)).size, [orders]);
@@ -496,18 +516,26 @@ const DashboardTab = () => {
           </div>
           <div className="space-y-2">
             {topCustomers.length === 0 && <div className="text-sm text-muted-foreground">No data</div>}
-            {topCustomers.map((c, i) => (
-              <div key={c.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-card/50 px-3 py-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{i + 1}</span>
-                  <span className="truncate font-mono text-[11px] text-muted-foreground">{c.id.slice(0, 12)}…</span>
+            {topCustomers.map((c, i) => {
+              const info = customerMap[c.id];
+              const name = info?.first_name?.trim() || (info?.username ? `@${info.username}` : null);
+              const sub = info?.username ? `@${info.username}` : (info?.chat_id ? `ID ${info.chat_id}` : `${c.id.slice(0, 8)}…`);
+              return (
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-card/50 px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">{i + 1}</span>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">{name || sub}</div>
+                      {name && <div className="truncate text-[10px] text-muted-foreground">{sub}</div>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 pl-2">
+                    <div className="text-sm font-bold text-primary">{fmtUSD(c.rev)}</div>
+                    <div className="text-[10px] text-muted-foreground">{c.orders} orders</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-primary">{fmtUSD(c.rev)}</div>
-                  <div className="text-[10px] text-muted-foreground">{c.orders} orders</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
 
