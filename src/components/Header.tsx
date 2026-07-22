@@ -1,4 +1,4 @@
-import { RefreshCw, Plus, Megaphone, Search, LogOut } from 'lucide-react';
+import { RefreshCw, Plus, Megaphone, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
@@ -29,11 +29,6 @@ const Header = ({ onAddProduct, onRefresh, onBroadcast, telegramUser, title = 'D
           <span className="font-heading text-sm font-semibold text-foreground truncate">{title}</span>
         </div>
 
-        <div className="hidden lg:flex items-center gap-2 ml-4 px-3 h-9 w-72 rounded-lg bg-muted/40 border border-border/60 text-muted-foreground">
-          <Search className="h-3.5 w-3.5" />
-          <span className="text-xs">Quick search…</span>
-          <kbd className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-background/60 border border-border/60">⌘K</kbd>
-        </div>
 
         <div className="ml-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
           <Button variant="ghost" size="icon" onClick={onBroadcast} className="h-9 w-9 rounded-lg hover:bg-accent/60" title="Broadcast">
