@@ -5062,15 +5062,14 @@ async function showOrders(chatId, customer, page = 0, emojiMap = {}, editMessage
   }
 
   const totalPages = Math.ceil((count || 0) / PAGE_SIZE);
-  let msg = `📦 <b>ORDER HISTORY</b>\n\nSelect an order to view details:`;
+  let msg = `📦 <b>ORDER HISTORY</b>\n\nSelect an order to view details.\n\n🔍 <i>Tip: Send <code>/order &lt;ID&gt;</code> (e.g. <code>/order A12B</code>) to find a specific order by its ID.</i>`;
   const buttons = [];
 
   for (const o of orders) {
-    const rows = (o.row_numbers || []);
-    const rowLabel = rows.length > 0 ? `#${Math.min(...rows)}` : "";
+    const shortId = String(o.id).substring(0, 4).toUpperCase();
     const priceStr = Number(o.total_price) >= 1000 ? `${Math.round(Number(o.total_price) / 1000)}k` : String(Number(o.total_price));
     const statusPrefix = o.status === "pending_delivery" ? "⏳ " : o.status === "cancelled" ? "❌ " : "";
-    const btnText = `${statusPrefix}${rowLabel} ${o.product_name}  x${o.quantity} ${priceStr}`.trim();
+    const btnText = `${statusPrefix}#${shortId} • ${o.product_name} x${o.quantity} • ${priceStr}`.trim();
     buttons.push([{ text: btnText, callback_data: `vord_${o.id}` }]);
   }
 
