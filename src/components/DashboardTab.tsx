@@ -572,29 +572,52 @@ const DashboardTab = () => {
         </Card>
       </div>
 
-      {/* Payment breakdown */}
-      <div className="grid grid-cols-1 gap-4">
+      {/* Payment methods · Top customers · Recent orders */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Payment Methods (compact) */}
         <Card className="p-5">
-          <h3 className="mb-4 font-heading text-base font-semibold">Payment Methods</h3>
-          <div className="space-y-3">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-blue-400" />
+              <h3 className="font-heading text-base font-semibold">Payment Methods</h3>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{paymentBreakdown.length}</span>
+          </div>
+          <div className="space-y-2.5">
             {paymentBreakdown.length === 0 && <div className="text-sm text-muted-foreground">No data</div>}
-            {paymentBreakdown.map((p) => (
-              <div key={p.method}>
-                <div className="mb-1 flex items-center justify-between text-xs">
-                  <span className="font-medium">{p.method}</span>
-                  <span className="text-muted-foreground">{fmtUSD(p.rev)} · {p.count}</span>
+            {(() => {
+              const top = paymentBreakdown.slice(0, 6);
+              const rest = paymentBreakdown.slice(6);
+              const otherRev = rest.reduce((s, x) => s + x.rev, 0);
+              const otherCount = rest.reduce((s, x) => s + x.count, 0);
+              const otherPct = rest.reduce((s, x) => s + x.pct, 0);
+              const items = rest.length > 0
+                ? [...top, { method: `Others (${rest.length})`, rev: otherRev, count: otherCount, pct: otherPct }]
+                : top;
+              return items.map((p, i) => (
+                <div key={p.method} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full',
+                        i === 0 ? 'bg-blue-400' : i === 1 ? 'bg-violet-400' : i === 2 ? 'bg-emerald-400' :
+                        i === 3 ? 'bg-amber-400' : i === 4 ? 'bg-pink-400' : i === 5 ? 'bg-cyan-400' : 'bg-slate-400')} />
+                      <span className="truncate font-medium">{p.method}</span>
+                    </div>
+                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{fmtUSD(p.rev)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted/60">
+                      <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500" style={{ width: `${Math.max(p.pct, 1.5)}%` }} />
+                    </div>
+                    <span className="w-14 text-right font-mono text-[10px] text-muted-foreground/80">{p.pct.toFixed(1)}% · {p.count}</span>
+                  </div>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500" style={{ width: `${p.pct}%` }} />
-                </div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </Card>
-      </div>
 
-      {/* Top customers + recent */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Top Customers */}
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
             <Users className="h-4 w-4 text-primary" />
@@ -625,39 +648,39 @@ const DashboardTab = () => {
           </div>
         </Card>
 
-        <Card className="lg:col-span-2 p-5">
+        {/* Recent Orders */}
+        <Card className="p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-heading text-base font-semibold">Recent Orders</h3>
-            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="h-4 w-4 text-emerald-400" />
+              <h3 className="font-heading text-base font-semibold">Recent Orders</h3>
+            </div>
           </div>
           <div className="space-y-2">
             {recent.length === 0 && <div className="text-sm text-muted-foreground">No orders yet</div>}
-            {recent.map((o) => (
-              <div key={o.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-card/50 px-3 py-2 transition-colors hover:border-primary/30 hover:bg-card">
+            {recent.slice(0, 6).map((o) => (
+              <div key={o.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-card/50 px-3 py-2 transition-colors hover:border-primary/30 hover:bg-card">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span className={cn('inline-flex h-4 items-center rounded px-1.5 text-[9px] font-bold uppercase',
                       o.source === 'web' ? 'bg-blue-500/20 text-blue-400' : 'bg-emerald-500/20 text-emerald-400')}>
-                      {o.source === 'web' ? 'Web' : 'Bot'}
+                      {o.source === 'web' ? 'W' : 'B'}
                     </span>
-                    <div className="truncate text-sm font-medium">{o.product_name || 'Unknown'}</div>
+                    <div className="truncate text-xs font-medium">{o.product_name || 'Unknown'}</div>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span>{new Date(o.created_at).toLocaleString('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                    <span>·</span>
-                    <span>{o.payment_method || '—'}</span>
-                    <span>·</span>
-                    <span>Qty {o.quantity}</span>
+                  <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    {new Date(o.created_at).toLocaleString('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} · Qty {o.quantity}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-primary">{fmtUSD(Number(o.total_price) || 0)}</div>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-bold text-primary">{fmtUSD(Number(o.total_price) || 0)}</div>
                 </div>
               </div>
             ))}
           </div>
         </Card>
       </div>
+
     </div>
   );
 };
