@@ -5713,6 +5713,15 @@ async function handleMessage(message, emojiMap) {
   if (text === "/balance") { await showBalance(chatId, customer, emojiMap); return; }
   if (text === "/deposit") { await showDepositInfo(chatId, emojiMap); return; }
   if (text === "/orders") { await showOrders(chatId, customer, 0, emojiMap); return; }
+  if (text?.startsWith("/order ") || text === "/order") {
+    const arg = (text.split(/\s+/)[1] || "").trim();
+    if (!arg) {
+      await sendMessage(chatId, "🔍 Usage: <code>/order &lt;ID&gt;</code>\nExample: <code>/order A12B</code>", mainMenuKeyboard(emojiMap));
+    } else {
+      await handleViewOrder(chatId, customer, arg, emojiMap);
+    }
+    return;
+  }
   if (text === "/api") { await showDeveloperApi(chatId, customer, emojiMap); return; }
   if (text === "/withdraw") { await handleWithdrawStart(chatId, customer, emojiMap); return; }
   if (text === "/support") {
