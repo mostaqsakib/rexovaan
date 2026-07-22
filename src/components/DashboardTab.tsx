@@ -401,56 +401,142 @@ const DashboardTab = () => {
 
       {/* Chart + Top products */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h3 className="font-heading text-base font-semibold">
-                Revenue · {rangeBounds ? 'Custom range' : 'Last 30 days'}
+        <Card className="lg:col-span-2 p-0 overflow-hidden border-border/60">
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3 flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="font-heading text-base font-semibold tracking-tight">
+                Revenue <span className="text-muted-foreground font-normal">· {rangeBounds ? 'Custom range' : 'Last 30 days'}</span>
               </h3>
-              <p className="text-xs text-muted-foreground">Stacked: Bot + Web daily revenue</p>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                Stacked: Bot + Web daily revenue
+              </p>
             </div>
-            <div className="flex items-center gap-3 text-right">
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="h-2 w-2 rounded-sm bg-emerald-400" /> Bot
-                <span className="ml-2 h-2 w-2 rounded-sm bg-blue-400" /> Web
+            <div className="flex items-center gap-5">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
+                  <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Bot</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]" />
+                  <span className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Web</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xl font-bold tracking-tight leading-none">{fmtUSD(rangeBounds ? stats.custom.rev : stats.d30.rev)}</div>
+                <div className="text-[11px] text-muted-foreground font-medium mt-1">{fmtInt(rangeBounds ? stats.custom.count : stats.d30.count)} orders</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Chart body */}
+          <div className="relative px-5 pt-6 pb-3">
+            {/* Gridlines */}
+            <div className="pointer-events-none absolute left-5 right-5 top-6 bottom-10 flex flex-col justify-between">
+              {[0, 1, 2, 3, 4].map(i => <div key={i} className="w-full border-t border-border/40" />)}
+            </div>
+
+            {/* Bars + trend overlay */}
+            <div className="relative h-56">
+              <div className="absolute inset-0 flex items-end justify-between gap-[3px]">
+                {chart.days.map((d, i) => {
+                  const total = d.bot + d.web;
+                  const totalPct = (total / chart.maxRev) * 100;
+                  const botPct = total ? (d.bot / total) * totalPct : 0;
+                  const webPct = total ? (d.web / total) * totalPct : 0;
+                  const isToday = !rangeBounds && i === chart.days.length - 1;
+                  const isPeak = total > 0 && total === chart.maxRev;
+                  return (
+                    <div key={i} className={cn(
+                      'group relative flex h-full flex-1 flex-col justify-end gap-[2px] rounded-t-md transition-all',
+                      isPeak && 'bg-emerald-500/[0.06] ring-1 ring-emerald-500/20'
+                    )}>
+                      <div
+                        className={cn('w-full rounded-t-sm bg-blue-400/75 transition-colors group-hover:bg-blue-400', isToday && 'bg-blue-400')}
+                        style={{ height: `${Math.max(webPct, total && d.web ? 1.5 : 0)}%` }}
+                      />
+                      <div
+                        className={cn('w-full bg-emerald-400/85 transition-colors group-hover:bg-emerald-400', isToday && 'bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.45)]')}
+                        style={{ height: `${Math.max(botPct, total && d.bot ? 1.5 : 0)}%` }}
+                      />
+                      <div className="pointer-events-none absolute -top-16 left-1/2 z-30 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] shadow-lg group-hover:block">
+                        <div className="font-semibold">{fmtUSD(total)} · {d.label}</div>
+                        <div className="text-muted-foreground">Bot {fmtUSD(d.bot)} · Web {fmtUSD(d.web)}</div>
+                        <div className="text-muted-foreground">{d.count} orders</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Smooth trend line overlay tracking total daily revenue */}
+              <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="rev-trend-fill" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.18" />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                {(() => {
+                  const n = chart.days.length;
+                  if (n < 2) return null;
+                  const pts = chart.days.map((d, i) => {
+                    const t = d.bot + d.web;
+                    const x = (i / (n - 1)) * 100;
+                    const y = 100 - (t / chart.maxRev) * 92 - 2;
+                    return [x, y] as const;
+                  });
+                  let p = `M ${pts[0][0]} ${pts[0][1]}`;
+                  for (let i = 1; i < n; i++) {
+                    const [px, py] = pts[i - 1];
+                    const [cx, cy] = pts[i];
+                    const mx = (px + cx) / 2;
+                    const my = (py + cy) / 2;
+                    p += i === 1 ? ` L ${mx} ${my}` : ` Q ${px} ${py}, ${mx} ${my}`;
+                  }
+                  p += ` L ${pts[n - 1][0]} ${pts[n - 1][1]}`;
+                  const fill = `${p} L 100 100 L 0 100 Z`;
+                  return (
+                    <>
+                      <path d={fill} fill="url(#rev-trend-fill)" />
+                      <path d={p} fill="none" stroke="hsl(var(--primary))" strokeOpacity="0.9" strokeWidth="1.4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+                    </>
+                  );
+                })()}
+              </svg>
+            </div>
+
+            {/* Axis labels */}
+            <div className="mt-3 flex justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              <span>{chart.days[0].label}</span>
+              <span>{chart.days[Math.floor(chart.days.length / 2)].label}</span>
+              <span className={rangeBounds ? '' : 'text-emerald-400'}>{rangeBounds ? chart.days[chart.days.length - 1].label : 'Today'}</span>
+            </div>
+          </div>
+
+          {/* Footer stats */}
+          <div className="flex items-center justify-between border-t border-border/40 bg-white/[0.02] px-5 py-3">
+            <div className="flex gap-6">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Avg / Day</p>
+                <p className="text-sm font-mono text-foreground">{fmtUSD(avgDaily)}</p>
               </div>
               <div>
-                <div className="text-lg font-bold">{fmtUSD(rangeBounds ? stats.custom.rev : stats.d30.rev)}</div>
-                <div className="text-[11px] text-muted-foreground">{rangeBounds ? stats.custom.count : stats.d30.count} orders</div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Avg Order</p>
+                <p className="text-sm font-mono text-emerald-400">{fmtUSD(avgOrder)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Peak Day</p>
+                <p className="text-sm font-mono text-foreground">{fmtUSD(chart.maxRev)}</p>
               </div>
             </div>
-          </div>
-          <div className="flex h-52 items-end gap-1.5">
-            {chart.days.map((d, i) => {
-              const total = d.web + d.bot;
-              const totalH = (total / chart.maxRev) * 100;
-              const botH = total ? (d.bot / total) * 100 : 0;
-              const webH = total ? (d.web / total) * 100 : 0;
-              const isToday = !rangeBounds && i === chart.days.length - 1;
-              return (
-                <div key={i} className="group relative flex h-full flex-1 flex-col items-center justify-end">
-                  <div
-                    className={cn('flex w-full flex-col-reverse overflow-hidden rounded-t-md transition-all', isToday && 'ring-1 ring-primary/60 shadow-[0_0_10px_hsl(var(--primary)/0.4)]')}
-                    style={{ height: `${Math.max(2, totalH)}%` }}
-                  >
-                    <div className="w-full bg-gradient-to-t from-emerald-500/80 to-emerald-400/50" style={{ height: `${botH}%` }} />
-                    <div className="w-full bg-gradient-to-t from-blue-500/80 to-blue-400/50" style={{ height: `${webH}%` }} />
-                  </div>
-                  <div className="pointer-events-none absolute -top-14 z-10 hidden whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] shadow-lg group-hover:block">
-                    <div className="font-semibold">{fmtUSD(total)} · {d.label}</div>
-                    <div className="text-muted-foreground">Bot {fmtUSD(d.bot)} · Web {fmtUSD(d.web)}</div>
-                    <div className="text-muted-foreground">{d.count} orders</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-2 flex justify-between text-[10px] text-muted-foreground">
-            <span>{chart.days[0].label}</span>
-            <span>{chart.days[Math.floor(chart.days.length / 2)].label}</span>
-            <span>{rangeBounds ? chart.days[chart.days.length - 1].label : 'Today'}</span>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              {chart.days.length} days
+            </div>
           </div>
         </Card>
+
 
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
