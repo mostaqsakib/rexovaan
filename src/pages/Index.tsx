@@ -165,7 +165,12 @@ const Index = () => {
     }, 100);
   };
 
-  const handleRefresh = () => { toast.info('Refreshing...'); void refreshStock(); void fetchPendingCount(); };
+  const handleRefresh = () => {
+    toast.info('Refreshing...');
+    void refreshStock();
+    void fetchPendingCount();
+    window.dispatchEvent(new CustomEvent('dashboard:refresh'));
+  };
 
   return (
     <SidebarProvider defaultOpen>
