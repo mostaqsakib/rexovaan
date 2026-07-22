@@ -5094,13 +5094,14 @@ async function handleViewOrder(chatId, customer, orderIdOrShortId, emojiMap, edi
       .maybeSingle();
     order = data;
   } else {
+    const needle = String(orderIdOrShortId).toLowerCase().replace(/^#/, "");
     const { data: recentOrders } = await supabase
       .from("bot_orders")
       .select("*")
       .eq("customer_id", customer.id)
       .order("created_at", { ascending: false })
-      .limit(100);
-    order = recentOrders?.find((item) => String(item.id).startsWith(orderIdOrShortId));
+      .limit(200);
+    order = recentOrders?.find((item) => String(item.id).toLowerCase().startsWith(needle));
   }
 
   if (!order) { await editOrSend(chatId, editMessageId, "❌ Order not found.", mainMenuKeyboard()); return; }
