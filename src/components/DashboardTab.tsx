@@ -44,35 +44,45 @@ const emptyBucket = (): Bucket => ({ rev: 0, count: 0, qty: 0, web: 0, bot: 0, w
 const DashboardTab = () => {
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [loadedSince, setLoadedSince] = useState<Date>(() => startOf(180));
   const [firstOrderAt, setFirstOrderAt] = useState<string | null>(null);
   const [customerCount, setCustomerCount] = useState(0);
   const [productCount, setProductCount] = useState(0);
   const [newCustomers7d, setNewCustomers7d] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [depositTotals, setDepositTotals] = useState({ verified: 0, pending: 0 });
+  const [range, setRange] = useState<DateRange | undefined>();
+  const [rangeLoading, setRangeLoading] = useState(false);
+
+  const fetchOrdersSince = async (since: Date) => {
+    const sinceISO = since.toISOString();
+    const all: Order[] = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from('bot_orders')
+        .select('id,product_name,product_id,quantity,total_price,status,payment_method,source,customer_id,created_at')
+        .in('status', ['delivered', 'completed'])
+        .gte('created_at', sinceISO)
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (error) break;
+      if (!data || data.length === 0) break;
+      all.push(...(data as Order[]));
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  };
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const sinceISO = startOf(180).toISOString();
-      const all: Order[] = [];
-      let from = 0;
-      const PAGE = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from('bot_orders')
-          .select('id,product_name,product_id,quantity,total_price,status,payment_method,source,customer_id,created_at')
-          .in('status', ['delivered', 'completed'])
-          .gte('created_at', sinceISO)
-          .order('created_at', { ascending: false })
-          .range(from, from + PAGE - 1);
-        if (error) break;
-        if (!data || data.length === 0) break;
-        all.push(...(data as Order[]));
-        if (data.length < PAGE) break;
-        from += PAGE;
-      }
+      const initialSince = startOf(180);
+      const all = await fetchOrdersSince(initialSince);
       setOrders(all);
+      setLoadedSince(initialSince);
 
       const since7 = startOf(6).toISOString();
       const [{ data: first }, { count: cCount }, { count: pCount }, { count: pendCount }, { count: newC }] = await Promise.all([
@@ -103,6 +113,21 @@ const DashboardTab = () => {
       setLoading(false);
     })();
   }, []);
+
+  // Expand order fetch when custom range extends earlier than what's loaded
+  useEffect(() => {
+    if (!range?.from) return;
+    const from = new Date(range.from); from.setHours(0, 0, 0, 0);
+    if (from >= loadedSince) return;
+    (async () => {
+      setRangeLoading(true);
+      const all = await fetchOrdersSince(from);
+      setOrders(all);
+      setLoadedSince(from);
+      setRangeLoading(false);
+    })();
+  }, [range, loadedSince]);
+
 
   const stats = useMemo(() => {
     const today = startOf(0), d7 = startOf(6), d30 = startOf(29);
