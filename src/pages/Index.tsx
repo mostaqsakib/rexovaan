@@ -11,6 +11,7 @@ import AppSidebar from '@/components/AppSidebar';
 import WebOrdersTab from '@/components/WebOrdersTab';
 import ProductsTab from '@/components/ProductsTab';
 import HistoryTab from '@/components/HistoryTab';
+import DashboardTab from '@/components/DashboardTab';
 
 import CustomersTab from '@/components/CustomersTab';
 import WithdrawalsTab from '@/components/WithdrawalsTab';
