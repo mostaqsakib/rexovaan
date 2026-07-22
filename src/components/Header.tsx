@@ -1,4 +1,4 @@
-import { RefreshCw, Plus, Megaphone, Search, LogOut } from 'lucide-react';
+import { RefreshCw, Plus, Megaphone, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
