@@ -5111,7 +5111,7 @@ async function handleViewOrder(chatId, customer, orderIdOrShortId, emojiMap, edi
     ? `<tg-emoji emoji-id="${prodData.custom_emoji_id}">📦</tg-emoji>`
     : "📦";
 
-  const date = new Date(order.created_at).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const date = new Date(order.created_at).toLocaleString("en-US", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Dhaka" }) + " (BD)";
   const statusEmoji = order.status === "completed" ? "✅" : order.status === "pending_delivery" ? "⏳" : order.status === "cancelled" ? "❌" : "📦";
   const statusLabel = order.status === "pending_delivery" ? "Pending Delivery" : order.status === "cancelled" ? "Cancelled" : "Completed";
 
