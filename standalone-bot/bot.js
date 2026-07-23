@@ -5209,7 +5209,7 @@ async function showAdminWithdrawals(chatId, emojiMap, editMessageId) {
   for (const w of wds) {
     const cust = w.customer;
     const label = cust?.username ? `@${cust.username}` : cust?.first_name || `#${cust?.chat_id}`;
-    const date = new Date(w.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    const date = new Date(w.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Asia/Dhaka" }) + " (BD)";
     msg += `👤 ${label} — <b>${Number(w.amount).toFixed(2)} USDT</b> — ${date}\n📋 <code>${w.payment_details}</code>\n\n`;
     buttons.push([
       applyEmoji({ text: `✅ ${label}`, callback_data: `wd_approve_${w.id}` }, "approve_withdrawal", emojiMap),
@@ -5815,7 +5815,7 @@ async function handleMessage(message, emojiMap) {
     for (const o of pendings) {
       const orderShort = o.id.slice(0, 8);
       await notifyAdmin(
-        `🔔 <b>Pending Delivery</b>\n\n👤 ${getCustomerLabel(o.customer)}\n📦 Product: <b>${escapeHtml(o.product_name)}</b> x${o.quantity}\n💰 Total: <b>${Number(o.total_price).toFixed(2)} USDT</b>\n📅 ${new Date(o.created_at).toLocaleString()}\n\nDeliver from source bot, then tap below.`,
+        `🔔 <b>Pending Delivery</b>\n\n👤 ${getCustomerLabel(o.customer)}\n📦 Product: <b>${escapeHtml(o.product_name)}</b> x${o.quantity}\n💰 Total: <b>${Number(o.total_price).toFixed(2)} USDT</b>\n📅 ${new Date(o.created_at).toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '')} (BD)\n\nDeliver from source bot, then tap below.`,
         { inline_keyboard: [[{ text: "📦 Deliver", callback_data: `mdlvr_${orderShort}` }], [{ text: "❌ Cancel & Refund", callback_data: `mdcancel_${orderShort}` }]] }
       ).catch(() => {});
     }
@@ -6112,7 +6112,7 @@ async function handleMessage(message, emojiMap) {
       "{name}": adminName,
       "{id}": String(chatId),
       "{balance}": Number(customer.balance).toFixed(2),
-      "{joined}": new Date(customer.created_at).toLocaleDateString("en-GB"),
+      "{joined}": new Date(customer.created_at).toLocaleDateString("en-GB", { timeZone: "Asia/Dhaka" }) + " (BD)",
       "{link}": `https://t.me/${await getBotUsername()}?start=ref_${customer.id.substring(0, 8)}`,
       "{ref_24h}": "0",
       "{ref_7d}": "0",
@@ -6866,7 +6866,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     const order = orders?.find((o) => o.id.startsWith(orderShort));
     if (!order) { await editOrSend(chatId, msgId, "⚠️ Order not found or already processed.", { inline_keyboard: [[{ text: "◀️ Pending", callback_data: "adm_pending_deliveries" }]] }); return; }
     const cust = order.customer;
-    const date = new Date(order.created_at).toLocaleString();
+    const date = new Date(order.created_at).toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (BD)';
     const msg = `⏳ <b>Pending Delivery</b>\n\n👤 ${getCustomerLabel(cust)}\n📦 Product: <b>${escapeHtml(order.product_name)}</b> x${order.quantity}\n💰 Total: <b>${Number(order.total_price).toFixed(2)} USDT</b>\n📅 ${date}\n\nDeliver from source bot, then tap below.`;
     await editOrSend(chatId, msgId, msg, { inline_keyboard: [
       [{ text: "📦 Deliver", callback_data: `mdlvr_${orderShort}` }],
@@ -7013,7 +7013,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     }
 
     // firstOrderDate already set from RPC above
-    const botStartedStr = firstOrderDate ? new Date(firstOrderDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "N/A";
+    const botStartedStr = firstOrderDate ? new Date(firstOrderDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Dhaka" }) + " (BD)" : "N/A";
 
     const statsMsg = `📊 <b>Quick Stats</b>\n\n` +
       `🚀 Bot Started: <b>${botStartedStr}</b>\n` +
@@ -7054,7 +7054,7 @@ async function handleCallback(callbackQuery, emojiMap) {
       const prod = dep.product;
       const custLabel = cust ? (cust.username ? `@${cust.username}` : cust.first_name || `#${cust.chat_id}`) : "Unknown";
       const depShort = dep.id.slice(0, 8);
-      const date = new Date(dep.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+      const date = new Date(dep.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Asia/Dhaka" }) + " (BD)";
       msg += `👤 ${custLabel} — <code>${dep.txn_hash ? dep.txn_hash.slice(0, 12) + "..." : "N/A"}</code> — ${date}`;
       if (dep.pending_product_id && prod) msg += ` — 📦 ${prod.name} x${dep.pending_quantity || 1}`;
       msg += `\n`;
