@@ -434,6 +434,37 @@ function SectionCard({
             {buttons.length === 0 ? (
               <p className="text-xs text-muted-foreground">No matching buttons found in <code>bot_button_emojis</code>.</p>
             ) : (
+        <div className="space-y-2">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary" /> Live Preview
+            <span className="text-[10px] normal-case text-muted-foreground/70">— exactly how it appears in Telegram (premium emoji + formatting)</span>
+          </Label>
+          <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-[#0f1620] to-[#0a1017] p-4 shadow-inner">
+            <div className="inline-block max-w-full rounded-2xl rounded-tl-sm bg-[#182533] px-3.5 py-2.5 text-[14px] leading-[1.35] text-[#e6edf3] shadow-md">
+              <TelegramRichText html={fillTemplate(value)} />
+              {section.buttons && buttons.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-white/5 pt-2">
+                  {buttons.map((b) => (
+                    <span key={b.id} className="inline-flex items-center gap-1 rounded-md bg-[#2b5278] px-2.5 py-1 text-[12px] text-white/95">
+                      {b.custom_emoji_id && <TgEmoji id={b.custom_emoji_id} size="1em" />}
+                      <span>{b.button_label}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {section.buttons && section.buttons.length > 0 && (
+          <div className="space-y-2 rounded-lg border border-dashed border-border/60 p-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Buttons on this screen</Label>
+              <Badge variant="secondary" className="text-[10px]">{buttons.length} / {section.buttons.length}</Badge>
+            </div>
+            {buttons.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No matching buttons found in <code>bot_button_emojis</code>.</p>
+            ) : (
               <div className="space-y-2">
                 {buttons.map((b) => <ButtonEditor key={b.id} row={b} onChanged={onButtonsChanged} />)}
               </div>
