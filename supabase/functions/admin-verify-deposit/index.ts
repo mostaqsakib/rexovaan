@@ -276,20 +276,24 @@ Deno.serve(async (req) => {
     // If this deposit has a pending product order → auto-deliver
     if (deposit.pending_product_id && deposit.pending_quantity) {
       const { data: product } = await supabase.from("bot_products").select("*").eq("id", deposit.pending_product_id).single();
-      if (!product) {
-        // No product found, apply deposit (pay-later first, then balance)
+      if (!product || product.is_active === false) {
+        // Product not found OR disabled → credit balance instead of delivering
         const applied = await applyDepositCredit(supabase, customer.id, amount);
         const plLine = applied.paidPayLater > 0
           ? `\n🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>`
           : "";
         await supabase.from("bot_customers").update({ pending_action: null, updated_at: new Date().toISOString() }).eq("id", customer.id);
         await supabase.from("bot_deposits").update({ pending_product_id: null, pending_quantity: null }).eq("id", deposit_id);
+        const disabledLine = product && product.is_active === false
+          ? `\n\n⚠️ <b>${product.name}</b> is currently disabled and could not be delivered. Your payment has been credited to your balance instead.`
+          : "";
         await sendTelegramMessage(customer.chat_id,
-          `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\nNew Balance: <b>${applied.newBalance.toFixed(2)} USDT</b>`,
+          `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\nNew Balance: <b>${applied.newBalance.toFixed(2)} USDT</b>${disabledLine}`,
           mainMenuKeyboard()
         );
-        return new Response(JSON.stringify({ success: true, action: "balance_added", ...applied }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return new Response(JSON.stringify({ success: true, action: product ? "product_disabled_balance_added" : "balance_added", ...applied }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+
 
       const qty = deposit.pending_quantity;
 
