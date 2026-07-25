@@ -175,14 +175,17 @@ export function TgEmoji({ id, fallback, size = '1.25em', disableRemoteFetch = fa
 
   if (info?.url) {
     if (info.url.endsWith('.json')) {
-      if (lottieData) {
+      if (lottieData && isValidLottie(lottieData)) {
         return (
           <Suspense fallback={<span className="tg-emoji-fallback" aria-label={text}>{text}</span>}>
             <span className="tg-emoji-media" style={style} aria-label={text}>
-              <Lottie animationData={lottieData} loop autoplay style={{ width: '100%', height: '100%' }} />
+              <LottieSafe animationData={lottieData} fallback={<span className="tg-emoji-fallback" aria-label={text}>{text}</span>} />
             </span>
           </Suspense>
         );
+      }
+      if (lottieData && !isValidLottie(lottieData)) {
+        return <span className="tg-emoji-fallback" aria-label={text}>{text}</span>;
       }
     } else if (info.url.endsWith('.webm') || info.url.endsWith('.mp4')) {
       return (
