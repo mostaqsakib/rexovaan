@@ -2,6 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
 import { logAdminAction } from "../_shared/audit-log.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULT_WITHDRAWAL_OK = `✅ <b>Withdrawal Completed!</b>
+
+Amount: <b>{amount} USDT</b>
+Payment Details: <b>{payment_details}</b>{note_block}`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,10 +70,13 @@ Deno.serve(async (req) => {
       note: admin_note || null,
     });
 
-    const caption = `✅ <b>Withdrawal Completed!</b>\n\n` +
-      `Amount: <b>${Number(withdrawal.amount).toFixed(2)} USDT</b>\n` +
-      `Payment Details: <b>${withdrawal.payment_details}</b>` +
-      (admin_note ? `\n\n📝 <b>Note:</b> ${admin_note}` : "");
+    const caption = await renderTemplate(supabase, "notif_withdrawal_confirmed", DEFAULT_WITHDRAWAL_OK, {
+      amount: Number(withdrawal.amount).toFixed(2),
+      payment_details: String(withdrawal.payment_details || ""),
+      note: admin_note || "",
+      note_block: admin_note ? `\n\n📝 <b>Note:</b> ${admin_note}` : "",
+      name: customer.first_name || "",
+    });
 
     await notifyCustomer(supabase, {
       customer,

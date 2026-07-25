@@ -121,7 +121,14 @@ Deno.serve(async (req) => {
 
     // 5. Notify customer over Telegram + email (best-effort)
     if (customer) {
-      const tgText = `↩️ <b>Order Refunded</b>\n\nProduct: <b>${order.product_name}</b> × ${order.quantity}\nRefunded: <b>${Number(order.total_price).toFixed(2)} USDT</b> to your balance${note ? `\n\nNote: ${note}` : ""}`;
+      const tgText = await renderTemplate(supabase, "notif_refund", DEFAULT_REFUND, {
+        product: order.product_name,
+        quantity: order.quantity,
+        amount: Number(order.total_price).toFixed(2),
+        note: note || "",
+        note_block: note ? `\n\nNote: ${note}` : "",
+        name: customer.first_name || "",
+      });
       await notifyCustomer(supabase, {
         customer,
         telegram: { text: tgText },
