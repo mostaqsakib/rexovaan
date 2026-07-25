@@ -594,10 +594,13 @@ Deno.serve(async (req) => {
       }).select("id").single();
 
 
-      await sendTelegramMessage(customer.chat_id,
-        `✅ <b>Payment Verified & Order Placed!</b>\n\nProduct: <b>${product.name}</b>\nQuantity: <b>${qty}</b>\nTotal: <b>${totalPrice.toFixed(2)} ${product.currency}</b>\n\n⏳ <b>Your order is being processed.</b>\nAdmin will deliver it manually.`,
-        mainMenuKeyboard()
-      );
+      const manualText = await renderTemplate(supabase, "notif_payment_verified_manual", DEFAULT_PAYMENT_VERIFIED_MANUAL, {
+        product: product.name,
+        quantity: String(qty),
+        total: totalPrice.toFixed(2),
+        currency: product.currency || "USDT",
+      });
+      await sendTelegramMessage(customer.chat_id, manualText, mainMenuKeyboard());
 
       return new Response(JSON.stringify({ success: true, action: "pending_delivery", product: product.name, qty, orderId: orderRow?.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -607,10 +610,14 @@ Deno.serve(async (req) => {
     const plLine = applied.paidPayLater > 0
       ? `\n🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>`
       : "";
-    await sendTelegramMessage(customer.chat_id,
-      `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\nNew Balance: <b>${applied.newBalance.toFixed(2)} USDT</b>`,
-      mainMenuKeyboard()
-    );
+    const verifiedText = await renderTemplate(supabase, "notif_deposit_verified", DEFAULT_DEPOSIT_VERIFIED, {
+      amount: amount.toFixed(2),
+      new_balance: applied.newBalance.toFixed(2),
+      pay_later: applied.paidPayLater.toFixed(2),
+      pay_later_block: plLine,
+      name: customer.first_name || "",
+    });
+    await sendTelegramMessage(customer.chat_id, verifiedText, mainMenuKeyboard());
 
     return new Response(JSON.stringify({ success: true, action: "balance_added", newBalance: applied.newBalance, ...applied }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
