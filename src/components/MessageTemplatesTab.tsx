@@ -425,15 +425,6 @@ function SectionCard({
           </div>
         </div>
 
-        {section.buttons && section.buttons.length > 0 && (
-          <div className="space-y-2 rounded-lg border border-dashed border-border/60 p-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Buttons on this screen</Label>
-              <Badge variant="secondary" className="text-[10px]">{buttons.length} / {section.buttons.length}</Badge>
-            </div>
-            {buttons.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No matching buttons found in <code>bot_button_emojis</code>.</p>
-            ) : (
         <div className="space-y-2">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" /> Live Preview
