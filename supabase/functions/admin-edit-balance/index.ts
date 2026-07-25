@@ -84,15 +84,16 @@ Deno.serve(async (req) => {
     });
 
     if (!silent) {
-      const emoji = diff > 0 ? "💰" : diff < 0 ? "💸" : "ℹ️";
-      const action = diff > 0 ? "Credited" : diff < 0 ? "Debited" : "Adjusted";
-
-      const tgMsg =
-        `${emoji} <b>Balance ${action}</b>\n\n` +
-        `Previous: <b>${oldBalance.toFixed(2)} USDT</b>\n` +
-        `New: <b>${newBal.toFixed(2)} USDT</b>\n` +
-        `Change: <b>${diff >= 0 ? '+' : ''}${diff.toFixed(2)} USDT</b>\n\n` +
-        `📝 <b>Note:</b> ${noteText}`;
+      const key = diff > 0 ? "notif_balance_credit" : diff < 0 ? "notif_balance_debit" : "notif_balance_adjust";
+      const defaultTpl = diff > 0 ? DEFAULT_CREDIT : diff < 0 ? DEFAULT_DEBIT : DEFAULT_ADJUST;
+      const tgMsg = await renderTemplate(supabase, key, defaultTpl, {
+        old_balance: oldBalance.toFixed(2),
+        new_balance: newBal.toFixed(2),
+        diff: (diff >= 0 ? "+" : "") + diff.toFixed(2),
+        abs_diff: Math.abs(diff).toFixed(2),
+        note: noteText,
+        name: customer.first_name || "",
+      });
 
       await notifyCustomer(supabase, {
         customer,
