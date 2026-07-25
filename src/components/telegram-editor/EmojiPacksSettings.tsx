@@ -13,6 +13,28 @@ export default function EmojiPacksSettings() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [newName, setNewName] = useState('');
+  const [detectInput, setDetectInput] = useState('');
+  const [detecting, setDetecting] = useState(false);
+
+  const detectPacks = async () => {
+    setDetecting(true);
+    try {
+      const raw = detectInput.trim();
+      const { data, error } = await supabase.functions.invoke('detect-emoji-packs', {
+        body: raw.includes('<') ? { html: raw } : { emoji_ids: raw.split(/[\s,;]+/).filter(Boolean) },
+      });
+      if (error) throw error;
+      const names = data?.pack_names || [];
+      if (names.length === 0) toast.warning('No packs detected. Check the emoji IDs.');
+      else toast.success(`Detected & synced ${names.length} pack(s): ${names.join(', ')}`);
+      setDetectInput('');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Detect failed');
+    } finally {
+      setDetecting(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -117,7 +139,25 @@ export default function EmojiPacksSettings() {
             </div>
           </>
         )}
+
+        <div className="mt-4 rounded-md border border-dashed p-3 space-y-2">
+          <p className="text-sm font-medium">Auto-detect from forwarded content</p>
+          <p className="text-xs text-muted-foreground">
+            Telegram theke premium emoji-wala msg forward korle je HTML/text pao ba je emoji ID gulo dekha jay — nicher box e paste koro. System nijei pack short-name ber kore sync kore felbe.
+          </p>
+          <textarea
+            className="w-full min-h-[80px] rounded-md border bg-background p-2 text-xs font-mono"
+            placeholder="&lt;tg-emoji emoji-id='5368324170671202286'&gt;🔥&lt;/tg-emoji&gt;   OR   5368324170671202286, 5350454367726960585"
+            value={detectInput}
+            onChange={(e) => setDetectInput(e.target.value)}
+          />
+          <Button onClick={detectPacks} disabled={detecting || !detectInput.trim()} size="sm" className="gap-2">
+            {detecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            Detect &amp; Sync Packs
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
 }
+
