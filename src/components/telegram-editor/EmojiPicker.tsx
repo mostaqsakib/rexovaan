@@ -188,7 +188,14 @@ export default function EmojiPicker({ onPickUnicode, onPickCustom }: Props) {
       </div>
 
 
-      <div className="telegram-emoji-footer flex items-center gap-1 overflow-x-auto px-2 py-1.5 scrollbar-hide">
+      <div
+        className="telegram-emoji-footer flex items-center gap-1 overflow-x-auto px-2 py-1.5 scrollbar-hide"
+        onWheel={(e) => {
+          if (e.deltaY === 0) return;
+          e.currentTarget.scrollLeft += e.deltaY;
+        }}
+      >
+
         {mode === 'custom' ? (
           <>
             <FooterButton active={activeSet === 'recent'} onClick={() => setActiveSet('recent')} title="Recent"><Clock className="h-4 w-4" /></FooterButton>
