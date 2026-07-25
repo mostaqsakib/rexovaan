@@ -4191,6 +4191,7 @@ async function handleBuyProduct(chatId, customer, productId, emojiMap, editMessa
     supabase.from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity"),
   ]);
   if (!product) { await sendMessage(chatId, "❌ Product not found.", mainMenuKeyboard()); return; }
+  if (product.is_active === false) { await sendMessage(chatId, `⚠️ <b>${product.name}</b> is currently unavailable.`, mainMenuKeyboard()); return; }
 
   const { msg, flashSale } = await buildProductDetailMessage(product, tiers, customer?.id);
   const keyboard = buildProductDetailKeyboard(productId, emojiMap);
