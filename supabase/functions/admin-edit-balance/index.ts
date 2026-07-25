@@ -2,6 +2,30 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
 import { logAdminAction } from "../_shared/audit-log.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULT_CREDIT = `💰 <b>Balance Credited</b>
+
+Previous: <b>{old_balance} USDT</b>
+New: <b>{new_balance} USDT</b>
+Change: <b>+{diff} USDT</b>
+
+📝 <b>Note:</b> {note}`;
+
+const DEFAULT_DEBIT = `💸 <b>Balance Debited</b>
+
+Previous: <b>{old_balance} USDT</b>
+New: <b>{new_balance} USDT</b>
+Change: <b>{diff} USDT</b>
+
+📝 <b>Note:</b> {note}`;
+
+const DEFAULT_ADJUST = `ℹ️ <b>Balance Adjusted</b>
+
+Previous: <b>{old_balance} USDT</b>
+New: <b>{new_balance} USDT</b>
+
+📝 <b>Note:</b> {note}`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
