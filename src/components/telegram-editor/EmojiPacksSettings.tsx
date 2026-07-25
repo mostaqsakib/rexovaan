@@ -13,6 +13,28 @@ export default function EmojiPacksSettings() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [newName, setNewName] = useState('');
+  const [detectInput, setDetectInput] = useState('');
+  const [detecting, setDetecting] = useState(false);
+
+  const detectPacks = async () => {
+    setDetecting(true);
+    try {
+      const raw = detectInput.trim();
+      const { data, error } = await supabase.functions.invoke('detect-emoji-packs', {
+        body: raw.includes('<') ? { html: raw } : { emoji_ids: raw.split(/[\s,;]+/).filter(Boolean) },
+      });
+      if (error) throw error;
+      const names = data?.pack_names || [];
+      if (names.length === 0) toast.warning('No packs detected. Check the emoji IDs.');
+      else toast.success(`Detected & synced ${names.length} pack(s): ${names.join(', ')}`);
+      setDetectInput('');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || 'Detect failed');
+    } finally {
+      setDetecting(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
