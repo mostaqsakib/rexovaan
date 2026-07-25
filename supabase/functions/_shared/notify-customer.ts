@@ -13,6 +13,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY_1") || Deno.env.get("TELEGRAM_API_KEY");
+const BOT_TOKEN = Deno.env.get("BOT_TOKEN") || Deno.env.get("TELEGRAM_BOT_TOKEN");
 
 interface NotifyCustomerArgs {
   customer: { id?: string; chat_id?: number | null; auth_user_id?: string | null; first_name?: string | null; username?: string | null };
@@ -21,24 +22,40 @@ interface NotifyCustomerArgs {
 }
 
 async function sendTelegram(chatId: number, args: NonNullable<NotifyCustomerArgs["telegram"]>) {
-  if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) return { ok: false, skipped: "no_telegram_keys" };
-  const headers = {
-    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-    "X-Connection-Api-Key": TELEGRAM_API_KEY,
-    "Content-Type": "application/json",
-  };
+  // Prefer direct Bot API (BOT_TOKEN) since standalone bot uses it; fallback to Lovable gateway.
+  let url: string;
+  let headers: Record<string, string>;
+
+  if (BOT_TOKEN) {
+    url = `https://api.telegram.org/bot${BOT_TOKEN}`;
+    headers = { "Content-Type": "application/json" };
+  } else if (LOVABLE_API_KEY && TELEGRAM_API_KEY) {
+    url = GATEWAY_URL;
+    headers = {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "X-Connection-Api-Key": TELEGRAM_API_KEY,
+      "Content-Type": "application/json",
+    };
+  } else {
+    return { ok: false, skipped: "no_telegram_keys" };
+  }
+
   try {
     if (args.photoUrl) {
       const body: Record<string, unknown> = { chat_id: chatId, photo: args.photoUrl, parse_mode: "HTML" };
       if (args.text) body.caption = args.text;
-      const r = await fetch(`${GATEWAY_URL}/sendPhoto`, { method: "POST", headers, body: JSON.stringify(body) });
+      if (args.replyMarkup) body.reply_markup = args.replyMarkup;
+      const r = await fetch(`${url}/sendPhoto`, { method: "POST", headers, body: JSON.stringify(body) });
+      if (!r.ok) console.error("notifyCustomer sendPhoto failed", r.status, await r.text().catch(() => ""));
       return { ok: r.ok };
     }
     const body: Record<string, unknown> = { chat_id: chatId, text: args.text, parse_mode: "HTML", disable_web_page_preview: true };
     if (args.replyMarkup) body.reply_markup = args.replyMarkup;
-    const r = await fetch(`${GATEWAY_URL}/sendMessage`, { method: "POST", headers, body: JSON.stringify(body) });
+    const r = await fetch(`${url}/sendMessage`, { method: "POST", headers, body: JSON.stringify(body) });
+    if (!r.ok) console.error("notifyCustomer sendMessage failed", r.status, await r.text().catch(() => ""));
     return { ok: r.ok };
   } catch (e) {
+    console.error("notifyCustomer telegram error", (e as Error).message);
     return { ok: false, error: String((e as Error).message || e) };
   }
 }
