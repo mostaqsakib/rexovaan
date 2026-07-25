@@ -65,21 +65,29 @@ const SpecialPricingDialog = ({ customerId, customerLabel, onClose }: Props) => 
 
   useEffect(() => { void load(); }, [customerId]);
 
+  const notify = (product_id: string, action: 'set' | 'updated' | 'removed' | 'disabled' | 'enabled', price?: number, min_quantity?: number, note?: string | null) => {
+    supabase.functions
+      .invoke('admin-notify-special-price', { body: { customer_id: customerId, product_id, action, price, min_quantity, note } })
+      .catch((e) => console.error('notify special price failed', e));
+  };
+
   const handleAdd = async () => {
     if (!customerId || !newProductId || !newPrice) return;
     const price = Number(newPrice);
     const moq = Math.max(1, Math.floor(Number(newMoq) || 1));
+    const noteVal = newNote.trim() || null;
     if (!(price >= 0)) { toast.error('Invalid price'); return; }
     setSaving(true);
     const { error } = await supabase
       .from('bot_customer_pricing')
       .upsert(
-        { customer_id: customerId, product_id: newProductId, price, min_quantity: moq, note: newNote.trim() || null },
+        { customer_id: customerId, product_id: newProductId, price, min_quantity: moq, note: noteVal },
         { onConflict: 'customer_id,product_id' }
       );
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success('Special price set');
+    toast.success('Special price set — customer notified');
+    notify(newProductId, 'set', price, moq, noteVal);
     setNewProductId(''); setNewPrice(''); setNewMoq('1'); setNewNote('');
     void load();
   };
@@ -87,26 +95,33 @@ const SpecialPricingDialog = ({ customerId, customerLabel, onClose }: Props) => 
   const handleUpdate = async (id: string, price: number, minQuantity: number) => {
     if (!(price >= 0)) { toast.error('Invalid price'); return; }
     const moq = Math.max(1, Math.floor(minQuantity || 1));
+    const row = rows.find((r) => r.id === id);
     const { error } = await supabase.from('bot_customer_pricing').update({ price, min_quantity: moq, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { toast.error(error.message); return; }
-    toast.success('Updated');
+    toast.success('Updated — customer notified');
+    if (row) notify(row.product_id, 'updated', price, moq, row.note);
     void load();
   };
 
 
   const handleToggleActive = async (id: string, is_active: boolean) => {
+    const row = rows.find((r) => r.id === id);
     const { error } = await supabase.from('bot_customer_pricing').update({ is_active, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { toast.error(error.message); return; }
     toast.success(is_active ? 'Special price enabled' : 'Disabled — customer sees regular price');
+    if (row) notify(row.product_id, is_active ? 'enabled' : 'disabled', row.price, row.min_quantity, row.note);
     void load();
   };
 
   const handleDelete = async (id: string) => {
+    const row = rows.find((r) => r.id === id);
     const { error } = await supabase.from('bot_customer_pricing').delete().eq('id', id);
     if (error) { toast.error(error.message); return; }
     toast.success('Removed — customer will see regular price');
+    if (row) notify(row.product_id, 'removed', row.price, row.min_quantity, row.note);
     void load();
   };
+
 
 
   const usedIds = new Set(rows.map((r) => r.product_id));
