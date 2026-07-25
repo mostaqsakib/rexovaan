@@ -4191,6 +4191,7 @@ async function handleBuyProduct(chatId, customer, productId, emojiMap, editMessa
     supabase.from("bot_product_pricing").select("*").eq("product_id", productId).order("min_quantity"),
   ]);
   if (!product) { await sendMessage(chatId, "❌ Product not found.", mainMenuKeyboard()); return; }
+  if (product.is_active === false) { await sendMessage(chatId, `⚠️ <b>${product.name}</b> is currently unavailable.`, mainMenuKeyboard()); return; }
 
   const { msg, flashSale } = await buildProductDetailMessage(product, tiers, customer?.id);
   const keyboard = buildProductDetailKeyboard(productId, emojiMap);
@@ -4217,12 +4218,13 @@ async function handleBuyProduct(chatId, customer, productId, emojiMap, editMessa
 async function showQuantitySelection(chatId, productId, emojiMap, editMessageId) {
   // Fire flash sale lookup in parallel with the initial product/tier/customer batch.
   const [{ data: product }, { data: tiers }, { data: custRow }, flash] = await Promise.all([
-    supabase.from("bot_products").select("name, price, currency, custom_emoji_id, is_manual_delivery, source_id, source_product_id, last_known_stock").eq("id", productId).single(),
+    supabase.from("bot_products").select("name, price, currency, custom_emoji_id, is_manual_delivery, source_id, source_product_id, last_known_stock, is_active").eq("id", productId).single(),
     supabase.from("bot_product_pricing").select("price").eq("product_id", productId).order("min_quantity").limit(1),
     supabase.from("bot_customers").select("id").eq("chat_id", chatId).maybeSingle(),
     getActiveFlashSale(productId),
   ]);
   if (!product) return;
+  if (product.is_active === false) { await sendMessage(chatId, `⚠️ <b>${product.name}</b> is currently unavailable.`, mainMenuKeyboard()); return; }
   // Only use special as base price if MOQ is 1 (always-applicable). Otherwise show tier/regular.
   // (Needs custRow.id, so it runs after the batch.)
   const special = await getCustomerSpecialPrice(custRow?.id, productId, 1);
@@ -4436,6 +4438,7 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
     supabase.from("bot_customers").select("id, balance").eq("chat_id", chatId).single(),
   ]);
   if (!method || !product) return;
+  if (product.is_active === false) { await sendMessage(chatId, `⚠️ <b>${product.name}</b> is currently unavailable.`, mainMenuKeyboard()); return; }
 
   const unitPrice = await getTieredPrice(productId, qty, Number(product.price), fresh?.id);
   const total = Math.round(unitPrice * qty * 10000) / 10000;
