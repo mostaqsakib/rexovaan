@@ -558,9 +558,18 @@ Deno.serve(async (req) => {
 
         // Notify admin — bKash order delivered
         const custLabel = customer.username ? `@${customer.username}` : (customer.first_name || `#${customer.chat_id}`);
-        await notifyAdmin(
-          `💰 <b>bKash Order Delivered</b>\n\n👤 ${escapeHtml(custLabel)}\n📦 Product: <b>${escapeHtml(product.name)}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>${escapeHtml(deposit.payment_method || "bKash")}</b>\n🔗 TxID: <code>${escapeHtml(deposit.txn_hash || "—")}</code>`
-        );
+        const paymentLabel = deposit.payment_method || "bKash";
+        const adminText = await renderTemplate(supabase, "admin_notif_order_delivered", DEFAULT_ADMIN_ORDER_DELIVERED, {
+          payment: paymentLabel,
+          customer: escapeHtml(custLabel),
+          product: escapeHtml(product.name),
+          quantity: String(qty),
+          total: totalPrice.toFixed(2),
+          currency: escapeHtml(product.currency || "USDT"),
+          payment_method: escapeHtml(paymentLabel),
+          txid: escapeHtml(deposit.txn_hash || "—"),
+        });
+        await notifyAdmin(adminText);
 
         // Recent Sales Feed (Web/Bot group)
         const saleSource: "web" | "bot" = (deposit.source || "bot") === "web" ? "web" : "bot";
