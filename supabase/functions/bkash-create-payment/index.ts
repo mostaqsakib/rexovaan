@@ -65,6 +65,14 @@ Deno.serve(async (req) => {
     if (!customer) return json({ error: "Customer not found" }, 404);
     if (customer.is_banned) return json({ error: "Account banned" }, 403);
 
+    // Guard: reject bKash payment for disabled products
+    if (pendingProductId) {
+      const { data: prod } = await admin.from("bot_products").select("is_active, name").eq("id", pendingProductId).maybeSingle();
+      if (!prod) return json({ error: "Product not found" }, 404);
+      if (prod.is_active === false) return json({ error: `${prod.name} is currently unavailable` }, 400);
+    }
+
+
     const missing = ["BKASH_APP_KEY", "BKASH_APP_SECRET", "BKASH_USERNAME", "BKASH_PASSWORD"].filter(
       (k) => !Deno.env.get(k),
     );
