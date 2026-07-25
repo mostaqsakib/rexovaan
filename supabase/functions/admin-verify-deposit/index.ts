@@ -4,6 +4,30 @@ import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/b
 import { requireAdmin } from "../_shared/require-admin.ts";
 import { applyDepositCredit } from "../_shared/apply-deposit-credit.ts";
 import { awardReferralCommission } from "../_shared/referral-commission.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULT_ADMIN_ORDER_DELIVERED = `💰 <b>{payment} Order Delivered</b>
+
+👤 {customer}
+📦 Product: <b>{product}</b>
+🔢 Quantity: <b>{quantity}</b>
+💵 Total: <b>{total} {currency}</b>
+💳 Payment: <b>{payment_method}</b>
+🔗 TxID: <code>{txid}</code>`;
+
+const DEFAULT_DEPOSIT_VERIFIED = `✅ <b>Deposit Verified by Admin!</b>
+
+Amount: <b>{amount} USDT</b>{pay_later_block}
+New Balance: <b>{new_balance} USDT</b>`;
+
+const DEFAULT_PAYMENT_VERIFIED_MANUAL = `✅ <b>Payment Verified & Order Placed!</b>
+
+Product: <b>{product}</b>
+Quantity: <b>{quantity}</b>
+Total: <b>{total} {currency}</b>
+
+⏳ <b>Your order is being processed.</b>
+Admin will deliver it manually.`;
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 const BULK_TXT_THRESHOLD = 20;
