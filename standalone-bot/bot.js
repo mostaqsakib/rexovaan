@@ -4438,6 +4438,7 @@ async function showPaymentDetails(chatId, methodId, productId, qty, emojiMap, ed
     supabase.from("bot_customers").select("id, balance").eq("chat_id", chatId).single(),
   ]);
   if (!method || !product) return;
+  if (product.is_active === false) { await sendMessage(chatId, `⚠️ <b>${product.name}</b> is currently unavailable.`, mainMenuKeyboard()); return; }
 
   const unitPrice = await getTieredPrice(productId, qty, Number(product.price), fresh?.id);
   const total = Math.round(unitPrice * qty * 10000) / 10000;
