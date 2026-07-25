@@ -11,7 +11,35 @@ import { Loader2, Save, MessageSquare, Info, RotateCcw, Sparkles, X } from 'luci
 import { TelegramEditor } from '@/components/telegram-editor';
 import EmojiPicker from '@/components/telegram-editor/EmojiPicker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { TgEmoji } from '@/components/TelegramRichText';
+import { TgEmoji, TelegramRichText } from '@/components/TelegramRichText';
+
+// Sample values for {placeholders} so the preview looks realistic
+const SAMPLE_VARS: Record<string, string> = {
+  name: 'Rakib', id: '123456789', balance: '25.40', joined: '2025-01-14',
+  ref_24h: '3', ref_7d: '12', ref_total: '48', earned: '14.20', available: '6.80',
+  transferred: '7.40', commission: '5', bonus: '0.50',
+  link: 'https://t.me/RexovaanShoppieBot?start=ref_123',
+  amount: '10', address: '0xA1b2C3d4E5f6789012345678901234567890AbCd',
+  expires_min: '30', memo: 'REX-8842', amount_ltc: '0.0842', amount_usd: '10.00', rate: '118.76',
+  product: '📦 Netflix 1 Month Premium', quantity: '2', price: '4.50', total: '9.00',
+  currency: 'USDT', subtotal: '9.00', final: '9.00', after: '16.40',
+  balance_section: '\n💰 Balance: <b>25.40 USDT</b>', payment_hint: '\n\n💳 Choose payment below', pay_later_section: '',
+  added: '25', stock: '48', bulk_pricing: '\n📦 5+ = 4.20 USDT each',
+  description: 'Fresh premium accounts, warranty included.',
+  old_price: '5.00', new_price: '4.50', savings: '0.50', original: '5.00', countdown: '00:14:32',
+  old_balance: '25.40', new_balance: '35.40', diff: '10.00', abs_diff: '10.00',
+  note: 'Manual top-up from admin.', txid: '0xabc123def456', txid_block: '\n🔗 TxID: <code>0xabc…456</code>',
+  reason: 'Amount mismatch.', reason_block: '\n\n📝 Reason: Amount mismatch.',
+  pay_later: '', pay_later_block: '', payment_details: 'BEP20: 0xA1b2…AbCd',
+  note_block: '\n\n📝 Note: Processed successfully.',
+  special: '3.80', regular: '4.50', savings_block: '\n💸 You save: 0.70 USDT',
+  moq: '5', moq_block: '\n📦 Min order: 5', products: '3 products',
+  count: '3', payment: 'bKash', customer: '@rakib_bd', payment_method: 'bKash Personal',
+};
+
+function fillTemplate(tpl: string): string {
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => (k in SAMPLE_VARS ? SAMPLE_VARS[k] : `{${k}}`));
+}
 
 // ---- Template registry (matches standalone-bot/bot.js) ----
 type Section = {
