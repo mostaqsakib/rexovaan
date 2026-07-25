@@ -1,6 +1,32 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULTS: Record<string, string> = {
+  set: `🎁 <b>Special Price Unlocked</b>
+
+Product: <b>{product}</b>
+Your Price: <b>{special} USDT</b>{savings_block}
+Regular: <s>{regular} USDT</s>{moq_block}{note_block}`,
+  updated: `🔄 <b>Special Price Updated</b>
+
+Product: <b>{product}</b>
+New Price: <b>{special} USDT</b>{savings_block}
+Regular: <s>{regular} USDT</s>{moq_block}`,
+  enabled: `✅ <b>Special Price Re-Enabled</b>
+
+Product: <b>{product}</b>
+Your Price: <b>{special} USDT</b>`,
+  disabled: `⏸️ <b>Special Price Paused</b>
+
+Product: <b>{product}</b>
+You will now see the regular price: <b>{regular} USDT</b>`,
+  removed: `❌ <b>Special Price Removed</b>
+
+Product: <b>{product}</b>
+You will now see the regular price: <b>{regular} USDT</b>`,
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
