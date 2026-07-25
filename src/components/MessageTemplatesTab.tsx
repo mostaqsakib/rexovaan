@@ -191,9 +191,89 @@ const SECTIONS: Section[] = [
     default: `🛍️ Someone just bought <b>{quantity}× {product}</b> from the website`,
     placeholders: '{product} {quantity}',
   },
+
+  // ─── Admin Notifications (edge functions) ───
+  {
+    group: 'Admin Notifications', key: 'notif_balance_credit', title: '29. Balance Credit',
+    desc: 'Admin credits balance manually.',
+    default: `💰 <b>Balance Credited</b>\n\nPrevious: <b>{old_balance} USDT</b>\nNew: <b>{new_balance} USDT</b>\nChange: <b>+{diff} USDT</b>\n\n📝 <b>Note:</b> {note}`,
+    placeholders: '{old_balance} {new_balance} {diff} {abs_diff} {note} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_balance_debit', title: '30. Balance Debit',
+    desc: 'Admin deducts balance manually.',
+    default: `💸 <b>Balance Debited</b>\n\nPrevious: <b>{old_balance} USDT</b>\nNew: <b>{new_balance} USDT</b>\nChange: <b>{diff} USDT</b>\n\n📝 <b>Note:</b> {note}`,
+    placeholders: '{old_balance} {new_balance} {diff} {abs_diff} {note} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_balance_adjust', title: '31. Balance Adjust (no change)',
+    default: `ℹ️ <b>Balance Adjusted</b>\n\nPrevious: <b>{old_balance} USDT</b>\nNew: <b>{new_balance} USDT</b>\n\n📝 <b>Note:</b> {note}`,
+    placeholders: '{old_balance} {new_balance} {note} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_deposit_verified', title: '32. Deposit Verified',
+    default: `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>{amount} USDT</b>{pay_later_block}\nNew Balance: <b>{new_balance} USDT</b>`,
+    placeholders: '{amount} {new_balance} {pay_later} {pay_later_block} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_deposit_rejected', title: '33. Deposit Rejected',
+    default: `❌ <b>Deposit Rejected</b>\n\nYour deposit{txid_block} has been rejected by admin.{reason_block}\n\nIf you believe this is an error, please contact support.`,
+    placeholders: '{amount} {txid} {txid_block} {reason} {reason_block} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_payment_verified_manual', title: '34. Manual Delivery Order Placed',
+    default: `✅ <b>Payment Verified & Order Placed!</b>\n\nProduct: <b>{product}</b>\nQuantity: <b>{quantity}</b>\nTotal: <b>{total} {currency}</b>\n\n⏳ <b>Your order is being processed.</b>\nAdmin will deliver it manually.`,
+    placeholders: '{product} {quantity} {total} {currency}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_refund', title: '35. Order Refund',
+    default: `↩️ <b>Order Refunded</b>\n\nProduct: <b>{product}</b> × {quantity}\nRefunded: <b>{amount} USDT</b> to your balance{note_block}`,
+    placeholders: '{product} {quantity} {amount} {note} {note_block} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_withdrawal_confirmed', title: '36. Withdrawal Confirmed',
+    default: `✅ <b>Withdrawal Completed!</b>\n\nAmount: <b>{amount} USDT</b>\nPayment Details: <b>{payment_details}</b>{note_block}`,
+    placeholders: '{amount} {payment_details} {note} {note_block} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_withdrawal_rejected', title: '37. Withdrawal Rejected',
+    default: `❌ <b>Withdrawal Rejected</b>\n\nYour withdrawal request of <b>{amount} USDT</b> has been rejected.\nThe amount has been returned to your balance.\n\n💰 Current Balance: <b>{new_balance} USDT</b>{reason_block}\n\nContact support if you have questions.`,
+    placeholders: '{amount} {new_balance} {reason} {reason_block} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_special_price_set', title: '38. Special Price — Set',
+    default: `🎁 <b>Special Price Unlocked</b>\n\nProduct: <b>{product}</b>\nYour Price: <b>{special} USDT</b>{savings_block}\nRegular: <s>{regular} USDT</s>{moq_block}{note_block}`,
+    placeholders: '{product} {special} {regular} {savings} {savings_block} {moq} {moq_block} {note} {note_block} {name}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_special_price_updated', title: '39. Special Price — Updated',
+    default: `🔄 <b>Special Price Updated</b>\n\nProduct: <b>{product}</b>\nNew Price: <b>{special} USDT</b>{savings_block}\nRegular: <s>{regular} USDT</s>{moq_block}`,
+    placeholders: '{product} {special} {regular} {savings_block} {moq_block}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_special_price_enabled', title: '40. Special Price — Re-Enabled',
+    default: `✅ <b>Special Price Re-Enabled</b>\n\nProduct: <b>{product}</b>\nYour Price: <b>{special} USDT</b>`,
+    placeholders: '{product} {special}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_special_price_disabled', title: '41. Special Price — Paused',
+    default: `⏸️ <b>Special Price Paused</b>\n\nProduct: <b>{product}</b>\nYou will now see the regular price: <b>{regular} USDT</b>`,
+    placeholders: '{product} {regular}',
+  },
+  {
+    group: 'Admin Notifications', key: 'notif_special_price_removed', title: '42. Special Price — Removed',
+    default: `❌ <b>Special Price Removed</b>\n\nProduct: <b>{product}</b>\nYou will now see the regular price: <b>{regular} USDT</b>`,
+    placeholders: '{product} {regular}',
+  },
+  {
+    group: 'Admin Notifications', key: 'admin_notif_order_delivered', title: '43. Admin Group — Order Delivered',
+    desc: 'Sent to admin group when a bKash / manual deposit order is delivered.',
+    default: `💰 <b>{payment} Order Delivered</b>\n\n👤 {customer}\n📦 Product: <b>{product}</b>\n🔢 Quantity: <b>{quantity}</b>\n💵 Total: <b>{total} {currency}</b>\n💳 Payment: <b>{payment_method}</b>\n🔗 TxID: <code>{txid}</code>`,
+    placeholders: '{payment} {customer} {product} {quantity} {total} {currency} {payment_method} {txid}',
+  },
 ];
 
-const GROUPS = ['Main Flow', 'Deposit Flow', 'Order Flow', 'Auto Broadcasts'];
+const GROUPS = ['Main Flow', 'Deposit Flow', 'Order Flow', 'Auto Broadcasts', 'Admin Notifications'];
 
 // ---- Button row (label + emoji ID) ----
 type ButtonRow = { id: string; button_key: string; button_label: string; custom_emoji_id: string | null };
