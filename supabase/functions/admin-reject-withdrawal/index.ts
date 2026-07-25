@@ -2,6 +2,16 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
 import { logAdminAction } from "../_shared/audit-log.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULT_WITHDRAWAL_REJECT = `❌ <b>Withdrawal Rejected</b>
+
+Your withdrawal request of <b>{amount} USDT</b> has been rejected.
+The amount has been returned to your balance.
+
+💰 Current Balance: <b>{new_balance} USDT</b>{reason_block}
+
+Contact support if you have questions.`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,12 +86,13 @@ Deno.serve(async (req) => {
     });
 
 
-    const tgText = `❌ <b>Withdrawal Rejected</b>\n\n` +
-      `Your withdrawal request of <b>${Number(withdrawal.amount).toFixed(2)} USDT</b> has been rejected.\n` +
-      `The amount has been returned to your balance.\n\n` +
-      `💰 Current Balance: <b>${newBalance.toFixed(2)} USDT</b>` +
-      (note ? `\n\n📝 <b>Reason:</b> ${note}` : "") +
-      `\n\nContact support if you have questions.`;
+    const tgText = await renderTemplate(supabase, "notif_withdrawal_rejected", DEFAULT_WITHDRAWAL_REJECT, {
+      amount: Number(withdrawal.amount).toFixed(2),
+      new_balance: newBalance.toFixed(2),
+      reason: note || "",
+      reason_block: note ? `\n\n📝 <b>Reason:</b> ${note}` : "",
+      name: customer.first_name || "",
+    });
 
     await notifyCustomer(supabase, {
       customer: { ...customer, balance: newBalance },

@@ -1,66 +1,115 @@
-# LTC (Litecoin) Payment Gateway
+## Goal
 
-Trust Wallet er xpub theke proti order-e unique LTC address auto-generate hobe, block explorer diye auto-verify hobe. Same pattern jeta BEP20/Polygon e ache.
+1. Admin action & sales-feed notification msg gula **editable** koro (Message Templates tab er moto WYSIWYG editor diye).
+2. Premium (custom) emoji er 3 ta problem thik koro:
+   - **Picker e pack load hoy na** → pack list refresh + fallback.
+   - **Bot e send korle fallback ashe** → serialize/send pipeline check kore `<tg-emoji>` properly forward.
+   - **Site preview e broken** → `TelegramRichText` diye render, cache theke image/lottie.
 
-## Phase 1 — Database
+---
 
-**New tables:**
-- `ltc_settings` — singleton: `xpub`, `next_index`, `script_type` (bip84/bip49/bip44), `watcher_last_height`, `min_confirmations` (default 2)
-- `ltc_reserved_addresses` — `order_id`, `deposit_id`, `address`, `derivation_index`, `expected_amount_ltc`, `expected_amount_usd`, `status` (pending/paid/expired), `expires_at`, `paid_tx_hash`, `paid_amount_ltc`, `paid_at`
-- `ltc_payment_registry` — `tx_hash`, `vout`, `address`, `amount_ltc`, `block_height`, `confirmations`, `credited_at` (idempotency)
+## Part A — Editable Admin Notifications
 
-**Extend `bot_deposits`:** add `ltc_address`, `ltc_tx_hash` columns.
+Notun template group **"Admin Notifications"** add korbo `MessageTemplatesTab.tsx` te. Egula edit korle edge functions `bot_settings` theke read korbe (hardcoded fallback thakbe).
 
-## Phase 2 — Address Derivation
+### Templates jegula editable hobe:
 
-Shared module `supabase/functions/_ltc/derive.ts`:
-- `zpub`/`ypub`/`xpub` → child pubkey (path `m/0/i`)
-- Encode as bech32 (`ltc1...` for zpub/BIP84), p2sh-segwit (`M...` for ypub/BIP49), or legacy (`L...` for xpub/BIP44)
-- Uses `@scure/bip32` + `@scure/base` (bech32) — Deno esm.sh compatible
+**Customer-facing (edge → customer telegram/email):**
+- `notif_deposit_verified` — Deposit approved
+- `notif_deposit_rejected` — Deposit rejected  
+- `notif_balance_credit` — Admin manual credit (deposit)
+- `notif_balance_debit` — Admin manual deduct
+- `notif_refund` — Order refunded
+- `notif_withdrawal_confirmed` — Withdrawal completed
+- `notif_withdrawal_rejected` — Withdrawal rejected
+- `notif_pending_cancelled` — Pending delivery cancelled
+- `notif_special_price_set` — Special price added/updated
+- `notif_special_price_removed` — Special price removed
 
-## Phase 3 — Reserve Endpoint
+**Admin group / sales-feed:**
+- `admin_notif_order_delivered` — "💰 {payment} Order Delivered" (bKash/crypto/balance)
+- `admin_notif_deposit_received` — Deposit pending review
+- `admin_notif_withdrawal_request` — Withdrawal request
+- `admin_notif_manual_delivery` — Stock empty, needs manual delivery
 
-`ltc-reserve-address` edge function:
-- Input: `order_id`, `expected_usd`
-- Fetch LTC/USD price (CoinGecko), compute `expected_ltc`
-- Atomically increment `next_index`, derive address, insert row with 30-min expiry
-- Return: address, amount_ltc, qr_data (`litecoin:<addr>?amount=<ltc>`), expires_at
+Each template with proper `{placeholders}` — e.g. `{amount} {currency} {new_balance} {note} {product} {qty} {txid} {payment_method}`.
 
-## Phase 4 — Watcher (auto-verify)
+### How edge functions read them:
 
-`ltc-watcher` edge function, cron every 60s:
-- Use **Blockstream-style Litecoin explorer API** (`https://litecoinspace.org/api`) — free, no key needed, similar to mempool.space
-- For each `pending` address: GET `/address/{addr}/txs` → filter confirmed txs with 2+ confirmations
-- Skip if `(tx_hash, vout)` already in `ltc_payment_registry`
-- Match amount (tolerance ±1%), credit `bot_deposits`, notify customer, mark address `paid`
-- Overpay → credit actual; underpay → keep open till expiry
+Ekta chhoto helper `_shared/render-template.ts`:
 
-## Phase 5 — Bot + Admin
+```ts
+// Reads bot_settings.value for key, falls back to default,
+// then interpolates {placeholders}.
+export async function renderTemplate(
+  supabase, key: string, defaults: string, vars: Record<string, string>
+): Promise<string> { ... }
+```
 
-- Add "Litecoin (LTC)" to `bot_payment_methods` (sort_order after TON)
-- Bot flow: amount → reserve address → QR + address + countdown + polling
-- Admin panel: `OnChainActivityTab` e LTC section — reserved addresses list, live tx status, manual re-scan button
-- Web deposit page (`Deposit.tsx`) — same LTC option
+Update these edge functions to use it:
+- `admin-verify-deposit`, `admin-reject-deposit`
+- `admin-edit-balance`
+- `admin-refund-order`
+- `admin-confirm-withdrawal`, `admin-reject-withdrawal`
+- `admin-cancel-pending-delivery`
+- `admin-notify-special-price`
+- `stock-broadcast` (manual delivery admin ping)
 
-## Phase 6 — Sweeping
+---
 
-**v1: skip auto-sweep.** LTC funds derived addresses e stack hoye thakbe; tumi occasionally Trust Wallet e seed import kore manually sweep korba. Safer — xprv server e rakhte hobe na.
+## Part B — Premium Emoji Fixes
 
-(Future: if you want auto-sweep, add `LTC_XPRV` secret and sign-transaction module.)
+### B1. Picker e pack load thik korbo
 
-## Technical Details
+`EmojiPacksSettings.tsx` te admin pack short_names dey (jemon `AnimatedEmojies`). `list-my-emoji-sticker-sets` edge function call kore Telegram theke sticker fetch kore `bot_emoji_sticker_sets` cache kore.
 
-- **Script type detection:** xpub prefix theke auto-detect (`zpub`→BIP84, `ypub`→BIP49, `xpub`→BIP44)
-- **Explorer:** litecoinspace.org (primary), Blockcypher (fallback) — no API key needed for basic reads
-- **Confirmations:** 2 blocks (~5 min) for auto-credit
-- **Price feed:** CoinGecko `/simple/price?ids=litecoin&vs_currencies=usd`, cached 60s
+**Issues:**
+- Refresh button add — force re-fetch specific set.
+- Error message dekhabe (kono set fail hole).
+- Picker load holo cache theke — new pack add korle sathe sathe show.
 
-## Deliverables
+### B2. Bot e send hole tg-emoji forward
 
-- 3 tables + RLS + grants
-- 2 edge functions (`ltc-reserve-address`, `ltc-watcher`)
-- `_ltc/derive.ts` shared module
-- pg_cron entry (60s watcher)
-- Bot payment method entry with LTC emoji
-- Admin panel LTC section in OnChainActivityTab
-- Standalone bot integration for LTC option
+Edge functions/`send-bot-message`/bot delivery — jei msg `bot_settings` theke ashbe, oita already `<tg-emoji emoji-id="..." >X</tg-emoji>` format e stored ache (editor eta save kore). `parse_mode: 'HTML'` diye send korle Telegram premium user der animated emoji dekhabe, free user fallback char dekhabe. **Eta already correct — verify korbo standalone-bot delivery paths.**
+
+Ekta gotcha: `notify-customer.ts` direct BOT_TOKEN diye send kore. Sekhaneo parse_mode HTML thik ase kina check korbo — `<tg-emoji>` tag ta bot Telegram API te forward hocche kina.
+
+### B3. Site preview e premium emoji render
+
+Customer site (Shop, Announcements, ProductDetail) e message dekhale `TelegramRichText` component diye render korbo — eta already ache, kintu maybe kotha te use hocche na. Audit kore lagabo:
+- `AnnouncementBanner.tsx`  
+- Announcement dialogs  
+- Any bot message preview on site
+
+`TgEmoji` component `bot_custom_emoji_cache` theke Lottie/webp URL nibe. Cache warmup e `get-custom-emojis` edge function ache — trigger korbo missing id gula upore.
+
+---
+
+## Files to change
+
+**New:**
+- `supabase/functions/_shared/render-template.ts` — template loader + interpolator
+
+**Frontend:**
+- `src/components/MessageTemplatesTab.tsx` — new "Admin Notifications" group + templates
+- `src/components/telegram-editor/EmojiPacksSettings.tsx` — refresh, error UX
+- `src/components/customer/AnnouncementBanner.tsx` (+ others) — use `TelegramRichText`
+
+**Edge functions (update to use renderTemplate):**
+- `admin-verify-deposit`, `admin-reject-deposit`
+- `admin-edit-balance`  
+- `admin-refund-order`
+- `admin-confirm-withdrawal`, `admin-reject-withdrawal`
+- `admin-cancel-pending-delivery`
+- `admin-notify-special-price`
+- `_shared/notify-customer.ts` — ensure parse_mode HTML propagates
+
+---
+
+## Out of scope (ask if you also want)
+
+- Per-user notification template customization
+- Multi-language (Bangla/English toggle)
+- Rich-text editor for email HTML (currently Resend uses React Email templates)
+
+Approve korle implement kori.

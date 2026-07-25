@@ -2,6 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
 import { logAdminAction } from "../_shared/audit-log.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULT_REFUND = `↩️ <b>Order Refunded</b>
+
+Product: <b>{product}</b> × {quantity}
+Refunded: <b>{amount} USDT</b> to your balance{note_block}`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,7 +121,14 @@ Deno.serve(async (req) => {
 
     // 5. Notify customer over Telegram + email (best-effort)
     if (customer) {
-      const tgText = `↩️ <b>Order Refunded</b>\n\nProduct: <b>${order.product_name}</b> × ${order.quantity}\nRefunded: <b>${Number(order.total_price).toFixed(2)} USDT</b> to your balance${note ? `\n\nNote: ${note}` : ""}`;
+      const tgText = await renderTemplate(supabase, "notif_refund", DEFAULT_REFUND, {
+        product: order.product_name,
+        quantity: order.quantity,
+        amount: Number(order.total_price).toFixed(2),
+        note: note || "",
+        note_block: note ? `\n\nNote: ${note}` : "",
+        name: customer.first_name || "",
+      });
       await notifyCustomer(supabase, {
         customer,
         telegram: { text: tgText },

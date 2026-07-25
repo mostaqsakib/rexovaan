@@ -4,6 +4,30 @@ import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/b
 import { requireAdmin } from "../_shared/require-admin.ts";
 import { applyDepositCredit } from "../_shared/apply-deposit-credit.ts";
 import { awardReferralCommission } from "../_shared/referral-commission.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULT_ADMIN_ORDER_DELIVERED = `💰 <b>{payment} Order Delivered</b>
+
+👤 {customer}
+📦 Product: <b>{product}</b>
+🔢 Quantity: <b>{quantity}</b>
+💵 Total: <b>{total} {currency}</b>
+💳 Payment: <b>{payment_method}</b>
+🔗 TxID: <code>{txid}</code>`;
+
+const DEFAULT_DEPOSIT_VERIFIED = `✅ <b>Deposit Verified by Admin!</b>
+
+Amount: <b>{amount} USDT</b>{pay_later_block}
+New Balance: <b>{new_balance} USDT</b>`;
+
+const DEFAULT_PAYMENT_VERIFIED_MANUAL = `✅ <b>Payment Verified & Order Placed!</b>
+
+Product: <b>{product}</b>
+Quantity: <b>{quantity}</b>
+Total: <b>{total} {currency}</b>
+
+⏳ <b>Your order is being processed.</b>
+Admin will deliver it manually.`;
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
 const BULK_TXT_THRESHOLD = 20;
@@ -534,9 +558,18 @@ Deno.serve(async (req) => {
 
         // Notify admin — bKash order delivered
         const custLabel = customer.username ? `@${customer.username}` : (customer.first_name || `#${customer.chat_id}`);
-        await notifyAdmin(
-          `💰 <b>bKash Order Delivered</b>\n\n👤 ${escapeHtml(custLabel)}\n📦 Product: <b>${escapeHtml(product.name)}</b>\n🔢 Quantity: <b>${qty}</b>\n💵 Total: <b>${totalPrice.toFixed(2)} ${escapeHtml(product.currency || "USDT")}</b>\n💳 Payment: <b>${escapeHtml(deposit.payment_method || "bKash")}</b>\n🔗 TxID: <code>${escapeHtml(deposit.txn_hash || "—")}</code>`
-        );
+        const paymentLabel = deposit.payment_method || "bKash";
+        const adminText = await renderTemplate(supabase, "admin_notif_order_delivered", DEFAULT_ADMIN_ORDER_DELIVERED, {
+          payment: paymentLabel,
+          customer: escapeHtml(custLabel),
+          product: escapeHtml(product.name),
+          quantity: String(qty),
+          total: totalPrice.toFixed(2),
+          currency: escapeHtml(product.currency || "USDT"),
+          payment_method: escapeHtml(paymentLabel),
+          txid: escapeHtml(deposit.txn_hash || "—"),
+        });
+        await notifyAdmin(adminText);
 
         // Recent Sales Feed (Web/Bot group)
         const saleSource: "web" | "bot" = (deposit.source || "bot") === "web" ? "web" : "bot";
@@ -561,10 +594,13 @@ Deno.serve(async (req) => {
       }).select("id").single();
 
 
-      await sendTelegramMessage(customer.chat_id,
-        `✅ <b>Payment Verified & Order Placed!</b>\n\nProduct: <b>${product.name}</b>\nQuantity: <b>${qty}</b>\nTotal: <b>${totalPrice.toFixed(2)} ${product.currency}</b>\n\n⏳ <b>Your order is being processed.</b>\nAdmin will deliver it manually.`,
-        mainMenuKeyboard()
-      );
+      const manualText = await renderTemplate(supabase, "notif_payment_verified_manual", DEFAULT_PAYMENT_VERIFIED_MANUAL, {
+        product: product.name,
+        quantity: String(qty),
+        total: totalPrice.toFixed(2),
+        currency: product.currency || "USDT",
+      });
+      await sendTelegramMessage(customer.chat_id, manualText, mainMenuKeyboard());
 
       return new Response(JSON.stringify({ success: true, action: "pending_delivery", product: product.name, qty, orderId: orderRow?.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -574,10 +610,14 @@ Deno.serve(async (req) => {
     const plLine = applied.paidPayLater > 0
       ? `\n🏷️ Pay-Later Cleared: <b>${applied.paidPayLater.toFixed(2)} USDT</b>`
       : "";
-    await sendTelegramMessage(customer.chat_id,
-      `✅ <b>Deposit Verified by Admin!</b>\n\nAmount: <b>${amount.toFixed(2)} USDT</b>${plLine}\nNew Balance: <b>${applied.newBalance.toFixed(2)} USDT</b>`,
-      mainMenuKeyboard()
-    );
+    const verifiedText = await renderTemplate(supabase, "notif_deposit_verified", DEFAULT_DEPOSIT_VERIFIED, {
+      amount: amount.toFixed(2),
+      new_balance: applied.newBalance.toFixed(2),
+      pay_later: applied.paidPayLater.toFixed(2),
+      pay_later_block: plLine,
+      name: customer.first_name || "",
+    });
+    await sendTelegramMessage(customer.chat_id, verifiedText, mainMenuKeyboard());
 
     return new Response(JSON.stringify({ success: true, action: "balance_added", newBalance: applied.newBalance, ...applied }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {

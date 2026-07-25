@@ -1,6 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { notifyCustomer } from "../_shared/notify-customer.ts";
 import { requireAdmin } from "../_shared/require-admin.ts";
+import { renderTemplate } from "../_shared/render-template.ts";
+
+const DEFAULT_REJECT = `❌ <b>Deposit Rejected</b>
+
+Your deposit{txid_block} has been rejected by admin.{reason_block}
+
+If you believe this is an error, please contact support.`;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,10 +49,14 @@ Deno.serve(async (req) => {
 
     const customer = deposit.customer;
     if (customer) {
-      const tgText = `❌ <b>Deposit Rejected</b>\n\n` +
-        `Your deposit${deposit.txn_hash ? ` (TxID: <code>${deposit.txn_hash}</code>)` : ''} has been rejected by admin.` +
-        (note ? `\n\n📝 <b>Reason:</b> ${note}` : '') +
-        `\n\nIf you believe this is an error, please contact support.`;
+      const tgText = await renderTemplate(supabase, "notif_deposit_rejected", DEFAULT_REJECT, {
+        amount: Number(deposit.amount || 0).toFixed(2),
+        txid: deposit.txn_hash || "",
+        txid_block: deposit.txn_hash ? ` (TxID: <code>${deposit.txn_hash}</code>)` : "",
+        reason: note || "",
+        reason_block: note ? `\n\n📝 <b>Reason:</b> ${note}` : "",
+        name: customer.first_name || "",
+      });
 
       await notifyCustomer(supabase, {
         customer,
