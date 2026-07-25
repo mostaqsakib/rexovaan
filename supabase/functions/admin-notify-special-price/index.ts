@@ -65,47 +65,20 @@ Deno.serve(async (req) => {
       ? `${(((regular - special) / regular) * 100).toFixed(0)}% off`
       : null;
 
-    let header = "";
-    let body = "";
-    let emailTemplate = "";
-    switch (action) {
-      case "set":
-        header = "🎁 <b>Special Price Unlocked</b>";
-        body =
-          `Product: <b>${product.name}</b>\n` +
-          `Your Price: <b>${special.toFixed(2)} USDT</b>${savings ? ` (${savings})` : ""}\n` +
-          `Regular: <s>${regular.toFixed(2)} USDT</s>\n` +
-          (moq > 1 ? `Min Quantity: <b>${moq}</b>\n` : "") +
-          (note ? `\n📝 ${note}` : "");
-        emailTemplate = "special-price-set";
-        break;
-      case "updated":
-        header = "🔄 <b>Special Price Updated</b>";
-        body =
-          `Product: <b>${product.name}</b>\n` +
-          `New Price: <b>${special.toFixed(2)} USDT</b>${savings ? ` (${savings})` : ""}\n` +
-          `Regular: <s>${regular.toFixed(2)} USDT</s>\n` +
-          (moq > 1 ? `Min Quantity: <b>${moq}</b>` : "");
-        emailTemplate = "special-price-set";
-        break;
-      case "enabled":
-        header = "✅ <b>Special Price Re-Enabled</b>";
-        body = `Product: <b>${product.name}</b>\nYour Price: <b>${special.toFixed(2)} USDT</b>`;
-        emailTemplate = "special-price-set";
-        break;
-      case "disabled":
-        header = "⏸️ <b>Special Price Paused</b>";
-        body = `Product: <b>${product.name}</b>\nYou will now see the regular price: <b>${regular.toFixed(2)} USDT</b>`;
-        emailTemplate = "special-price-removed";
-        break;
-      case "removed":
-        header = "❌ <b>Special Price Removed</b>";
-        body = `Product: <b>${product.name}</b>\nYou will now see the regular price: <b>${regular.toFixed(2)} USDT</b>`;
-        emailTemplate = "special-price-removed";
-        break;
-    }
-
-    const tgText = `${header}\n\n${body}`;
+    const key = `notif_special_price_${action}`;
+    const fallback = DEFAULTS[action] || DEFAULTS.set;
+    const tgText = await renderTemplate(supabase, key, fallback, {
+      product: product.name,
+      special: special.toFixed(2),
+      regular: regular.toFixed(2),
+      savings: savings || "",
+      savings_block: savings ? ` (${savings})` : "",
+      moq: String(moq),
+      moq_block: moq > 1 ? `\nMin Quantity: <b>${moq}</b>` : "",
+      note: note || "",
+      note_block: note ? `\n\n📝 ${note}` : "",
+      name: customer.first_name || "",
+    });
 
     const result = await notifyCustomer(supabase, {
       customer,
