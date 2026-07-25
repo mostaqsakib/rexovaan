@@ -1,9 +1,32 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Component, Fragment, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 const Lottie = lazy(() => import('lottie-react'));
 
 type EmojiInfo = { url: string | null; fallback: string | null };
+
+// Lottie JSON must have `layers` array; each layer of type 4 (shape) needs `shapes` array.
+// Telegram TGS/animated emoji occasionally lack these fields — rendering them crashes lottie-web.
+function isValidLottie(data: any): boolean {
+  if (!data || typeof data !== 'object') return false;
+  if (!Array.isArray(data.layers)) return false;
+  for (const layer of data.layers) {
+    if (layer && layer.ty === 4 && !Array.isArray(layer.shapes)) return false;
+  }
+  return true;
+}
+
+// Error boundary so a bad Lottie payload can't blank the whole page.
+class LottieSafe extends Component<{ animationData: any; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch() { /* swallow */ }
+  render() {
+    if (this.state.failed) return this.props.fallback;
+    return <Lottie animationData={this.props.animationData} loop autoplay style={{ width: '100%', height: '100%' }} />;
+  }
+}
+
 
 // ---- Tiny in-memory + sessionStorage cache to avoid refetching ----
 const memCache = new Map<string, EmojiInfo>();
@@ -175,14 +198,17 @@ export function TgEmoji({ id, fallback, size = '1.25em', disableRemoteFetch = fa
 
   if (info?.url) {
     if (info.url.endsWith('.json')) {
-      if (lottieData) {
+      if (lottieData && isValidLottie(lottieData)) {
         return (
           <Suspense fallback={<span className="tg-emoji-fallback" aria-label={text}>{text}</span>}>
             <span className="tg-emoji-media" style={style} aria-label={text}>
-              <Lottie animationData={lottieData} loop autoplay style={{ width: '100%', height: '100%' }} />
+              <LottieSafe animationData={lottieData} fallback={<span className="tg-emoji-fallback" aria-label={text}>{text}</span>} />
             </span>
           </Suspense>
         );
+      }
+      if (lottieData && !isValidLottie(lottieData)) {
+        return <span className="tg-emoji-fallback" aria-label={text}>{text}</span>;
       }
     } else if (info.url.endsWith('.webm') || info.url.endsWith('.mp4')) {
       return (
