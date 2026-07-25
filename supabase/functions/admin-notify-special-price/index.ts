@@ -1,0 +1,94 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { notifyCustomer } from "../_shared/notify-customer.ts";
+import { requireAdmin } from "../_shared/require-admin.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+type Action = "set" | "updated" | "removed" | "disabled" | "enabled";
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const guard = await requireAdmin(req, corsHeaders);
+  if (guard) return guard;
+
+  try {
+    const { customer_id, product_id, price, min_quantity, note, action } = await req.json() as {
+      customer_id: string; product_id: string; price?: number; min_quantity?: number; note?: string | null; action: Action;
+    };
+    if (!customer_id || !product_id || !action) {
+      return new Response(JSON.stringify({ error: "customer_id, product_id, action required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    const [{ data: customer }, { data: product }] = await Promise.all([
+      supabase.from("bot_customers").select("*").eq("id", customer_id).maybeSingle(),
+      supabase.from("bot_products").select("id, name, price").eq("id", product_id).maybeSingle(),
+    ]);
+    if (!customer || !product) {
+      return new Response(JSON.stringify({ error: "Customer or product not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const regular = Number(product.price || 0);
+    const special = Number(price ?? 0);
+    const moq = Math.max(1, Math.floor(Number(min_quantity ?? 1)));
+    const savings = regular > 0 && special > 0 && special < regular
+      ? `${(((regular - special) / regular) * 100).toFixed(0)}% off`
+      : null;
+
+    let header = "";
+    let body = "";
+    let emailTemplate = "";
+    switch (action) {
+      case "set":
+        header = "🎁 <b>Special Price Unlocked</b>";
+        body =
+          `Product: <b>${product.name}</b>\n` +
+          `Your Price: <b>${special.toFixed(2)} USDT</b>${savings ? ` (${savings})` : ""}\n` +
+          `Regular: <s>${regular.toFixed(2)} USDT</s>\n` +
+          (moq > 1 ? `Min Quantity: <b>${moq}</b>\n` : "") +
+          (note ? `\n📝 ${note}` : "");
+        emailTemplate = "special-price-set";
+        break;
+      case "updated":
+        header = "🔄 <b>Special Price Updated</b>";
+        body =
+          `Product: <b>${product.name}</b>\n` +
+          `New Price: <b>${special.toFixed(2)} USDT</b>${savings ? ` (${savings})` : ""}\n` +
+          `Regular: <s>${regular.toFixed(2)} USDT</s>\n` +
+          (moq > 1 ? `Min Quantity: <b>${moq}</b>` : "");
+        emailTemplate = "special-price-set";
+        break;
+      case "enabled":
+        header = "✅ <b>Special Price Re-Enabled</b>";
+        body = `Product: <b>${product.name}</b>\nYour Price: <b>${special.toFixed(2)} USDT</b>`;
+        emailTemplate = "special-price-set";
+        break;
+      case "disabled":
+        header = "⏸️ <b>Special Price Paused</b>";
+        body = `Product: <b>${product.name}</b>\nYou will now see the regular price: <b>${regular.toFixed(2)} USDT</b>`;
+        emailTemplate = "special-price-removed";
+        break;
+      case "removed":
+        header = "❌ <b>Special Price Removed</b>";
+        body = `Product: <b>${product.name}</b>\nYou will now see the regular price: <b>${regular.toFixed(2)} USDT</b>`;
+        emailTemplate = "special-price-removed";
+        break;
+    }
+
+    const tgText = `${header}\n\n${body}`;
+
+    const result = await notifyCustomer(supabase, {
+      customer,
+      telegram: { text: tgText },
+    });
+
+    return new Response(JSON.stringify({ ok: true, result }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  } catch (e) {
+    console.error("admin-notify-special-price error", e);
+    return new Response(JSON.stringify({ error: String((e as Error).message || e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+});
