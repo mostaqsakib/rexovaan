@@ -60,6 +60,29 @@ Deno.serve(async (req) => {
     const { error: restoreErr } = await supabase.rpc("restore_internal_stock_items", { _order_id: order.id });
     if (restoreErr) console.error("restore_internal_stock_items:", restoreErr);
 
+    // 1b. Bump last_known_stock so the bot's stock-alert checker does NOT
+    // treat the restored items as "new stock added" and broadcast them.
+    try {
+      const { data: prodRow } = await supabase
+        .from("bot_orders")
+        .select("product_id")
+        .eq("id", order.id)
+        .maybeSingle();
+      const productId = prodRow?.product_id;
+      if (productId) {
+        const { count } = await supabase
+          .from("bot_product_stock_items")
+          .select("id", { count: "exact", head: true })
+          .eq("product_id", productId)
+          .eq("status", "available");
+        if (typeof count === "number") {
+          await supabase.from("bot_products").update({ last_known_stock: count }).eq("id", productId);
+        }
+      }
+    } catch (e) {
+      console.error("suppress_refund_broadcast:", (e as Error).message);
+    }
+
     // 2. Refund customer balance
     const { error: refundErr } = await supabase.rpc("refund_customer_balance", {
       _customer_id: order.customer_id,
