@@ -318,29 +318,39 @@ const OnChainActivityTab = () => {
       return c.username ? `@${c.username}` : c.first_name || `#${c.chat_id ?? '—'}`;
     };
 
-    const credited: any[] = registry.map((r) => {
-      const match = r.reserved_address_id
-        ? reservedById.get(r.reserved_address_id)
-        : reservedByAddress.get(r.address.toLowerCase());
-      return {
-        id: r.id,
-        kind: 'credited' as const,
-        date: r.credited_at,
-        token: r.token,
-        contract: null as string | null,
-        address: r.address,
-        from: null as string | null,
-        tx_hash: r.tx_hash,
-        amount: Number(r.amount || 0),
-        depositAmount: Number(r.amount || 0),
-        expected: Number(match?.expected_amount || 0),
-        received: Number(match?.received_amount || r.amount || 0),
-        status: match?.status || 'paid',
-        sweep_status: match?.sweep_status || null,
-        sweep_tx_hash: match?.sweep_tx_hash || null,
-        customer: custLabel(match?.customer_id),
-      };
-    });
+    // Hide dust transfers (< 0.01) — these are spam/dusting attacks that
+    // occasionally hit reserved addresses and pollute the log even though
+    // the credited value is effectively zero.
+    const DUST_THRESHOLD = 0.01;
+    const credited: any[] = registry
+      .filter((r) => Number(r.amount || 0) >= DUST_THRESHOLD)
+      .map((r) => {
+        const match = r.reserved_address_id
+          ? reservedById.get(r.reserved_address_id)
+          : reservedByAddress.get(r.address.toLowerCase());
+        const perTx = Number(r.amount || 0);
+        return {
+          id: r.id,
+          kind: 'credited' as const,
+          date: r.credited_at,
+          token: r.token,
+          contract: null as string | null,
+          address: r.address,
+          from: null as string | null,
+          tx_hash: r.tx_hash,
+          amount: perTx,
+          depositAmount: perTx,
+          expected: Number(match?.expected_amount || 0),
+          // Show the per-tx amount, not the reservation's cumulative received.
+          // Otherwise multiple registry rows for the same address all show the
+          // same inflated "received" total and look like duplicate payments.
+          received: perTx,
+          status: match?.status || 'paid',
+          sweep_status: match?.sweep_status || null,
+          sweep_tx_hash: match?.sweep_tx_hash || null,
+          customer: custLabel(match?.customer_id),
+        };
+      });
 
     // Only surface scam/ignored rows here if they hit an address that has
     // NO credited row — otherwise we double every real deposit with its
