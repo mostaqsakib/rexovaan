@@ -24,6 +24,8 @@ import {
   padTopicAddress,
 } from "../_bep20/chains.ts";
 
+const MIN_CREDITABLE_STABLE_AMOUNT = 0.01;
+
 async function rpc(url: string, method: string, params: unknown[]): Promise<any> {
   const r = await fetch(url, {
     method: "POST",
@@ -166,6 +168,13 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
       if (res.token !== "ANY" && res.token !== tok.symbol) continue;
 
       const amt = formatUnits(rawAmt, tok.decimals);
+
+      // Ignore zero/dust transfers. Scam/phishing contracts often trigger tiny or
+      // zero-value stablecoin Transfer events to watched addresses; they should not
+      // mark a deposit as paid or notify Telegram/admin.
+      if (amt < MIN_CREDITABLE_STABLE_AMOUNT) {
+        continue;
+      }
 
       const { error: regErr } = await supabase.from("bep20_payment_registry").insert({
         tx_hash: txHash, log_index: logIndex, address: toAddr, token: tok.symbol,
