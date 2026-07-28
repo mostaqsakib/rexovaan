@@ -68,11 +68,12 @@ const CustomersTab = () => {
   const [pricingCustomer, setPricingCustomer] = useState<Customer | null>(null);
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('all');
+  const [sortBy, setSortBy] = useState<'recent' | 'balance_desc' | 'balance_asc'>('recent');
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchCustomers(true);
-  }, [debouncedSearch, accountFilter, balanceFilter]);
+  }, [debouncedSearch, accountFilter, balanceFilter, sortBy]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
@@ -117,8 +118,10 @@ const CustomersTab = () => {
 
     let query = supabase
       .from('bot_customers')
-      .select('*', { count: 'exact' })
-      .order('updated_at', { ascending: false });
+      .select('*', { count: 'exact' });
+    if (sortBy === 'balance_desc') query = query.order('balance', { ascending: false });
+    else if (sortBy === 'balance_asc') query = query.order('balance', { ascending: true });
+    else query = query.order('updated_at', { ascending: false });
 
     if (accountFilter === 'web') query = query.not('auth_user_id', 'is', null);
     else if (accountFilter === 'telegram') query = query.is('auth_user_id', null);
@@ -329,6 +332,21 @@ const CustomersTab = () => {
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${balanceFilter === f.key ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
               >
                 {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {([
+              { key: 'recent' as const, label: 'Recent' },
+              { key: 'balance_desc' as const, label: 'Balance ↓' },
+              { key: 'balance_asc' as const, label: 'Balance ↑' },
+            ]).map(s => (
+              <button
+                key={s.key}
+                onClick={() => setSortBy(s.key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${sortBy === s.key ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              >
+                {s.label}
               </button>
             ))}
           </div>
