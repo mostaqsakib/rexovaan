@@ -335,6 +335,21 @@ const CustomersTab = () => {
               </button>
             ))}
           </div>
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {([
+              { key: 'recent' as const, label: 'Recent' },
+              { key: 'balance_desc' as const, label: 'Balance ↓' },
+              { key: 'balance_asc' as const, label: 'Balance ↑' },
+            ]).map(s => (
+              <button
+                key={s.key}
+                onClick={() => setSortBy(s.key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${sortBy === s.key ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
           <Input
             placeholder="Search by username, name, chat ID, or email..."
             value={search}
