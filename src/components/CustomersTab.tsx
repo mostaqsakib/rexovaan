@@ -118,8 +118,10 @@ const CustomersTab = () => {
 
     let query = supabase
       .from('bot_customers')
-      .select('*', { count: 'exact' })
-      .order('updated_at', { ascending: false });
+      .select('*', { count: 'exact' });
+    if (sortBy === 'balance_desc') query = query.order('balance', { ascending: false });
+    else if (sortBy === 'balance_asc') query = query.order('balance', { ascending: true });
+    else query = query.order('updated_at', { ascending: false });
 
     if (accountFilter === 'web') query = query.not('auth_user_id', 'is', null);
     else if (accountFilter === 'telegram') query = query.is('auth_user_id', null);
