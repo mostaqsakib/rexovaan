@@ -68,11 +68,12 @@ const CustomersTab = () => {
   const [pricingCustomer, setPricingCustomer] = useState<Customer | null>(null);
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all');
   const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>('all');
+  const [sortBy, setSortBy] = useState<'recent' | 'balance_desc' | 'balance_asc'>('recent');
   const [emailMap, setEmailMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchCustomers(true);
-  }, [debouncedSearch, accountFilter, balanceFilter]);
+  }, [debouncedSearch, accountFilter, balanceFilter, sortBy]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
