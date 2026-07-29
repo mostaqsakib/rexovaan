@@ -366,7 +366,7 @@ Deno.serve(async (req) => {
     const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: reservations } = await supabase
       .from("bep20_reserved_addresses")
-      .select("id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains")
+      .select("id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains, pending_notified_tx")
       .in("status", ["pending", "paid", "expired", "rejected"])
       .gte("created_at", cutoffIso)
       .limit(500);
