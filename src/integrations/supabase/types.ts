@@ -184,6 +184,7 @@ export type Database = {
           gas_tx_hash: string | null
           id: string
           paid_at: string | null
+          pending_notified_tx: string | null
           received_amount: number
           received_chains: string[]
           status: string
@@ -208,6 +209,7 @@ export type Database = {
           gas_tx_hash?: string | null
           id?: string
           paid_at?: string | null
+          pending_notified_tx?: string | null
           received_amount?: number
           received_chains?: string[]
           status?: string
@@ -232,6 +234,7 @@ export type Database = {
           gas_tx_hash?: string | null
           id?: string
           paid_at?: string | null
+          pending_notified_tx?: string | null
           received_amount?: number
           received_chains?: string[]
           status?: string
