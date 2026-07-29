@@ -283,6 +283,57 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
     }
   }
 
+  // ---- Unconfirmed "payment detected" pass ----
+  // Scans the not-yet-confirmed tip (safeTo+1 .. latest) and notifies the customer
+  // that their transfer was seen. NO balance credit happens here — credit still
+  // requires the full confirmation count in the pass above.
+  if (!override) {
+    try {
+      const tipFrom = safeTo + 1;
+      const tipTo = latest;
+      if (tipTo >= tipFrom && tipTo - tipFrom < 500) {
+        const tipLogs: any[] = await rpc(rpcUrl, "eth_getLogs", [{
+          fromBlock: "0x" + tipFrom.toString(16),
+          toBlock: "0x" + tipTo.toString(16),
+          topics: [TRANSFER_TOPIC, null, toAddrTopics],
+        }]);
+        for (const log of tipLogs) {
+          const contract = log.address.toLowerCase();
+          if (!knownContracts.has(contract)) continue;
+          const tok = tokenByContract(chain, contract);
+          if (!tok) continue;
+          const toAddr = topicAddressToHex(log.topics[2]);
+          const res = resByAddr.get(toAddr);
+          if (!res || res.status !== "pending") continue;
+          const amt = formatUnits(hexToBigInt(log.data), tok.decimals);
+          if (amt < MIN_CREDITABLE_STABLE_AMOUNT) continue;
+          const txHash = log.transactionHash;
+          if (res.pending_notified_tx === txHash) continue;
+
+          const { data: upd } = await supabase
+            .from("bep20_reserved_addresses")
+            .update({ pending_notified_tx: txHash })
+            .eq("id", res.id)
+            .neq("pending_notified_tx", txHash)
+            .select("id");
+          res.pending_notified_tx = txHash;
+          if (!upd || upd.length === 0) continue;
+
+          const { data: customer } = await supabase
+            .from("bot_customers").select("chat_id").eq("id", res.customer_id).maybeSingle();
+          if (customer?.chat_id) {
+            await sendTelegram("sendMessage", {
+              chat_id: customer.chat_id,
+              text: `⏳ <b>Payment Detected</b>\n\n💵 Amount: <b>${amt.toFixed(2)} ${tok.symbol}</b>\n🌐 Network: <b>${chain.name}</b>\n\nWaiting for network confirmations — your balance will update automatically in a few seconds.\n\n🔗 <a href="${chain.explorerTx(txHash)}">View transaction</a>`,
+              parse_mode: "HTML",
+            });
+          }
+        }
+      }
+    } catch (e) { console.error(`[${chain.id}] tip scan err`, e); }
+  }
+
+
   if (!override?.skipStateWrite) {
     await supabase.from("evm_chain_state").upsert({
       chain: chain.id,
