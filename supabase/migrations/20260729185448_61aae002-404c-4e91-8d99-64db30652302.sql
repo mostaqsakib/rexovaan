@@ -1,0 +1,2 @@
+ALTER TABLE public.bep20_reserved_addresses ADD COLUMN IF NOT EXISTS pending_notified_tx text;
+UPDATE public.evm_chain_state SET confirmations = 8, updated_at = now() WHERE chain = 'polygon' AND confirmations > 8;
