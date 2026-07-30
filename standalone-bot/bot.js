@@ -1997,8 +1997,8 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
   let mediaItems = [];
   try { mediaItems = typeof product.delivery_media === "string" ? JSON.parse(product.delivery_media) : product.delivery_media || []; } catch {}
   for (const m of mediaItems) {
-    if (m.type === "video") await sendVideo(chatId, m.url);
-    else await sendPhoto(chatId, m.url);
+    const sentMedia = m.type === "video" ? await sendVideo(chatId, m.url) : await sendPhoto(chatId, m.url);
+    if (sentMedia?.result?.message_id) deliveredMsgIds.push(sentMedia.result.message_id);
   }
 
   // Persist delivery message IDs so admin can wipe them on refund
