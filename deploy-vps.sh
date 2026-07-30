@@ -28,7 +28,6 @@ fi
 declare -A ENV_SOURCES=(
   ["tg-link-checker"]="$HOME/tg-link-checker/.env /root/tg-link-checker/.env"
   ["vps-worker"]="/opt/link-checker/.env $HOME/vps-worker/.env /root/vps-worker/.env"
-  ["standalone-bot"]="$HOME/standalone-bot/.env /root/standalone-bot/.env"
 )
 for dir in "${!ENV_SOURCES[@]}"; do
   [ -d "$ROOT/$dir" ] || continue
@@ -57,7 +56,7 @@ install_deps () {
 }
 install_deps "tg-link-checker"   # Bot link checker
 install_deps "vps-worker"        # Site link checker
-install_deps "standalone-bot"    # Telegram bot
+# NOTE: standalone-bot (main shop bot) runs on Railway — NOT deployed on this VPS.
 
 # ---- 4. Restart via PM2 ----
 command -v pm2 >/dev/null || npm install -g pm2 >/dev/null
@@ -79,7 +78,9 @@ start_or_restart () {
 
 start_or_restart "tg-link-checker" "tg-link-checker" "bot.js"
 start_or_restart "link-checker"    "vps-worker"      "worker.js"
-start_or_restart "bot"             "standalone-bot"  "bot.js"
+
+# Remove the old main bot from this VPS if it was started here before (now on Railway)
+pm2 delete bot >/dev/null 2>&1 || true
 
 pm2 save >/dev/null
 pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
@@ -95,4 +96,5 @@ echo ""
 pm2 list
 echo ""
 echo "✅ Done! Next time just run:  rexo-update"
-echo "📜 Logs:  pm2 logs tg-link-checker | pm2 logs link-checker | pm2 logs bot"
+echo "📜 Logs:  pm2 logs tg-link-checker | pm2 logs link-checker"
+echo "ℹ️  Main shop bot (standalone-bot) runs on Railway — not on this VPS."
