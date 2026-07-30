@@ -70,7 +70,9 @@ const {
   PROGRESS_EDIT_INTERVAL_MS = '2000',
   ALLOWED_USER_IDS = '',
   MAX_LINKS_PER_JOB = '20000',
+  ADMIN_MIRROR_CHAT_ID = '',
 } = process.env;
+
 
 if (!BOT_TOKEN) {
   console.error('Missing BOT_TOKEN in .env', {
