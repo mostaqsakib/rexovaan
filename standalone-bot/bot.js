@@ -1928,7 +1928,8 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
       (orderNumTxt ? `🧾 Order: <b>#${orderNumTxt}</b>\n` : '') +
       `📅 Date: <b>${purchaseDateTxt}</b>\n` +
       `🔢 Quantity: <b>${textItems.length}</b>`;
-    await sendDocumentBuffer(chatId, Buffer.from(txt), filename, fileCaption);
+    const bulkDoc = await sendDocumentBuffer(chatId, Buffer.from(txt), filename, fileCaption);
+    if (bulkDoc?.result?.message_id) deliveredMsgIds.push(bulkDoc.result.message_id);
   } else if (textItems.length > 0) {
     // Try to fit everything in one message with header
     const singleMsg = headerInfo + `\n${productHeader}\n\n` + formattedItems.join("\n") + "\n";
