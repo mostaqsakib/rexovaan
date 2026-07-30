@@ -64,8 +64,8 @@ async function logJobToDashboard(ctx, { label, total, valid, invalid, errors, du
 
 const BOT_TOKEN = (process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const {
-  MAX_CONCURRENCY = '25',
-  HARD_MAX_CONCURRENCY = '25',
+  MAX_CONCURRENCY = '40',
+  HARD_MAX_CONCURRENCY = '40',
   INLINE_LIMIT = '50',
   PROGRESS_EDIT_INTERVAL_MS = '2000',
   ALLOWED_USER_IDS = '',
