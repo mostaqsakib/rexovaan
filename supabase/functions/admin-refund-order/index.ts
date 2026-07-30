@@ -112,11 +112,14 @@ Deno.serve(async (req) => {
     const { data: customer } = await supabase.from("bot_customers").select("*").eq("id", order.customer_id).maybeSingle();
     const msgIds: number[] = Array.isArray(order.delivery_message_ids) ? order.delivery_message_ids : [];
     let deleted = 0;
+    const deleteErrors: string[] = [];
     if (customer?.chat_id && customer.chat_id > 0 && msgIds.length) {
       for (const mid of msgIds) {
         const r = await tgDelete(Number(customer.chat_id), Number(mid));
         if (r?.ok) deleted++;
+        else if (r?.description) deleteErrors.push(`${mid}: ${r.description}`);
       }
+      if (deleteErrors.length) console.error("delivery message delete failures:", deleteErrors.join(" | "));
     }
 
     // 5. Notify customer over Telegram + email (best-effort)
