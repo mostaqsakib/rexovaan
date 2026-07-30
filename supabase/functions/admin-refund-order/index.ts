@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ ok: true, deleted_messages: deleted, total_messages: msgIds.length }), {
+    return new Response(JSON.stringify({ ok: true, deleted_messages: deleted, total_messages: msgIds.length, delete_errors: deleteErrors }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
