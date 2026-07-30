@@ -321,15 +321,62 @@ async function sendDocFromString(ctx, content, filename, caption) {
   }
 }
 
+function describeForwardOrigin(msg) {
+  if (!msg) return '';
+  const o = msg.forward_origin;
+  if (o) {
+    if (o.type === 'user') {
+      const u = o.sender_user || {};
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || 'Unknown';
+      return `👤 ${escapeHtml(name)}${u.username ? ` (@${escapeHtml(u.username)})` : ''} • <code>${u.id}</code>`;
+    }
+    if (o.type === 'hidden_user') {
+      return `🕶 ${escapeHtml(o.sender_user_name || 'Hidden user')} (privacy on — ID hidden)`;
+    }
+    if (o.type === 'chat') {
+      const c = o.sender_chat || {};
+      return `👥 ${escapeHtml(c.title || 'Chat')}${c.username ? ` (@${escapeHtml(c.username)})` : ''} • <code>${c.id}</code>`;
+    }
+    if (o.type === 'channel') {
+      const c = o.chat || {};
+      return `📢 ${escapeHtml(c.title || 'Channel')}${c.username ? ` (@${escapeHtml(c.username)})` : ''} • <code>${c.id}</code>`
+        + (o.message_id ? ` • msg <code>${o.message_id}</code>` : '');
+    }
+  }
+  // Legacy fields (older Bot API payloads)
+  if (msg.forward_from) {
+    const u = msg.forward_from;
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || 'Unknown';
+    return `👤 ${escapeHtml(name)}${u.username ? ` (@${escapeHtml(u.username)})` : ''} • <code>${u.id}</code>`;
+  }
+  if (msg.forward_sender_name) {
+    return `🕶 ${escapeHtml(msg.forward_sender_name)} (privacy on — ID hidden)`;
+  }
+  if (msg.forward_from_chat) {
+    const c = msg.forward_from_chat;
+    return `📢 ${escapeHtml(c.title || 'Chat')}${c.username ? ` (@${escapeHtml(c.username)})` : ''} • <code>${c.id}</code>`;
+  }
+  return '';
+}
+
 async function mirrorValidToAdmin(ctx, valid, label) {
   const adminChat = String(ADMIN_MIRROR_CHAT_ID || '').trim();
   if (!adminChat || valid.length === 0) return;
   const from = ctx.from || {};
   const who = [from.first_name, from.last_name].filter(Boolean).join(' ')
     || (from.username ? `@${from.username}` : `id:${from.id}`);
+  const msg = ctx.message || ctx.update?.message || null;
+  const origin = describeForwardOrigin(msg);
+  const fwdDate = msg?.forward_date
+    ? new Date(msg.forward_date * 1000).toLocaleString('en-GB', { timeZone: 'Asia/Dhaka' })
+    : '';
   const caption = `📥 <b>Valid links</b> (${valid.length})\n`
     + `From: ${escapeHtml(who)}${from.username ? ` (@${escapeHtml(from.username)})` : ''} • <code>${from.id}</code>\n`
+    + (origin
+      ? `↩️ Forwarded from: ${origin}${fwdDate ? `\n🕒 Original: ${escapeHtml(fwdDate)}` : ''}\n`
+      : `↩️ Forwarded: no (uploaded directly)\n`)
     + `Job: ${escapeHtml(label || 'job')}`;
+
 
   const content = valid.join('\n');
   const MAX_BYTES = 8 * 1024 * 1024;
