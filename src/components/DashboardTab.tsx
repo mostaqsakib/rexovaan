@@ -687,7 +687,11 @@ const DashboardTab = () => {
         </Card>
       </div>
 
+      {/* Inventory value */}
+      <InventoryValueCard />
+
     </div>
+
   );
 };
 
