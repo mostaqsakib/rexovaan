@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
+import InventoryValueCard from '@/components/InventoryValueCard';
+
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -687,7 +689,11 @@ const DashboardTab = () => {
         </Card>
       </div>
 
+      {/* Inventory value */}
+      <InventoryValueCard />
+
     </div>
+
   );
 };
 
