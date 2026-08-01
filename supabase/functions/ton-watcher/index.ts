@@ -24,6 +24,22 @@ function isUsdtJetton(jetton: { address?: string; symbol?: string; name?: string
   return normalizedSymbol === "USDT" && Number(jetton.decimals ?? USDT_DECIMALS) === USDT_DECIMALS;
 }
 
+const TON_DECIMALS = 9;
+
+async function getTonUsdRate(): Promise<number | null> {
+  try {
+    const res = await fetch("https://tonapi.io/v2/rates?tokens=ton&currencies=usd", {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const rate = Number(json?.rates?.TON?.prices?.USD);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function notifyCustomer(chatId: string, text: string) {
   const token = Deno.env.get("BOT_TOKEN");
   if (!token || !chatId) return;
@@ -89,12 +105,15 @@ Deno.serve(async (req) => {
 
     const events = await fetchTonEvents(tonAddress);
     let matched = 0;
+    let tonUsdRate: number | null = null;
     for (const ev of events.events || []) {
       for (const act of ev.actions || []) {
-        if (act.type !== "JettonTransfer") continue;
-        const jt = act.JettonTransfer;
+        const isJetton = act.type === "JettonTransfer";
+        const isNativeTon = act.type === "TonTransfer";
+        if (!isJetton && !isNativeTon) continue;
+        const jt = isJetton ? act.JettonTransfer : act.TonTransfer;
         if (!jt) continue;
-        if (!isUsdtJetton(jt.jetton)) continue;
+        if (isJetton && !isUsdtJetton(jt.jetton)) continue;
         // recipient must be our wallet
         const dest = jt.recipient?.address || jt.destination?.address;
         if (!dest) continue;
@@ -117,7 +136,22 @@ Deno.serve(async (req) => {
         if (existing) continue;
 
         const rawAmount = BigInt(jt.amount || "0");
-        const receivedUsd = Number(rawAmount) / Math.pow(10, USDT_DECIMALS);
+        let receivedUsd = 0;
+        let assetLabel = "USDT";
+        if (isNativeTon) {
+          const tonAmount = Number(rawAmount) / Math.pow(10, TON_DECIMALS);
+          if (tonAmount <= 0) continue;
+          if (tonUsdRate === null) tonUsdRate = await getTonUsdRate();
+          if (!tonUsdRate) {
+            console.error("[ton-watcher] TON/USD rate unavailable, skipping native transfer", txHash);
+            continue;
+          }
+          receivedUsd = Math.round(tonAmount * tonUsdRate * 100) / 100;
+          assetLabel = `${tonAmount.toFixed(4)} TON`;
+        } else {
+          receivedUsd = Number(rawAmount) / Math.pow(10, USDT_DECIMALS);
+          assetLabel = `${receivedUsd.toFixed(2)} USDT`;
+        }
         if (receivedUsd <= 0) continue;
 
         const isLate = reservation.status === "expired" || reservation.status === "rejected";
@@ -147,16 +181,16 @@ Deno.serve(async (req) => {
 
         if (isLate) {
           if (cust?.chat_id) {
-            await notifyCustomer(String(cust.chat_id), `⏰ <b>Late TON Payment Detected</b>\n\n💵 Amount: <b>${receivedUsd.toFixed(2)} USDT</b>\n🆔 Memo: <code>${memo}</code>\n\nYour payment arrived after the checkout window expired. Our team will credit your account shortly.`);
+            await notifyCustomer(String(cust.chat_id), `⏰ <b>Late TON Payment Detected</b>\n\n💵 Amount: <b>${assetLabel}</b> (≈ $${receivedUsd.toFixed(2)})\n🆔 Memo: <code>${memo}</code>\n\nYour payment arrived after the checkout window expired. Our team will credit your account shortly.`);
           }
           const adminChat = Deno.env.get("ADMIN_CHAT_ID");
           if (adminChat) {
-            await notifyCustomer(adminChat, `⏰ <b>LATE TON PAYMENT</b>\n⚠️ Needs manual credit.\n\nAmount: <b>${receivedUsd.toFixed(2)} USDT</b>\nMemo: <code>${memo}</code>\nDeposit: <code>${reservation.deposit_id}</code>`);
+            await notifyCustomer(adminChat, `⏰ <b>LATE TON PAYMENT</b>\n⚠️ Needs manual credit.\n\nAmount: <b>${assetLabel}</b> (≈ $${receivedUsd.toFixed(2)})\nMemo: <code>${memo}</code>\nDeposit: <code>${reservation.deposit_id}</code>`);
           }
         } else if (cust) {
           const newBalance = Number(cust.balance || 0) + receivedUsd;
           await supabase.from("bot_customers").update({ balance: newBalance }).eq("id", cust.id);
-          await notifyCustomer(String(cust.chat_id), `✅ <b>USDT TON deposit confirmed</b>\n\n💰 Received: <b>${receivedUsd.toFixed(2)} USDT</b>\n🆔 Memo: <code>${memo}</code>\n💵 New balance: <b>$${newBalance.toFixed(2)}</b>`);
+          await notifyCustomer(String(cust.chat_id), `✅ <b>TON deposit confirmed</b>\n\n💰 Received: <b>${assetLabel}</b> (≈ $${receivedUsd.toFixed(2)})\n🆔 Memo: <code>${memo}</code>\n💵 New balance: <b>$${newBalance.toFixed(2)}</b>`);
         }
         matched++;
       }
