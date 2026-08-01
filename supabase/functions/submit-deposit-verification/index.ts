@@ -504,7 +504,16 @@ Deno.serve(async (req) => {
       checks.push(verifyBinance(normalizedTxn, binanceKey, binanceSecret).then((r) => ({ source: "Binance", ...r })).catch(() => ({ source: "Binance", verified: false, amount: 0 })));
     }
     if (targets.bybit && bybitKey && bybitSecret) {
-      checks.push(verifyBybit(normalizedTxn, bybitKey, bybitSecret).then((r) => ({ source: "Bybit", ...r })).catch(() => ({ source: "Bybit", verified: false, amount: 0 })));
+      const isRefUsed = async (ref: string) => {
+        const { data } = await supabase
+          .from("bot_deposits").select("id").eq("external_ref", ref).neq("status", "rejected").maybeSingle();
+        return !!data;
+      };
+      checks.push(
+        verifyBybit(normalizedTxn, bybitKey, bybitSecret, { claimedAmount, isRefUsed })
+          .then((r) => ({ source: "Bybit", ...r }))
+          .catch(() => ({ source: "Bybit", verified: false, amount: 0 })),
+      );
     }
     // On-chain explorer checks (BEP20/TRC20/TON/LTC) disabled by request.
     // Crypto deposits are verified exclusively via Binance API (Binance Pay / Deposit history).
@@ -513,6 +522,7 @@ Deno.serve(async (req) => {
     let verifiedAmount = 0;
     let verifiedVia = "";
     let ltcRaw = 0;
+    let externalRef: string | null = null;
     if (checks.length > 0) {
       const results = await Promise.all(checks);
       console.log("[Verify] results:", results.map((r) => `${r.source}=${r.verified}/${r.amount}`).join(", "));
@@ -521,6 +531,7 @@ Deno.serve(async (req) => {
           verified = true;
           verifiedAmount = r.amount;
           verifiedVia = r.via || r.source;
+          externalRef = (r as any).externalRef || null;
           if (r.source === "LTC" && (r as any).ltcAmount) ltcRaw = (r as any).ltcAmount;
           break;
         }
@@ -533,7 +544,7 @@ Deno.serve(async (req) => {
     if (verified && verifiedAmount > 0) {
       let depId = existingDepositId;
       if (isRecheck && existingDepositId) {
-        const updatePayload: any = { amount: verifiedAmount, status: "verified", verified_at: new Date().toISOString(), via: verifiedVia };
+        const updatePayload: any = { amount: verifiedAmount, status: "verified", verified_at: new Date().toISOString(), via: verifiedVia, external_ref: externalRef };
         const { error: updErr } = await supabase
           .from("bot_deposits")
           .update(updatePayload)
@@ -543,9 +554,10 @@ Deno.serve(async (req) => {
       } else {
         const { data: dep, error: depErr } = await supabase
           .from("bot_deposits")
-          .insert({ customer_id: customer.id, amount: verifiedAmount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString(), payment_method: paymentMethod || null, via: verifiedVia, source: "web" })
+          .insert({ customer_id: customer.id, amount: verifiedAmount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString(), payment_method: paymentMethod || null, via: verifiedVia, source: "web", external_ref: externalRef })
           .select("id,created_at")
           .single();
+
         if (depErr) throw depErr;
         depId = dep.id;
       }
