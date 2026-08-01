@@ -113,7 +113,25 @@ Deno.serve(async (req) => {
         if (!isJetton && !isNativeTon) continue;
         const jt = isJetton ? act.JettonTransfer : act.TonTransfer;
         if (!jt) continue;
-        if (isJetton && !isUsdtJetton(jt.jetton)) continue;
+        if (isJetton && !isUsdtJetton(jt.jetton)) {
+          // Log unsupported jettons (GRAM, scam tokens, etc.) so they show up in history
+          try {
+            const decimals = Number(jt.jetton?.decimals ?? 9);
+            await supabase.from("bep20_fake_transactions").upsert({
+              chain: "ton",
+              tx_hash: String(ev.event_id || ""),
+              log_index: 0,
+              address: String(jt.recipient?.address || jt.destination?.address || tonAddress),
+              contract: String(jt.jetton?.address || "unknown"),
+              token_symbol: String(jt.jetton?.symbol || jt.jetton?.name || "UNKNOWN"),
+              amount: Number(jt.amount || 0) / Math.pow(10, decimals),
+              raw_amount: String(jt.amount || "0"),
+              from_address: jt.sender?.address || null,
+              reason: "unsupported_ton_jetton",
+            }, { onConflict: "chain,tx_hash,log_index", ignoreDuplicates: true });
+          } catch (_) {}
+          continue;
+        }
         // recipient must be our wallet
         const dest = jt.recipient?.address || jt.destination?.address;
         if (!dest) continue;
@@ -158,6 +176,8 @@ Deno.serve(async (req) => {
 
         await supabase.from("ton_reserved_deposits").update({
           status: isLate ? "late_paid" : "paid",
+          asset: isNativeTon ? "TON" : "USDT",
+          asset_amount: Number(rawAmount) / Math.pow(10, isNativeTon ? TON_DECIMALS : USDT_DECIMALS),
           received_amount: receivedUsd,
           tx_hash: txHash,
           from_address: jt.sender?.address || null,
