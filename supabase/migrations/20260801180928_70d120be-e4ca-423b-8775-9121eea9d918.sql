@@ -1,0 +1,2 @@
+ALTER TABLE public.bot_deposits ADD COLUMN IF NOT EXISTS external_ref text;
+CREATE UNIQUE INDEX IF NOT EXISTS bot_deposits_external_ref_uniq ON public.bot_deposits (external_ref) WHERE external_ref IS NOT NULL;
