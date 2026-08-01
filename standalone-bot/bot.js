@@ -3744,7 +3744,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
 
   const verifyTargets = inferVerificationTargets(normalizedTxn, selectedPaymentMethodName);
   console.log(`[Verify] Starting verification for TxID: ${normalizedTxn}, raw: ${txnHash}, customer: ${customer.id}, pending_action: ${customer.pending_action || "none"}, targets: ${JSON.stringify(verifyTargets)}`);
-  let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0;
+  let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0, externalRef = null;
 
   const binanceApiKey = envGet("BINANCE_API_KEY"), binanceApiSecret = envGet("BINANCE_API_SECRET");
   const bybitApiKey = envGet("BYBIT_API_KEY"), bybitApiSecret = envGet("BYBIT_API_SECRET");
@@ -3763,7 +3763,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
   if (internalChecks.length > 0) {
     const results = await Promise.all(internalChecks);
     console.log(`[Verify] Exchange check results:`, results.map(r => `${r.source}=${r.verified}/${r.amount}`).join(", "));
-    for (const r of results) { if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; break; } }
+    for (const r of results) { if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; externalRef = r.externalRef || null; break; } }
   }
 
   if (!verified && (verifyTargets.bep20 || verifyTargets.trc20 || verifyTargets.ton || verifyTargets.ltc)) {
@@ -3785,7 +3785,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
     // guarantees only ONE concurrent verifier can insert. If insert fails with
     // a unique-violation, another submission already claimed this TxID → abort
     // so we never double-credit or double-deliver on the same on-chain txn.
-    const { error: depInsErr } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+    const { error: depInsErr } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString(), external_ref: externalRef });
     if (depInsErr) {
       console.log(`[Verify] Duplicate TxID insert blocked: ${normalizedTxn} → ${depInsErr.message}`);
       await sendMessage(chatId, "⚠️ This transaction has already been used by another account. Each TxID can only be verified once.", mainMenuKeyboard());
@@ -3856,7 +3856,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
     const progressResult = await sendMessage(chatId, buildProgressMsg(0, MAX_RETRIES, normalizedTxn));
     const progressMsgId = progressResult?.result?.message_id;
 
-    let retryVerified = false, retryAmount = 0, retryVia = "", retryLtcRaw = 0;
+    let retryVerified = false, retryAmount = 0, retryVia = "", retryLtcRaw = 0, retryExternalRef = null;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       await new Promise(r => setTimeout(r, RETRY_INTERVAL_SEC * 1000));
@@ -3865,7 +3865,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
         await editMessageText(chatId, progressMsgId, buildProgressMsg(attempt, MAX_RETRIES, normalizedTxn));
       }
 
-      let rAmount = 0, rVerified = false, rVia = "", rLtcRaw = 0;
+      let rAmount = 0, rVerified = false, rVia = "", rLtcRaw = 0, rExternalRef = null;
       const rChecks = [];
       if (verifyTargets.binance && binanceApiKey && binanceApiSecret) {
         rChecks.push(verifyBinanceTransfer(normalizedTxn, binanceApiKey, binanceApiSecret).then(r => ({ source: "Binance", ...r })).catch(() => ({ source: "Binance", verified: false, amount: 0 })));
@@ -3878,7 +3878,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
       }
       if (rChecks.length > 0) {
         const results = await Promise.all(rChecks);
-        for (const r of results) { if (r.verified && r.amount > 0) { rAmount = r.amount; rVerified = true; rVia = r.via || r.source; break; } }
+        for (const r of results) { if (r.verified && r.amount > 0) { rAmount = r.amount; rVerified = true; rVia = r.via || r.source; rExternalRef = r.externalRef || null; break; } }
       }
       if (!rVerified && (verifyTargets.bep20 || verifyTargets.trc20 || verifyTargets.ton || verifyTargets.ltc)) {
         const [bep20, trc20, ton, ltc] = await Promise.all([
@@ -3906,11 +3906,11 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
     }
 
     if (retryVerified && retryAmount > 0) {
-      amount = retryAmount; verified = true; verifiedVia = retryVia; ltcRawAmount = retryLtcRaw;
+      amount = retryAmount; verified = true; verifiedVia = retryVia; ltcRawAmount = retryLtcRaw; externalRef = retryExternalRef;
       // Guard against race: ensure deposit isn't already recorded (e.g. background checker raced us)
       // Race-safe claim (see comment above). If another verifier already
       // inserted this txn_hash, the unique index rejects our insert → abort.
-      const { error: depInsErr2 } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+      const { error: depInsErr2 } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString(), external_ref: externalRef });
       if (depInsErr2) {
         console.log(`[Verify] Retry duplicate TxID insert blocked: ${normalizedTxn} → ${depInsErr2.message}`);
         await sendMessage(chatId, "⚠️ This transaction has already been used by another account. Each TxID can only be verified once.", mainMenuKeyboard());
@@ -9227,7 +9227,7 @@ async function backgroundDepositChecker() {
           const pendingAction = String(customer.pending_action || "");
           const methodHint = pendingAction.startsWith("bkashpay") ? "bkash" : "";
           const targets = inferVerificationTargets(txn, methodHint);
-          let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0;
+          let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0, externalRef = null;
 
           // Exchange checks
           const exchangeChecks = [];
@@ -9235,7 +9235,7 @@ async function backgroundDepositChecker() {
             exchangeChecks.push(verifyBinanceTransfer(txn, binanceApiKey, binanceApiSecret).then(r => ({ source: "Binance", ...r })).catch(() => ({ source: "Binance", verified: false, amount: 0 })));
           }
           if (targets.bybit && bybitApiKey && bybitApiSecret) {
-            exchangeChecks.push(verifyBybitTransfer(txn, bybitApiKey, bybitApiSecret).then(r => ({ source: "Bybit", ...r })).catch(() => ({ source: "Bybit", verified: false, amount: 0 })));
+            exchangeChecks.push(verifyBybitTransfer(txn, bybitApiKey, bybitApiSecret, { claimedAmount: Number(dep.amount || 0) }).then(r => ({ source: "Bybit", ...r })).catch(() => ({ source: "Bybit", verified: false, amount: 0 })));
           }
           if (targets.bkash) {
             exchangeChecks.push(verifyBkashPayment(txn).then(r => ({ source: "bKash", ...r })).catch(() => ({ source: "bKash", verified: false, amount: 0 })));
@@ -9243,7 +9243,7 @@ async function backgroundDepositChecker() {
           if (exchangeChecks.length > 0) {
             const results = await Promise.all(exchangeChecks);
             for (const r of results) {
-              if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; break; }
+              if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; externalRef = r.externalRef || null; break; }
             }
           }
 
@@ -9267,7 +9267,7 @@ async function backgroundDepositChecker() {
 
           // Update deposit status
           await supabase.from("bot_deposits").update({
-            status: "verified", amount, verified_at: new Date().toISOString(),
+            status: "verified", amount, verified_at: new Date().toISOString(), external_ref: externalRef,
           }).eq("id", dep.id);
 
           const chatId = customer.chat_id;
