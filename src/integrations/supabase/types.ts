@@ -2221,6 +2221,8 @@ export type Database = {
       }
       ton_reserved_deposits: {
         Row: {
+          asset: string
+          asset_amount: number
           created_at: string
           customer_id: string
           deposit_id: string | null
@@ -2236,6 +2238,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          asset?: string
+          asset_amount?: number
           created_at?: string
           customer_id: string
           deposit_id?: string | null
@@ -2251,6 +2255,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          asset?: string
+          asset_amount?: number
           created_at?: string
           customer_id?: string
           deposit_id?: string | null
