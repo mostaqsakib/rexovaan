@@ -618,6 +618,7 @@ export type Database = {
           bep20_tx_hash: string | null
           created_at: string
           customer_id: string
+          external_ref: string | null
           id: string
           ltc_address: string | null
           ltc_tx_hash: string | null
@@ -639,6 +640,7 @@ export type Database = {
           bep20_tx_hash?: string | null
           created_at?: string
           customer_id: string
+          external_ref?: string | null
           id?: string
           ltc_address?: string | null
           ltc_tx_hash?: string | null
@@ -660,6 +662,7 @@ export type Database = {
           bep20_tx_hash?: string | null
           created_at?: string
           customer_id?: string
+          external_ref?: string | null
           id?: string
           ltc_address?: string | null
           ltc_tx_hash?: string | null

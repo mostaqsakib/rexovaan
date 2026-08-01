@@ -3233,13 +3233,12 @@ async function convertLtcToUsdt(ltcAmount) {
   return 0;
 }
 
-async function verifyBybitTransfer(orderId, apiKey, apiSecret) {
+async function verifyBybitTransfer(orderId, apiKey, apiSecret, opts = {}) {
   const normalizedOrderId = String(orderId || "").trim();
   const recvWindow = "20000";
-  // Scan window: 6h — covers late submissions & API indexing lag
   const SCAN_WINDOW_MS = 6 * 60 * 60 * 1000;
-  // Coins to check — Bybit users sometimes send USDC / other stablecoins
   const COINS = ["USDT", "USDC"];
+  const claimedAmount = Number(opts.claimedAmount || 0);
 
   function freshBybitSign(queryString) {
     const ts = String(Date.now());
@@ -3247,166 +3246,133 @@ async function verifyBybitTransfer(orderId, apiKey, apiSecret) {
     const sign = crypto.createHmac("sha256", apiSecret).update(preSign).digest("hex");
     return { ts, sign };
   }
-
-  function hasSuccessStatus(value) {
-    const status = String(value || "").toUpperCase();
-    return status === "SUCCESS" || status === "2" || status === "3" || status === "4" || status === "COMPLETED";
-  }
-
-  function isPendingStatus(value) {
-    const status = String(value || "").toUpperCase();
-    return status === "PENDING" || status === "PROCESSING" || status === "0" || status === "1";
-  }
-
-  function matchBybitId(...values) {
-    return values.some((value) => String(value || "").trim() === normalizedOrderId);
-  }
-
-  let sawPending = false;
-
-  async function bybitGet(path, qs) {
+  function bybitGet(path, qs) {
     const { ts, sign } = freshBybitSign(qs);
     return fetchWithTimeout(`https://api.bybit.com${path}?${qs}`, {
       headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": recvWindow, "X-BAPI-SIGN": sign },
     });
   }
+  function hasSuccessStatus(value) {
+    const status = String(value || "").toUpperCase();
+    return status === "SUCCESS" || status === "2" || status === "3" || status === "4" || status === "COMPLETED";
+  }
+  function isPendingStatus(value) {
+    const status = String(value || "").toUpperCase();
+    return status === "PENDING" || status === "PROCESSING" || status === "0" || status === "1";
+  }
+  const digitsOf = (s) => String(s || "").replace(/\D/g, "");
+  const wantDigits = digitsOf(normalizedOrderId);
+  function looseMatch(ids) {
+    return ids.some((v) => {
+      const s = String(v || "").trim();
+      if (!s) return false;
+      if (s === normalizedOrderId) return true;
+      const d = digitsOf(s);
+      if (d && wantDigits && d.length >= 10 && (d === wantDigits || d.includes(wantDigits) || wantDigits.includes(d))) return true;
+      return false;
+    });
+  }
+
+  const startTime = Date.now() - SCAN_WINDOW_MS;
+  const records = [];
+  let sawPending = false;
 
   for (const coin of COINS) {
-    // 1) Internal transfer — filter by transferId
+    // Internal (Bybit → Bybit) transfers
     try {
-      const qs = `coin=${coin}&limit=50&transferId=${encodeURIComponent(normalizedOrderId)}`;
-      const res = await bybitGet("/v5/asset/transfer/query-inter-transfer-list", qs);
+      const res = await bybitGet("/v5/asset/transfer/query-inter-transfer-list", `coin=${coin}&limit=50&startTime=${startTime}`);
       if (res.ok) {
-        const data = await res.json();
-        console.log(`Bybit inter-transfer[${coin}]: retCode=${data.retCode}, list=${data.result?.list?.length || 0}`);
-        if (data.retCode === 0 && data.result?.list) {
-          for (const t of data.result.list) {
-            if (matchBybitId(t.transferId, t.transferID, t.id)) {
-              if (hasSuccessStatus(t.status)) {
-                console.log(`Bybit verified via inter-transfer: ${t.amount} ${coin}`);
-                return { verified: true, amount: parseFloat(t.amount), via: `${coin} Bybit Transfer` };
-              }
-              if (isPendingStatus(t.status)) sawPending = true;
-            }
-          }
+        const d = await res.json();
+        for (const t of (d?.result?.list || [])) {
+          if (isPendingStatus(t.status)) sawPending = true;
+          records.push({
+            ref: `bybit:transfer:${t.transferId || t.id}`,
+            ids: [t.transferId, t.transferID, t.id, t.orderId],
+            amount: parseFloat(t.amount), coin, via: `${coin} Bybit Transfer`,
+            ts: Number(t.timestamp || t.createdTime || 0), ok: hasSuccessStatus(t.status),
+          });
         }
-      } else {
-        console.error(`Bybit inter-transfer[${coin}] HTTP error:`, res.status, await res.text().catch(() => ""));
       }
-    } catch (e) { console.error("Bybit internal transfer check error:", e.message); }
+    } catch (e) { console.error("Bybit inter-transfer error:", e.message); }
 
-    // 1b) Internal transfer — scan recent window without transferId filter (some IDs don't index instantly)
+    // On-chain deposits
     try {
-      const startTime = Date.now() - SCAN_WINDOW_MS;
-      const qs = `coin=${coin}&limit=50&startTime=${startTime}`;
-      const res = await bybitGet("/v5/asset/transfer/query-inter-transfer-list", qs);
+      const res = await bybitGet("/v5/asset/deposit/query-record", `coin=${coin}&limit=50&startTime=${startTime}`);
       if (res.ok) {
-        const data = await res.json();
-        if (data.retCode === 0 && data.result?.list) {
-          for (const t of data.result.list) {
-            if (matchBybitId(t.transferId, t.transferID, t.id)) {
-              if (hasSuccessStatus(t.status)) {
-                console.log(`Bybit verified via inter-transfer scan: ${t.amount} ${coin}`);
-                return { verified: true, amount: parseFloat(t.amount), via: `${coin} Bybit Transfer` };
-              }
-              if (isPendingStatus(t.status)) sawPending = true;
-            }
-          }
+        const d = await res.json();
+        for (const x of (d?.result?.rows || [])) {
+          if (isPendingStatus(x.status)) sawPending = true;
+          records.push({
+            ref: `bybit:deposit:${x.txID || x.id}`,
+            ids: [x.txID, x.txId, x.id, x.orderId, x.orderLinkId, x.transferId],
+            amount: parseFloat(x.amount), coin, via: `${coin} ${x.chain || x.network || "Bybit Deposit"}`,
+            ts: Number(x.successAt || x.createdTime || 0), ok: hasSuccessStatus(x.status),
+          });
         }
       }
-    } catch (e) { console.error("Bybit inter-transfer scan error:", e.message); }
+    } catch (e) { console.error("Bybit deposit error:", e.message); }
 
-    // 2) On-chain deposit records — try txID filter AND recent-window scan
+    // Internal deposits — Bybit Pay / "Send to email or UID" lands here
     try {
-      const qs2 = `coin=${coin}&limit=50&txID=${encodeURIComponent(normalizedOrderId)}`;
-      const res2 = await bybitGet("/v5/asset/deposit/query-record", qs2);
-      if (res2.ok) {
-        const data2 = await res2.json();
-        console.log(`Bybit deposit[${coin}] (txID): retCode=${data2.retCode}, rows=${data2.result?.rows?.length || 0}`);
-        if (data2.retCode === 0 && data2.result?.rows) {
-          for (const d of data2.result.rows) {
-            if (matchBybitId(d.txID, d.txId, d.id, d.orderId, d.orderLinkId, d.transferId)) {
-              if (hasSuccessStatus(d.status)) {
-                const chain = d.chain || d.network || d.chainType || "Bybit Deposit";
-                console.log(`Bybit verified via deposit record: ${d.amount} ${coin} (${chain})`);
-                return { verified: true, amount: parseFloat(d.amount), via: `${coin} ${chain}` };
-              }
-              if (isPendingStatus(d.status)) sawPending = true;
-            }
-          }
-        }
-      }
-    } catch (e) { console.error("Bybit deposit check error:", e.message); }
-
-    // 2b) On-chain deposit — recent scan (user may paste txID that Bybit hasn't indexed via filter yet)
-    try {
-      const startTime = Date.now() - SCAN_WINDOW_MS;
-      const qs = `coin=${coin}&limit=50&startTime=${startTime}`;
-      const res = await bybitGet("/v5/asset/deposit/query-record", qs);
+      const res = await bybitGet("/v5/asset/deposit/query-internal-record", `coin=${coin}&limit=50&startTime=${startTime}`);
       if (res.ok) {
-        const data = await res.json();
-        if (data.retCode === 0 && data.result?.rows) {
-          for (const d of data.result.rows) {
-            if (matchBybitId(d.txID, d.txId, d.id, d.orderId, d.orderLinkId, d.transferId)) {
-              if (hasSuccessStatus(d.status)) {
-                const chain = d.chain || d.network || d.chainType || "Bybit Deposit";
-                console.log(`Bybit verified via deposit scan: ${d.amount} ${coin} (${chain})`);
-                return { verified: true, amount: parseFloat(d.amount), via: `${coin} ${chain}` };
-              }
-              if (isPendingStatus(d.status)) sawPending = true;
-            }
-          }
+        const d = await res.json();
+        for (const x of (d?.result?.rows || [])) {
+          if (isPendingStatus(x.status)) sawPending = true;
+          records.push({
+            ref: `bybit:internal:${x.id || x.txID}`,
+            ids: [x.id, x.txID, x.txId, x.transferId, x.orderId],
+            amount: parseFloat(x.amount), coin, via: `${coin} Bybit Internal Deposit`,
+            ts: Number(x.createdTime || x.successAt || 0), ok: hasSuccessStatus(x.status),
+          });
         }
       }
-    } catch (e) { console.error("Bybit deposit scan error:", e.message); }
+    } catch (e) { console.error("Bybit internal deposit error:", e.message); }
+  }
 
-    // 3) Internal deposit records — 7 day window (was 2h)
-    try {
-      const startTime = Date.now() - SCAN_WINDOW_MS;
-      const qs3i = `coin=${coin}&limit=50&startTime=${startTime}`;
-      const res3i = await bybitGet("/v5/asset/deposit/query-internal-record", qs3i);
-      if (res3i.ok) {
-        const data3i = await res3i.json();
-        console.log(`Bybit internal-deposit[${coin}]: retCode=${data3i.retCode}, rows=${data3i.result?.rows?.length || 0}`);
-        if (data3i.retCode === 0 && data3i.result?.rows) {
-          for (const d of data3i.result.rows) {
-            if (matchBybitId(d.id, d.txID, d.txId, d.transferId, d.orderId)) {
-              if (hasSuccessStatus(d.status)) {
-                console.log(`Bybit verified via internal deposit: ${d.amount} ${coin}`);
-                return { verified: true, amount: parseFloat(d.amount), via: `${coin} Bybit Internal Deposit` };
-              }
-              if (isPendingStatus(d.status)) sawPending = true;
-            }
-          }
-        }
-      } else {
-        console.error(`Bybit internal-deposit[${coin}] HTTP error:`, res3i.status, await res3i.text().catch(() => ""));
-      }
-    } catch (e) { console.error("Bybit internal deposit check error:", e.message); }
+  console.log(`Bybit scan: ${records.length} records for ${normalizedOrderId}`);
 
-    // 4) Universal transfer
-    try {
-      const qs4 = `coin=${coin}&limit=50&transferId=${encodeURIComponent(normalizedOrderId)}`;
-      const res4 = await bybitGet("/v5/asset/transfer/query-universal-transfer-list", qs4);
-      if (res4.ok) {
-        const data4 = await res4.json();
-        if (data4.retCode === 0 && data4.result?.list) {
-          for (const t of data4.result.list) {
-            if (matchBybitId(t.transferId, t.transferID, t.id)) {
-              if (hasSuccessStatus(t.status)) {
-                console.log(`Bybit verified via universal transfer: ${t.amount} ${coin}`);
-                return { verified: true, amount: parseFloat(t.amount), via: `${coin} Bybit Universal Transfer` };
-              }
-              if (isPendingStatus(t.status)) sawPending = true;
-            }
-          }
-        }
-      }
-    } catch (e) { /* universal transfer might not apply */ }
+  // 1) ID match (exact or digit-based loose match)
+  for (const r of records) {
+    if (r.ok && r.amount > 0 && looseMatch(r.ids)) {
+      console.log(`Bybit verified by ID: ${r.amount} ${r.coin} (${r.ref})`);
+      return { verified: true, amount: r.amount, via: r.via, externalRef: r.ref };
+    }
+  }
+
+  // 2) Fallback — Bybit Pay order IDs never surface in the API, so match by
+  //    amount (when known) or by a single unused successful record in the window.
+  const usable = [];
+  for (const r of records.filter((x) => x.ok && x.amount > 0).sort((a, b) => b.ts - a.ts)) {
+    if (await isBybitRefUsed(r.ref)) continue;
+    usable.push(r);
+  }
+  if (claimedAmount > 0) {
+    const hit = usable.find((r) => Math.abs(r.amount - claimedAmount) <= Math.max(0.01, claimedAmount * 0.005));
+    if (hit) {
+      console.log(`Bybit verified by amount: ${hit.amount} ${hit.coin} (${hit.ref})`);
+      return { verified: true, amount: hit.amount, via: `${hit.via} (amount matched)`, externalRef: hit.ref };
+    }
+  } else if (usable.length === 1) {
+    const hit = usable[0];
+    console.log(`Bybit verified by single unused record: ${hit.amount} ${hit.coin} (${hit.ref})`);
+    return { verified: true, amount: hit.amount, via: hit.via, externalRef: hit.ref };
   }
 
   console.log(`Bybit verify: no match for ${normalizedOrderId} (pending=${sawPending})`);
   return { verified: false, amount: 0, pending: sawPending };
+}
+
+async function isBybitRefUsed(ref) {
+  if (!ref) return true;
+  try {
+    const { data } = await supabase
+      .from("bot_deposits").select("id").eq("external_ref", ref).neq("status", "rejected").maybeSingle();
+    return !!data;
+  } catch (e) {
+    console.error("external_ref check error:", e.message);
+    return true;
+  }
 }
 
 function normalizeTxnInput(input) {
@@ -3778,7 +3744,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
 
   const verifyTargets = inferVerificationTargets(normalizedTxn, selectedPaymentMethodName);
   console.log(`[Verify] Starting verification for TxID: ${normalizedTxn}, raw: ${txnHash}, customer: ${customer.id}, pending_action: ${customer.pending_action || "none"}, targets: ${JSON.stringify(verifyTargets)}`);
-  let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0;
+  let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0, externalRef = null;
 
   const binanceApiKey = envGet("BINANCE_API_KEY"), binanceApiSecret = envGet("BINANCE_API_SECRET");
   const bybitApiKey = envGet("BYBIT_API_KEY"), bybitApiSecret = envGet("BYBIT_API_SECRET");
@@ -3797,7 +3763,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
   if (internalChecks.length > 0) {
     const results = await Promise.all(internalChecks);
     console.log(`[Verify] Exchange check results:`, results.map(r => `${r.source}=${r.verified}/${r.amount}`).join(", "));
-    for (const r of results) { if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; break; } }
+    for (const r of results) { if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; externalRef = r.externalRef || null; break; } }
   }
 
   if (!verified && (verifyTargets.bep20 || verifyTargets.trc20 || verifyTargets.ton || verifyTargets.ltc)) {
@@ -3819,7 +3785,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
     // guarantees only ONE concurrent verifier can insert. If insert fails with
     // a unique-violation, another submission already claimed this TxID → abort
     // so we never double-credit or double-deliver on the same on-chain txn.
-    const { error: depInsErr } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+    const { error: depInsErr } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString(), external_ref: externalRef });
     if (depInsErr) {
       console.log(`[Verify] Duplicate TxID insert blocked: ${normalizedTxn} → ${depInsErr.message}`);
       await sendMessage(chatId, "⚠️ This transaction has already been used by another account. Each TxID can only be verified once.", mainMenuKeyboard());
@@ -3890,7 +3856,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
     const progressResult = await sendMessage(chatId, buildProgressMsg(0, MAX_RETRIES, normalizedTxn));
     const progressMsgId = progressResult?.result?.message_id;
 
-    let retryVerified = false, retryAmount = 0, retryVia = "", retryLtcRaw = 0;
+    let retryVerified = false, retryAmount = 0, retryVia = "", retryLtcRaw = 0, retryExternalRef = null;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       await new Promise(r => setTimeout(r, RETRY_INTERVAL_SEC * 1000));
@@ -3899,7 +3865,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
         await editMessageText(chatId, progressMsgId, buildProgressMsg(attempt, MAX_RETRIES, normalizedTxn));
       }
 
-      let rAmount = 0, rVerified = false, rVia = "", rLtcRaw = 0;
+      let rAmount = 0, rVerified = false, rVia = "", rLtcRaw = 0, rExternalRef = null;
       const rChecks = [];
       if (verifyTargets.binance && binanceApiKey && binanceApiSecret) {
         rChecks.push(verifyBinanceTransfer(normalizedTxn, binanceApiKey, binanceApiSecret).then(r => ({ source: "Binance", ...r })).catch(() => ({ source: "Binance", verified: false, amount: 0 })));
@@ -3912,7 +3878,7 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
       }
       if (rChecks.length > 0) {
         const results = await Promise.all(rChecks);
-        for (const r of results) { if (r.verified && r.amount > 0) { rAmount = r.amount; rVerified = true; rVia = r.via || r.source; break; } }
+        for (const r of results) { if (r.verified && r.amount > 0) { rAmount = r.amount; rVerified = true; rVia = r.via || r.source; rExternalRef = r.externalRef || null; break; } }
       }
       if (!rVerified && (verifyTargets.bep20 || verifyTargets.trc20 || verifyTargets.ton || verifyTargets.ltc)) {
         const [bep20, trc20, ton, ltc] = await Promise.all([
@@ -3940,11 +3906,11 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
     }
 
     if (retryVerified && retryAmount > 0) {
-      amount = retryAmount; verified = true; verifiedVia = retryVia; ltcRawAmount = retryLtcRaw;
+      amount = retryAmount; verified = true; verifiedVia = retryVia; ltcRawAmount = retryLtcRaw; externalRef = retryExternalRef;
       // Guard against race: ensure deposit isn't already recorded (e.g. background checker raced us)
       // Race-safe claim (see comment above). If another verifier already
       // inserted this txn_hash, the unique index rejects our insert → abort.
-      const { error: depInsErr2 } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString() });
+      const { error: depInsErr2 } = await supabase.from("bot_deposits").insert({ customer_id: customer.id, amount, txn_hash: normalizedTxn, status: "verified", verified_at: new Date().toISOString(), external_ref: externalRef });
       if (depInsErr2) {
         console.log(`[Verify] Retry duplicate TxID insert blocked: ${normalizedTxn} → ${depInsErr2.message}`);
         await sendMessage(chatId, "⚠️ This transaction has already been used by another account. Each TxID can only be verified once.", mainMenuKeyboard());
@@ -9261,7 +9227,7 @@ async function backgroundDepositChecker() {
           const pendingAction = String(customer.pending_action || "");
           const methodHint = pendingAction.startsWith("bkashpay") ? "bkash" : "";
           const targets = inferVerificationTargets(txn, methodHint);
-          let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0;
+          let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0, externalRef = null;
 
           // Exchange checks
           const exchangeChecks = [];
@@ -9269,7 +9235,7 @@ async function backgroundDepositChecker() {
             exchangeChecks.push(verifyBinanceTransfer(txn, binanceApiKey, binanceApiSecret).then(r => ({ source: "Binance", ...r })).catch(() => ({ source: "Binance", verified: false, amount: 0 })));
           }
           if (targets.bybit && bybitApiKey && bybitApiSecret) {
-            exchangeChecks.push(verifyBybitTransfer(txn, bybitApiKey, bybitApiSecret).then(r => ({ source: "Bybit", ...r })).catch(() => ({ source: "Bybit", verified: false, amount: 0 })));
+            exchangeChecks.push(verifyBybitTransfer(txn, bybitApiKey, bybitApiSecret, { claimedAmount: Number(dep.amount || 0) }).then(r => ({ source: "Bybit", ...r })).catch(() => ({ source: "Bybit", verified: false, amount: 0 })));
           }
           if (targets.bkash) {
             exchangeChecks.push(verifyBkashPayment(txn).then(r => ({ source: "bKash", ...r })).catch(() => ({ source: "bKash", verified: false, amount: 0 })));
@@ -9277,7 +9243,7 @@ async function backgroundDepositChecker() {
           if (exchangeChecks.length > 0) {
             const results = await Promise.all(exchangeChecks);
             for (const r of results) {
-              if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; break; }
+              if (r.verified && r.amount > 0) { amount = r.amount; verified = true; verifiedVia = r.via || r.source; externalRef = r.externalRef || null; break; }
             }
           }
 
@@ -9301,7 +9267,7 @@ async function backgroundDepositChecker() {
 
           // Update deposit status
           await supabase.from("bot_deposits").update({
-            status: "verified", amount, verified_at: new Date().toISOString(),
+            status: "verified", amount, verified_at: new Date().toISOString(), external_ref: externalRef,
           }).eq("id", dep.id);
 
           const chatId = customer.chat_id;
