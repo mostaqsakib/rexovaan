@@ -13,6 +13,7 @@ import {
   ShieldAlert, Wallet, ArrowRight, CheckCircle2, Clock, AlertTriangle, Fuel,
 } from 'lucide-react';
 import LtcActivityCard from './LtcActivityCard';
+import TonActivityCard from './TonActivityCard';
 
 
 
@@ -783,6 +784,9 @@ const OnChainActivityTab = () => {
       {/* Litecoin gateway */}
       <LtcActivityCard />
 
+      {/* TON gateway */}
+      <TonActivityCard />
+
 
 
       {/* Filters */}
@@ -817,6 +821,9 @@ const OnChainActivityTab = () => {
 
       {/* Content */}
       <LedgerTable rows={filteredRegistry} />
+
+      {/* Unsupported / scam tokens (all chains incl. TON jettons like GRAM) */}
+      <FakeTable rows={fakes} customers={customers} />
 
     </div>
   );
