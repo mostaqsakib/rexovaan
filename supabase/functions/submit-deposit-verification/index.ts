@@ -179,69 +179,126 @@ async function verifyBinance(orderId: string, apiKey: string, apiSecret: string)
 }
 
 // ── Bybit ──
-async function verifyBybit(orderId: string, apiKey: string, apiSecret: string): Promise<VerifyResult> {
+// Bybit Pay / "Send" order IDs (e.g. 2608010002208361510739237...) never appear as
+// transferId/txID in the API. So: (1) loose-match every recent record, then
+// (2) fall back to amount + time matching against unused records (deduped by external_ref).
+interface BybitRecord { ref: string; ids: string[]; amount: number; coin: string; via: string; ts: number; okStatus: boolean; }
+
+async function verifyBybit(
+  orderId: string,
+  apiKey: string,
+  apiSecret: string,
+  opts: { claimedAmount?: number; isRefUsed?: (ref: string) => Promise<boolean> } = {},
+): Promise<VerifyResult & { externalRef?: string }> {
   const normalizedOrderId = orderId.trim();
   const recvWindow = "20000";
+  const WINDOW_MS = 6 * 60 * 60 * 1000;
+  const COINS = ["USDT", "USDC"];
   const freshSign = (qs: string) => {
     const ts = String(Date.now());
     const pre = `${ts}${apiKey}${recvWindow}${qs}`;
     const sign = createHmac("sha256", apiSecret).update(pre).digest("hex");
     return { ts, sign };
   };
-  const ok = (v: any) => { const s = String(v ?? "").toUpperCase(); return s === "SUCCESS" || s === "2" || s === "3" || s === "4" || s === "COMPLETED"; };
-  const match = (...values: any[]) => values.some((v) => String(v ?? "").trim() === normalizedOrderId);
-
-  try {
-    const qs = `coin=USDT&limit=50&transferId=${encodeURIComponent(normalizedOrderId)}`;
+  const get = (path: string, qs: string) => {
     const { ts, sign } = freshSign(qs);
-    const res = await fetchWithTimeout(`https://api.bybit.com/v5/asset/transfer/query-inter-transfer-list?${qs}`, {
+    return fetchWithTimeout(`https://api.bybit.com${path}?${qs}`, {
       headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": recvWindow, "X-BAPI-SIGN": sign },
     });
-    if (res.ok) {
-      const d = await res.json();
-      if (d.retCode === 0) for (const t of (d.result?.list || [])) {
-        if (match(t.transferId, t.transferID, t.id) && ok(t.status)) {
-          return { verified: true, amount: parseFloat(t.amount), via: `USDT Bybit Transfer` };
-        }
-      }
-    }
-  } catch (e) { console.error("Bybit inter err", e); }
+  };
+  const okStatus = (v: any) => {
+    const s = String(v ?? "").toUpperCase();
+    return s === "SUCCESS" || s === "2" || s === "3" || s === "4" || s === "COMPLETED";
+  };
+  const digits = (s: string) => String(s || "").replace(/\D/g, "");
+  const wantDigits = digits(normalizedOrderId);
+  const looseMatch = (ids: string[]) => ids.some((v) => {
+    const s = String(v ?? "").trim();
+    if (!s) return false;
+    if (s === normalizedOrderId) return true;
+    const d = digits(s);
+    if (d && wantDigits && d.length >= 10 && (d === wantDigits || d.includes(wantDigits) || wantDigits.includes(d))) return true;
+    return false;
+  });
 
-  try {
-    const qs = `coin=USDT&limit=50&txID=${encodeURIComponent(normalizedOrderId)}`;
-    const { ts, sign } = freshSign(qs);
-    const res = await fetchWithTimeout(`https://api.bybit.com/v5/asset/deposit/query-record?${qs}`, {
-      headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": recvWindow, "X-BAPI-SIGN": sign },
-    });
-    if (res.ok) {
-      const d = await res.json();
-      if (d.retCode === 0) for (const x of (d.result?.rows || [])) {
-        if (match(x.txID, x.txId, x.id, x.orderId, x.orderLinkId, x.transferId) && ok(x.status)) {
-          return { verified: true, amount: parseFloat(x.amount), via: `USDT ${x.chain || x.network || "Bybit Deposit"}` };
-        }
-      }
-    }
-  } catch (e) { console.error("Bybit dep err", e); }
+  const startTime = Date.now() - WINDOW_MS;
+  const records: BybitRecord[] = [];
 
-  try {
-    const twoH = Date.now() - 2 * 60 * 60 * 1000;
-    const qs = `coin=USDT&limit=50&startTime=${twoH}`;
-    const { ts, sign } = freshSign(qs);
-    const res = await fetchWithTimeout(`https://api.bybit.com/v5/asset/deposit/query-internal-record?${qs}`, {
-      headers: { "X-BAPI-API-KEY": apiKey, "X-BAPI-TIMESTAMP": ts, "X-BAPI-RECV-WINDOW": recvWindow, "X-BAPI-SIGN": sign },
-    });
-    if (res.ok) {
-      const d = await res.json();
-      if (d.retCode === 0) for (const x of (d.result?.rows || [])) {
-        if (match(x.id, x.txID, x.txId, x.transferId, x.orderId) && ok(x.status)) {
-          return { verified: true, amount: parseFloat(x.amount), via: `USDT Bybit Internal Deposit` };
+  for (const coin of COINS) {
+    // Internal (Bybit→Bybit) transfers
+    try {
+      const res = await get("/v5/asset/transfer/query-inter-transfer-list", `coin=${coin}&limit=50&startTime=${startTime}`);
+      if (res.ok) {
+        const d = await res.json();
+        for (const t of (d?.result?.list || [])) {
+          records.push({
+            ref: `bybit:transfer:${t.transferId || t.id}`,
+            ids: [t.transferId, t.transferID, t.id, t.orderId],
+            amount: parseFloat(t.amount), coin, via: `${coin} Bybit Transfer`,
+            ts: Number(t.timestamp || t.createdTime || 0), okStatus: okStatus(t.status),
+          });
         }
       }
+    } catch (e) { console.error("Bybit inter err", e); }
+
+    // On-chain deposits into our Bybit account
+    try {
+      const res = await get("/v5/asset/deposit/query-record", `coin=${coin}&limit=50&startTime=${startTime}`);
+      if (res.ok) {
+        const d = await res.json();
+        for (const x of (d?.result?.rows || [])) {
+          records.push({
+            ref: `bybit:deposit:${x.txID || x.id}`,
+            ids: [x.txID, x.txId, x.id, x.orderId, x.orderLinkId, x.transferId],
+            amount: parseFloat(x.amount), coin, via: `${coin} ${x.chain || x.network || "Bybit Deposit"}`,
+            ts: Number(x.successAt || x.createdTime || 0), okStatus: okStatus(x.status),
+          });
+        }
+      }
+    } catch (e) { console.error("Bybit dep err", e); }
+
+    // Internal deposits — this is where Bybit Pay / "Send to email or UID" lands
+    try {
+      const res = await get("/v5/asset/deposit/query-internal-record", `coin=${coin}&limit=50&startTime=${startTime}`);
+      if (res.ok) {
+        const d = await res.json();
+        for (const x of (d?.result?.rows || [])) {
+          records.push({
+            ref: `bybit:internal:${x.id || x.txID}`,
+            ids: [x.id, x.txID, x.txId, x.transferId, x.orderId],
+            amount: parseFloat(x.amount), coin, via: `${coin} Bybit Internal Deposit`,
+            ts: Number(x.createdTime || x.successAt || 0), okStatus: okStatus(x.status),
+          });
+        }
+      }
+    } catch (e) { console.error("Bybit internal err", e); }
+  }
+
+  console.log(`[Bybit] scanned ${records.length} records for ${normalizedOrderId}`);
+
+  // 1) ID match (exact or digits-based loose match)
+  for (const r of records) {
+    if (r.okStatus && r.amount > 0 && looseMatch(r.ids)) {
+      return { verified: true, amount: r.amount, via: r.via, externalRef: r.ref };
     }
-  } catch (e) { console.error("Bybit internal err", e); }
+  }
+
+  // 2) Amount + time fallback for Bybit Pay order IDs that the API never exposes
+  const claimed = Number(opts.claimedAmount || 0);
+  if (claimed > 0) {
+    const candidates = records
+      .filter((r) => r.okStatus && r.amount > 0 && Math.abs(r.amount - claimed) <= Math.max(0.01, claimed * 0.005))
+      .sort((a, b) => b.ts - a.ts);
+    for (const c of candidates) {
+      if (opts.isRefUsed && (await opts.isRefUsed(c.ref))) continue;
+      console.log(`[Bybit] amount-matched ${c.amount} ${c.coin} via ${c.ref}`);
+      return { verified: true, amount: c.amount, via: `${c.via} (amount matched)`, externalRef: c.ref };
+    }
+  }
 
   return { verified: false, amount: 0 };
 }
+
 
 // ── BEP20 ──
 async function verifyBep20(txnHash: string): Promise<VerifyResult> {
