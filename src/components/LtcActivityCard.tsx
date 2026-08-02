@@ -105,9 +105,15 @@ const LtcActivityCard = () => {
   const runSweep = async () => {
     setScanning(true);
     try {
-      const { error } = await supabase.functions.invoke('ltc-sweep');
+      // Manual sweep = force: bypasses the min-USD threshold so deferred
+      // small deposits (e.g. $0.70) are swept too.
+      const { data, error } = await supabase.functions.invoke('ltc-sweep', { body: { force: true } });
       if (error) throw error;
-      toast.success('LTC sweep triggered');
+      const swept = (data as any)?.swept ?? 0;
+      const skipped = (data as any)?.skipped ?? 0;
+      const errs = (data as any)?.errors as string[] | undefined;
+      if (errs?.length) toast.error(`Sweep errors: ${errs[0]}`);
+      else toast.success(`LTC sweep: ${swept} swept, ${skipped} skipped (dust)`);
       await load();
     } catch (e: any) {
       toast.error(e.message ?? 'Sweep failed');
@@ -115,6 +121,7 @@ const LtcActivityCard = () => {
       setScanning(false);
     }
   };
+
 
   useEffect(() => { load(); }, []);
 
