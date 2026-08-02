@@ -2369,18 +2369,22 @@ async function showApiDocs(chatId, customer, emojiMap = {}, editMessageId = null
     `<b>Authentication</b>
 Use your API key as Bearer token.
 <code>Authorization: Bearer YOUR_API_KEY</code>
+You can also pass it as <code>X-API-Key</code> header.
 
 ` +
-    `<b>Products</b>
+    `<b>1. Products</b>
 <code>GET ${escapeHtml(apiBase)}?action=products</code>
+Returns all active products with price, stock count, and delivery info.
 
 ` +
-    `<b>Balance</b>
+    `<b>2. Balance</b>
 <code>GET ${escapeHtml(apiBase)}?action=balance</code>
+Returns your current API balance.
 
 ` +
-    `<b>Create Order</b>
+    `<b>3. Create Order</b>
 <code>POST ${escapeHtml(apiBase)}?action=order</code>
+Charges your balance, reserves stock, and returns delivery accounts instantly.
 
 ` +
     `<b>Order JSON</b>
@@ -2388,7 +2392,42 @@ Use your API key as Bearer token.
   "product_id": "PRODUCT_ID",
   "quantity": 1,
   "external_order_id": "YOUR_ORDER_ID"
-}</pre>`;
+}</pre>
+
+` +
+    `<b>Idempotency</b>
+<code>external_order_id</code> is optional but strongly recommended. If you send the same <code>external_order_id</code> twice, the second request is rejected with <code>409 Duplicate external order id</code> — your balance is NOT charged a second time and no new order is created. Use a unique ID per order on your side.
+
+` +
+    `<b>4. Order Status / Lookup</b>
+<code>GET ${escapeHtml(apiBase)}?action=order_status&external_order_id=YOUR_ORDER_ID</code>
+<code>GET ${escapeHtml(apiBase)}?action=order_status&order_id=ORDER_UUID</code>
+Returns the order details, status, and delivery accounts. Use this to recover an order when a create-order request times out — the order may still have succeeded on our side. If the order exists you will get its full delivery info back, so you never need to re-purchase to see what you already bought.
+
+` +
+    `<b>Response (order_status)</b>
+<pre>{
+  "ok": true,
+  "order": {
+    "id": "ORDER_UUID",
+    "product_name": "...",
+    "quantity": 1,
+    "total_cost": 1.00,
+    "external_order_id": "YOUR_ORDER_ID",
+    "status": "completed",
+    "created_at": "2026-...",
+    "accounts": ["acc1 | pass1"],
+    "account": "acc1 | pass1"
+  },
+  "accounts": [...],
+  "account": "..."
+}</pre>
+
+` +
+    `<b>Recovering after a timeout</b>
+1. Call <code>order_status</code> with your <code>external_order_id</code>.
+2. If it returns the order with <code>status: "completed"</code>, you already have the delivery — no need to buy again.
+3. If it returns <code>404 Order not found</code>, the order never reached us — safe to retry with the same <code>external_order_id</code>.`;
 
   await editOrSend(chatId, editMessageId, msg, {
     inline_keyboard: [[applyEmoji({ text: "🛢️ Back to API Dashboard", callback_data: "api_dashboard" }, "api_dashboard", emojiMap)]],
