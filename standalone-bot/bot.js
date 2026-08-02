@@ -2294,7 +2294,8 @@ async function showDeveloperApi(chatId, customer, emojiMap = {}, editMessageId =
     `<b>Available actions</b>\n` +
     `• Product list: <code>GET /?action=products</code>\n` +
     `• Balance check: <code>GET /?action=balance</code>\n` +
-    `• Place order: <code>POST /?action=order</code>\n\n` +
+    `• Place order: <code>POST /?action=order</code>\n` +
+    `• Order status: <code>GET /?action=order_status</code>\n\n` +
     `<b>Endpoint URL</b>\n<code>${escapeHtml(apiBase)}</code>` +
     recentText;
 
