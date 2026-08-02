@@ -13,6 +13,7 @@ export interface Product {
   isManualDelivery?: boolean;
   isActive?: boolean;
   description?: string | null;
+  descriptionImage?: string | null;
   deliveryInstruction?: string | null;
   deliveryMedia?: { url: string; type: 'image' | 'video' }[] | null;
 }
