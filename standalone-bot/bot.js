@@ -1186,7 +1186,11 @@ async function flashSaleTickerLoop() {
             const { data: trackedCust } = await supabase.from("bot_customers").select("id").eq("chat_id", tracked.chatId).maybeSingle();
             const { msg } = await buildProductDetailMessage(product, tiers || [], trackedCust?.id || null);
             const keyboard = buildProductDetailKeyboard(tracked.productId, emojiMap);
-            const res = await editMessageText(tracked.chatId, tracked.messageId, msg, keyboard);
+            let res = await editMessageText(tracked.chatId, tracked.messageId, msg, keyboard);
+            if (!res?.ok && !res?.skipped) {
+              // Photo-based product messages must be edited via caption.
+              res = await editMessageCaption(tracked.chatId, tracked.messageId, msg, keyboard);
+            }
             if (!flashSale) { untrackFlashSaleProductMessage(tracked.chatId, tracked.messageId); continue; }
             if (!res?.ok && !res?.skipped) untrackFlashSaleProductMessage(tracked.chatId, tracked.messageId);
           } catch (_) {
@@ -1342,6 +1346,24 @@ async function editMessageText(chatId, messageId, text, replyMarkup) {
     return result;
   } catch (e) {
     console.error("editMessageText error:", e.message);
+    return { ok: false };
+  }
+}
+async function editMessageCaption(chatId, messageId, caption, replyMarkup) {
+  const body = { chat_id: chatId, message_id: messageId, caption: prepareTelegramHtml(caption), parse_mode: "HTML" };
+  const safeReplyMarkup = sanitizeReplyMarkup(replyMarkup);
+  if (safeReplyMarkup) body.reply_markup = safeReplyMarkup;
+  try {
+    let result = await tgFetch("editMessageCaption", body);
+    const desc = String(result?.description || "").toLowerCase();
+    if (!result?.ok && desc.includes("message is not modified")) return { ok: true, skipped: true };
+    if (!result?.ok && body.caption.includes("<tg-emoji")) {
+      body.caption = stripCustomEmoji(body.caption);
+      result = await tgFetch("editMessageCaption", body);
+    }
+    return result;
+  } catch (e) {
+    console.error("editMessageCaption error:", e.message);
     return { ok: false };
   }
 }
@@ -4063,7 +4085,7 @@ async function buildProductDetailMessage(product, tiers, customerId = null) {
   const manualNote = product.is_manual_delivery
     ? `\n⚠️ <b>Note:</b> <i>This product is delivered manually by admin.\n⏱ Delivery Time: 30 minutes — 12 hours.\nIf not delivered within 12 hours, your balance will be fully refunded.</i>`
     : `\n<i>Delivery is automatic after payment confirmation.</i>`;
-  return { msg: `${productEmoji} <b>${product.name}</b>\n\n${priceLine}${descBlock}${bulkBlock}${manualNote}`, flashSale };
+  return { msg: `${productEmoji} <b>${product.name}</b>\n\n${priceLine}${descBlock}${bulkBlock}${manualNote}`, flashSale, image: product.description_image || null };
 }
 
 function buildProductDetailKeyboard(productId, emojiMap) {
@@ -4160,13 +4182,28 @@ async function handleBuyProduct(chatId, customer, productId, emojiMap, editMessa
   if (!product) { await sendMessage(chatId, "❌ Product not found.", mainMenuKeyboard()); return; }
   if (product.is_active === false) { await sendMessage(chatId, `⚠️ <b>${product.name}</b> is currently unavailable.`, mainMenuKeyboard()); return; }
 
-  const { msg, flashSale } = await buildProductDetailMessage(product, tiers, customer?.id);
+  const { msg, flashSale, image } = await buildProductDetailMessage(product, tiers, customer?.id);
   const keyboard = buildProductDetailKeyboard(productId, emojiMap);
-  const result = editMessageId
-    ? await editMessageText(chatId, editMessageId, msg, keyboard)
-    : await sendMessage(chatId, msg, keyboard);
 
-  const productMessageId = editMessageId || result?.result?.message_id;
+  // Products with a description image are shown as a photo message (caption limit 1024 chars).
+  const usePhoto = Boolean(image) && msg.length <= 1024;
+  let result;
+  let productMessageId;
+  if (usePhoto) {
+    if (editMessageId) await deleteMessage(chatId, editMessageId).catch(() => {});
+    result = await sendPhoto(chatId, image, msg, keyboard);
+    productMessageId = result?.result?.message_id;
+    if (!result?.ok) {
+      // Photo failed (bad URL etc.) — fall back to a normal text message.
+      result = await sendMessage(chatId, msg, keyboard);
+      productMessageId = result?.result?.message_id;
+    }
+  } else {
+    result = editMessageId
+      ? await editMessageText(chatId, editMessageId, msg, keyboard)
+      : await sendMessage(chatId, msg, keyboard);
+    productMessageId = editMessageId || result?.result?.message_id;
+  }
 
   if (!result?.ok) {
     console.error(`Failed to show product ${productId} to chat ${chatId}`);
