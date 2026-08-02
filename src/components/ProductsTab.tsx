@@ -277,6 +277,10 @@ const DescriptionCell = ({ product }: { product: Product }) => {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(product.description || '');
   const [savedValue, setSavedValue] = useState(product.description || '');
+  const [image, setImage] = useState<string | null>(product.descriptionImage || null);
+  const [savedImage, setSavedImage] = useState<string | null>(product.descriptionImage || null);
+  const [uploading, setUploading] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const wrapSelection = (openTag: string, closeTag: string) => {
@@ -302,20 +306,43 @@ const DescriptionCell = ({ product }: { product: Product }) => {
 
   useEffect(() => {
     setSavedValue(product.description || '');
-    if (!editing) setValue(product.description || '');
-  }, [product.description]);
+    setSavedImage(product.descriptionImage || null);
+    if (!editing) {
+      setValue(product.description || '');
+      setImage(product.descriptionImage || null);
+    }
+  }, [product.description, product.descriptionImage]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Only image files are allowed'); return; }
+    setUploading(true);
+    const ext = file.name.split('.').pop();
+    const path = `descriptions/${product.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from('instruction-media').upload(path, file);
+    if (error) {
+      toast.error('Image upload failed');
+    } else {
+      const { data: urlData } = supabase.storage.from('instruction-media').getPublicUrl(path);
+      setImage(urlData.publicUrl);
+    }
+    setUploading(false);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
 
   const handleSave = async () => {
     const desc = value.trim() || null;
     const { error } = await supabase
       .from('bot_products')
-      .update({ description: desc })
+      .update({ description: desc, description_image: image } as any)
       .eq('id', product.id);
 
     if (error) {
       toast.error('Failed to save description');
     } else {
       setSavedValue(desc || '');
+      setSavedImage(image);
       toast.success('Description saved');
     }
     setEditing(false);
@@ -348,9 +375,34 @@ const DescriptionCell = ({ product }: { product: Product }) => {
           placeholder="Product description shown in bot..."
           className="text-xs min-h-[80px] resize-y rounded-t-none -mt-1.5 border-t-0"
           autoFocus
-          onKeyDown={(e) => { if (e.key === 'Escape') { setValue(savedValue); setEditing(false); } }}
+          onKeyDown={(e) => { if (e.key === 'Escape') { setValue(savedValue); setImage(savedImage); setEditing(false); } }}
         />
+
+        {image && (
+          <div className="relative w-fit group">
+            <img src={image} alt="" className="h-20 w-32 rounded object-cover border border-border" />
+            <button
+              type="button"
+              className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-4 w-4 flex items-center justify-center"
+              onClick={() => setImage(null)}
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5">
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 text-xs"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={uploading}
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            {uploading ? 'Uploading...' : image ? 'Change Image' : 'Add Image'}
+          </Button>
           <Button variant="ghost" size="sm" className="h-7 gap-1 ml-auto text-xs text-success" onClick={handleSave}>
             <Check className="h-3.5 w-3.5" /> Save
           </Button>
@@ -363,13 +415,14 @@ const DescriptionCell = ({ product }: { product: Product }) => {
     <button
       type="button"
       className="flex items-center gap-1.5 rounded px-2 py-1 text-sm hover:bg-muted transition-colors text-left max-w-[240px]"
-      onClick={() => { setValue(savedValue); setEditing(true); }}
+      onClick={() => { setValue(savedValue); setImage(savedImage); setEditing(true); }}
     >
+      {savedImage && <img src={savedImage} alt="" className="h-8 w-8 rounded object-cover border border-border shrink-0" />}
       {savedValue ? (
         <span className="text-xs text-foreground line-clamp-2">{savedValue}</span>
-      ) : (
+      ) : !savedImage ? (
         <span className="text-xs text-muted-foreground flex items-center gap-1"><Pencil className="h-3 w-3" /> Add</span>
-      )}
+      ) : null}
     </button>
   );
 };
