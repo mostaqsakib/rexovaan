@@ -5297,6 +5297,47 @@ async function handleMediaMessage(message, emojiMap) {
     return;
   }
 
+  // Admin description image upload (shown on product detail in bot + website)
+  if (customer.pending_action?.startsWith("admin_descimg_upload_") && isAdmin(chatId)) {
+    const prodShort = customer.pending_action.replace("admin_descimg_upload_", "");
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("chat_id", chatId);
+
+    const { data: prods } = await supabase.from("bot_products").select("id, name");
+    const prod = prods?.find(p => p.id.startsWith(prodShort));
+    if (!prod) { await sendMessage(chatId, "❌ Product not found.", mainMenuKeyboard()); return; }
+
+    const fileId = message.photo
+      ? message.photo[message.photo.length - 1].file_id
+      : (message.document && String(message.document.mime_type || "").startsWith("image/") ? message.document.file_id : null);
+    if (!fileId) { await sendMessage(chatId, "❌ Please send a photo (not a video).", mainMenuKeyboard()); return; }
+
+    try {
+      const fileRes = await tgFetch("getFile", { file_id: fileId });
+      if (!fileRes?.ok || !fileRes.result?.file_path) throw new Error("Failed to get file from Telegram");
+      const filePath = fileRes.result.file_path;
+      const fileResponse = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`);
+      if (!fileResponse.ok) throw new Error("Download failed");
+      const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
+      const ext = (filePath.split('.').pop() || 'jpg').toLowerCase();
+      const storagePath = `descriptions/${prod.id}/${Date.now()}.${ext}`;
+      const contentType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      const { error: uploadError } = await supabase.storage
+        .from("instruction-media")
+        .upload(storagePath, fileBuffer, { contentType, upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrl } = supabase.storage.from("instruction-media").getPublicUrl(storagePath);
+      await supabase.from("bot_products").update({ description_image: publicUrl.publicUrl }).eq("id", prod.id);
+
+      await sendMessage(chatId, `✅ Description image set for <b>${prod.name}</b>!`, { inline_keyboard: [[{ text: "🖼️ Desc Image", callback_data: `pdescimg_${prodShort}` }], [{ text: "◀️ Back to Product", callback_data: `pedit_${prodShort}` }]] });
+    } catch (err) {
+      console.error("Description image upload error:", err);
+      await sendMessage(chatId, `❌ Upload failed: ${err.message}`, mainMenuKeyboard());
+    }
+    return;
+  }
+
   // Admin media upload for product delivery instructions
   if (customer.pending_action?.startsWith("admin_media_upload_") && isAdmin(chatId)) {
     const prodShort = customer.pending_action.replace("admin_media_upload_", "");
@@ -8031,6 +8072,7 @@ async function handleCallback(callbackQuery, emojiMap) {
     const buttons = [
       [{ text: "✏️ Name", callback_data: `peditname_${prodShort}` }, { text: "💵 Price", callback_data: `peditprice_${prodShort}` }],
       [{ text: "📝 Description", callback_data: `peditdesc_${prodShort}` }, { text: "📋 Instruction", callback_data: `peditinstr_${prodShort}` }],
+      [{ text: `🖼️ Desc Image (${prod.description_image ? "✅" : "❌"})`, callback_data: `pdescimg_${prodShort}` }],
       [{ text: "📷 Media", callback_data: `pmedia_${prodShort}` }, { text: "💰 Pricing Tiers", callback_data: `ptiers_${prodShort}` }],
       [{ text: `✨ Emoji (${emojiStatus})`, callback_data: `pemoji_${prodShort}` }, { text: "🔗 Share Link", callback_data: `pshare_${prodShort}` }],
       [{ text: prod.is_active ? "🔴 Deactivate" : "🟢 Activate", callback_data: `ptoggle_${prodShort}` }],
@@ -8069,6 +8111,36 @@ async function handleCallback(callbackQuery, emojiMap) {
     msg += `Send the new description (HTML supported: &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;s&gt;, &lt;code&gt;).\n\nSend <b>-</b> to clear.\n❌ /cancel to cancel`;
     await supabase.from("bot_customers").update({ pending_action: `admin_editprod_desc_${prodShort}` }).eq("id", customer.id);
     await editOrSend(chatId, msgId, msg);
+    return;
+  }
+
+  if (data.startsWith("pdescimg_del_") && isAdmin(chatId)) {
+    const prodShort = data.replace("pdescimg_del_", "");
+    const { data: prods } = await supabase.from("bot_products").select("id, name");
+    const prod = prods?.find(p => p.id.startsWith(prodShort));
+    if (!prod) { await editOrSend(chatId, msgId, "❌ Not found."); return; }
+    await supabase.from("bot_products").update({ description_image: null }).eq("id", prod.id);
+    await editOrSend(chatId, msgId, `✅ Description image removed from <b>${prod.name}</b>.`, { inline_keyboard: [[{ text: "◀️ Back to Product", callback_data: `pedit_${prodShort}` }]] });
+    return;
+  }
+
+  if (data.startsWith("pdescimg_add_") && isAdmin(chatId)) {
+    const prodShort = data.replace("pdescimg_add_", "");
+    await supabase.from("bot_customers").update({ pending_action: `admin_descimg_upload_${prodShort}` }).eq("id", customer.id);
+    await editOrSend(chatId, msgId, "🖼️ <b>Upload Description Image</b>\n\nSend a <b>photo</b> now.\nIt will be shown on top of the product detail message (bot + website).\n\n❌ /cancel to cancel");
+    return;
+  }
+
+  if (data.startsWith("pdescimg_") && isAdmin(chatId)) {
+    const prodShort = data.replace("pdescimg_", "");
+    const { data: prods } = await supabase.from("bot_products").select("id, name, description_image");
+    const prod = prods?.find(p => p.id.startsWith(prodShort));
+    if (!prod) { await editOrSend(chatId, msgId, "❌ Not found."); return; }
+    const buttons = [[{ text: prod.description_image ? "🔄 Change Image" : "🖼️ Upload Image", callback_data: `pdescimg_add_${prodShort}` }]];
+    if (prod.description_image) buttons.push([{ text: "🗑️ Remove Image", callback_data: `pdescimg_del_${prodShort}` }]);
+    buttons.push([{ text: "◀️ Back to Product", callback_data: `pedit_${prodShort}` }]);
+    const msg = `🖼️ <b>Description Image — ${prod.name}</b>\n\n${prod.description_image ? `Current:\n<a href="${prod.description_image}">View image</a>` : "<i>No image set.</i>"}`;
+    await editOrSend(chatId, msgId, msg, { inline_keyboard: buttons });
     return;
   }
 
