@@ -22,20 +22,27 @@ function bearer(req: Request): string | null {
   return h.slice(7).trim();
 }
 
-function isServiceRoleToken(token: string): boolean {
+async function isServiceRoleToken(token: string): Promise<boolean> {
   const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  // Only an exact match with the real service-role secret, or a JWT whose
+  // signature is verified by Supabase AND whose role claim is service_role.
+  // NEVER trust an unverified/decoded payload — a forged token would grant
+  // full privileged access to sweeps and other admin-only functions.
   if (svc && timingSafeEqual(token, svc)) return true;
-  // Also accept any JWT whose payload claims role === 'service_role'
-  // (Supabase cron / functions.invoke from server contexts).
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !anon) return false;
   try {
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return payload?.role === "service_role";
+    const client = createClient(url, anon);
+    const { data, error } = await client.auth.getClaims(token);
+    if (error || !data?.claims) return false;
+    return (data.claims as Record<string, unknown>)?.role === "service_role";
   } catch {
     return false;
   }
 }
+
 
 export async function requireServiceRoleOrAdmin(
   req: Request,
