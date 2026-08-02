@@ -22,26 +22,50 @@ function bearer(req: Request): string | null {
   return h.slice(7).trim();
 }
 
+const verifiedServiceTokens = new Set<string>();
+
 async function isServiceRoleToken(token: string): Promise<boolean> {
   const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  // Only an exact match with the real service-role secret, or a JWT whose
-  // signature is verified by Supabase AND whose role claim is service_role.
-  // NEVER trust an unverified/decoded payload — a forged token would grant
-  // full privileged access to sweeps and other admin-only functions.
+  // Only an exact match with the real service-role secret, a JWT whose
+  // signature is verified by Supabase with role=service_role, or a key that
+  // provably has service privileges against this project's database.
+  // NEVER trust an unverified/decoded payload.
   if (svc && timingSafeEqual(token, svc)) return true;
+  if (verifiedServiceTokens.has(token)) return true;
 
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!url || !anon) return false;
+  if (!url) return false;
+
+  if (anon) {
+    try {
+      const client = createClient(url, anon);
+      const { data, error } = await client.auth.getClaims(token);
+      if (!error && (data?.claims as Record<string, unknown> | undefined)?.role === "service_role") {
+        verifiedServiceTokens.add(token);
+        return true;
+      }
+    } catch {
+      // fall through to the privilege probe
+    }
+  }
+
+  // Privilege probe: use the presented key as the API key and read a table that
+  // is unreachable for anon/authenticated (RLS + no grants). Only a real
+  // service-role key can succeed, so this cannot be forged.
   try {
-    const client = createClient(url, anon);
-    const { data, error } = await client.auth.getClaims(token);
-    if (error || !data?.claims) return false;
-    return (data.claims as Record<string, unknown>)?.role === "service_role";
+    const probe = createClient(url, token, { auth: { persistSession: false } });
+    const { error } = await probe.from("bep20_reserved_addresses").select("id").limit(1);
+    if (!error) {
+      verifiedServiceTokens.add(token);
+      return true;
+    }
   } catch {
     return false;
   }
+  return false;
 }
+
 
 
 export async function requireServiceRoleOrAdmin(
