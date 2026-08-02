@@ -242,6 +242,50 @@ Deno.serve(async (req) => {
       return json({ ok: true, reseller: { name: reseller.name, balance: apiBalance } });
     }
 
+    // ── Order status / lookup ───────────────────────────────────────────────
+    // GET ?action=order_status&external_order_id=xxx   (by your own order ID)
+    // GET ?action=order_status&order_id=<uuid>          (by our order UUID)
+    // Returns the order + delivery accounts. Use this to recover an order when a
+    // POST ?action=order request times out — the order may still have succeeded.
+    if (req.method === "GET" && action === "order_status") {
+      const externalOrderId = (url.searchParams.get("external_order_id") || "").trim();
+      const orderIdParam = (url.searchParams.get("order_id") || "").trim();
+
+      if (!externalOrderId && !orderIdParam) {
+        return json({ ok: false, error: "Provide external_order_id or order_id" }, 400);
+      }
+
+      let query = supabase
+        .from("bot_reseller_orders")
+        .select("id,product_name,quantity,unit_cost,total_cost,external_order_id,status,created_at,details")
+        .eq("reseller_id", reseller.id);
+
+      if (orderIdParam) {
+        query = query.eq("id", orderIdParam);
+      } else {
+        query = query.eq("external_order_id", externalOrderId);
+      }
+      query = query.order("created_at", { ascending: false }).limit(1);
+
+      const { data: orderRow, error: orderErr } = await query.maybeSingle();
+      if (orderErr) throw orderErr;
+      if (!orderRow) {
+        return json({ ok: false, error: "Order not found" }, 404);
+      }
+
+      const accounts = normalizeDelivery(orderRow.details);
+      return json({
+        ok: true,
+        order: {
+          ...orderRow,
+          accounts,
+          account: accounts[0] || null,
+        },
+        accounts,
+        account: accounts[0] || null,
+      });
+    }
+
     if (req.method === "GET" && action === "products") {
       console.log('reseller_api_products_start', { reseller_id: reseller.id, customer_id: reseller.customer_id });
       const { data: products, error: productsError } = await supabase
