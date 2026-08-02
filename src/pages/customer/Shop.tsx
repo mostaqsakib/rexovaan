@@ -200,9 +200,6 @@ export default function Shop() {
                   : { cls: 'bg-destructive/10 text-destructive border-destructive/30', label: 'Out of stock' };
               return (
                 <Link key={p.id} to={`/p/${p.short_code || p.id}`} className="premium-card premium-card-hover p-5 block group flex flex-col">
-                  {(p as any).description_image && (
-                    <img src={(p as any).description_image} alt={p.name} loading="lazy" className="mb-3 w-full h-36 object-cover rounded-xl border border-border" />
-                  )}
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h3 className="font-heading font-semibold text-base sm:text-lg group-hover:text-primary transition-colors line-clamp-2 break-words flex-1 inline-flex items-center gap-1.5">{p.custom_emoji_id && <TgEmoji id={p.custom_emoji_id} size="1.1em" />}<span>{p.name}</span></h3>
                     {f && f.sale_price < p.price && (
