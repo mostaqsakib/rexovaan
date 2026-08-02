@@ -40,6 +40,10 @@ Deno.serve(async (req) => {
   const json = (b: unknown, s = 200) =>
     new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+  const { requireServiceRoleOrAdmin } = await import("../_shared/require-caller.ts");
+  const authz = await requireServiceRoleOrAdmin(req);
+  if (!authz.ok) return json({ error: authz.error }, authz.status);
+
   try {
     const xprv = Deno.env.get("BSC_SWEEP_XPRV") || Deno.env.get("BSC_XPRV");
     const destination = Deno.env.get("BSC_SWEEP_DESTINATION") || null;
