@@ -1160,6 +1160,7 @@ export type Database = {
           delivery_instruction: string | null
           delivery_media: Json | null
           description: string | null
+          description_image: string | null
           detail_columns: string[]
           id: string
           is_active: boolean
@@ -1187,6 +1188,7 @@ export type Database = {
           delivery_instruction?: string | null
           delivery_media?: Json | null
           description?: string | null
+          description_image?: string | null
           detail_columns?: string[]
           id?: string
           is_active?: boolean
@@ -1214,6 +1216,7 @@ export type Database = {
           delivery_instruction?: string | null
           delivery_media?: Json | null
           description?: string | null
+          description_image?: string | null
           detail_columns?: string[]
           id?: string
           is_active?: boolean
