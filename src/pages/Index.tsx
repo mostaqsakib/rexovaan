@@ -101,6 +101,7 @@ const Index = () => {
             deliveryInstruction: d.delivery_instruction,
             deliveryMedia: parsedMedia,
             description: d.description,
+            descriptionImage: (d as any).description_image ?? null,
             isManualDelivery: d.is_manual_delivery,
             isActive: d.is_active ?? true,
           };
