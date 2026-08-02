@@ -1343,6 +1343,14 @@ async function editMessageText(chatId, messageId, text, replyMarkup) {
         result = await tgFetch("editMessageText", body);
       }
     }
+
+    // The target message is a photo/media message (no text to edit) — e.g. a
+    // product detail shown with a description image. Replace it with a fresh
+    // text message so navigation (Back buttons) keeps working.
+    if (!result?.ok && String(result?.description || "").toLowerCase().includes("no text in the message to edit")) {
+      await deleteMessage(chatId, messageId).catch(() => {});
+      return sendMessage(chatId, text, replyMarkup);
+    }
     return result;
   } catch (e) {
     console.error("editMessageText error:", e.message);
@@ -1401,16 +1409,41 @@ async function cleanupStaleReplyPrompt(chatId, message) {
   await deleteMessage(chatId, prompt.message_id).catch(() => {});
 }
 
+// Telegram re-downloads a photo URL on every sendPhoto call, which is slow.
+// After the first upload we cache Telegram's own file_id and reuse it, so later
+// sends are instant with identical image quality.
+const photoFileIdCache = new Map();
+
+function rememberPhotoFileId(photoUrl, result) {
+  const sizes = result?.result?.photo;
+  if (!Array.isArray(sizes) || sizes.length === 0) return;
+  const fileId = sizes[sizes.length - 1]?.file_id;
+  if (fileId) photoFileIdCache.set(photoUrl, fileId);
+}
+
 async function sendPhoto(chatId, photoUrl, caption, replyMarkup) {
-  const body = { chat_id: chatId, photo: photoUrl, parse_mode: "HTML" };
-  if (caption) body.caption = caption;
-  if (replyMarkup) body.reply_markup = replyMarkup;
-  const result = await tgFetch("sendPhoto", body);
-  if (!result?.ok && caption?.includes("<tg-emoji")) {
-    console.log("Retrying sendPhoto without custom emoji tags");
-    body.caption = stripCustomEmoji(caption);
-    return tgFetch("sendPhoto", body);
+  const cachedId = photoFileIdCache.get(photoUrl);
+  const send = async (photo) => {
+    const body = { chat_id: chatId, photo, parse_mode: "HTML" };
+    if (caption) body.caption = caption;
+    if (replyMarkup) body.reply_markup = replyMarkup;
+    let res = await tgFetch("sendPhoto", body);
+    if (!res?.ok && caption?.includes("<tg-emoji")) {
+      console.log("Retrying sendPhoto without custom emoji tags");
+      body.caption = stripCustomEmoji(caption);
+      res = await tgFetch("sendPhoto", body);
+    }
+    return res;
+  };
+
+  if (cachedId) {
+    const cachedRes = await send(cachedId);
+    if (cachedRes?.ok) return cachedRes;
+    photoFileIdCache.delete(photoUrl);
   }
+
+  const result = await send(photoUrl);
+  if (result?.ok) rememberPhotoFileId(photoUrl, result);
   return result;
 }
 
