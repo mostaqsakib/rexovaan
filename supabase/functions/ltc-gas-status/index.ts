@@ -34,6 +34,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   const json = (b: unknown, s = 200) =>
     new Response(JSON.stringify(b), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+  const { requireServiceRoleOrAdmin } = await import("../_shared/require-caller.ts");
+  const authz = await requireServiceRoleOrAdmin(req);
+  if (!authz.ok) return json({ error: authz.error }, authz.status);
+
   try {
     const master = Deno.env.get("LTC_MASTER_ADDRESS");
     if (!master) return json({ error: "LTC_MASTER_ADDRESS not configured" }, 500);
