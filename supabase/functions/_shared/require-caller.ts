@@ -50,7 +50,7 @@ export async function requireServiceRoleOrAdmin(
   const token = bearer(req);
   if (!token) return { ok: false, status: 401, error: "Missing bearer token" };
 
-  if (isServiceRoleToken(token)) return { ok: true, mode: "service" };
+  if (await isServiceRoleToken(token)) return { ok: true, mode: "service" };
 
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
@@ -74,7 +74,7 @@ export async function requireCustomerAuth(
   const token = bearer(req);
   if (!token) return { ok: false, status: 401, error: "Missing bearer token" };
 
-  if (isServiceRoleToken(token)) return { ok: true, mode: "service" };
+  if (await isServiceRoleToken(token)) return { ok: true, mode: "service" };
 
   const url = Deno.env.get("SUPABASE_URL");
   const anon = Deno.env.get("SUPABASE_ANON_KEY");
