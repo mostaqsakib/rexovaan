@@ -13,6 +13,7 @@ interface ProductLite {
   id: string;
   name: string;
   description: string | null;
+  description_image?: string | null;
   price: number;
   short_code: string | null;
   last_known_stock: number;
@@ -36,7 +37,7 @@ export default function Shop() {
   useEffect(() => {
     (async () => {
       const [{ data: prods }, { data: flashes }, sp] = await Promise.all([
-        supabase.from('bot_products').select('id,name,description,price,short_code,last_known_stock,is_manual_delivery,custom_emoji_id').eq('is_active', true).order('sort_order'),
+        supabase.from('bot_products').select('id,name,description,description_image,price,short_code,last_known_stock,is_manual_delivery,custom_emoji_id').eq('is_active', true).order('sort_order'),
         supabase.from('bot_flash_sales').select('product_id,sale_price,ends_at').eq('is_active', true).gte('ends_at', new Date().toISOString()),
         customer
           ? supabase.from('bot_customer_pricing').select('product_id,price,min_quantity').eq('customer_id', customer.id).eq('is_active', true)
@@ -199,6 +200,9 @@ export default function Shop() {
                   : { cls: 'bg-destructive/10 text-destructive border-destructive/30', label: 'Out of stock' };
               return (
                 <Link key={p.id} to={`/p/${p.short_code || p.id}`} className="premium-card premium-card-hover p-5 block group flex flex-col">
+                  {(p as any).description_image && (
+                    <img src={(p as any).description_image} alt={p.name} loading="lazy" className="mb-3 w-full h-36 object-cover rounded-xl border border-border" />
+                  )}
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h3 className="font-heading font-semibold text-base sm:text-lg group-hover:text-primary transition-colors line-clamp-2 break-words flex-1 inline-flex items-center gap-1.5">{p.custom_emoji_id && <TgEmoji id={p.custom_emoji_id} size="1.1em" />}<span>{p.name}</span></h3>
                     {f && f.sale_price < p.price && (

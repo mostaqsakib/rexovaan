@@ -23,7 +23,7 @@ export default function ProductDetail() {
 
   useEffect(() => {
     (async () => {
-      const safeCols = 'id,name,description,price,short_code,last_known_stock,is_manual_delivery,custom_emoji_id,is_active';
+      const safeCols = 'id,name,description,description_image,price,short_code,last_known_stock,is_manual_delivery,custom_emoji_id,is_active';
       let query = supabase.from('bot_products').select(safeCols).eq('is_active', true).limit(1);
       // try short_code first, then id
       const { data: byCode } = await query.eq('short_code', (code || '').toUpperCase()).maybeSingle();
@@ -73,6 +73,10 @@ export default function ProductDetail() {
             <Package className="h-4 w-4" /> {product.is_manual_delivery ? 'In stock' : product.last_known_stock > 0 ? `${product.last_known_stock} in stock` : 'Out of stock'}
           </div>
         </div>
+
+        {product.description_image && (
+          <img src={product.description_image} alt={product.name} className="w-full max-h-[420px] object-contain rounded-2xl border border-border bg-muted/30" />
+        )}
 
         {product.description && (
           <div className="text-foreground/90 leading-relaxed break-words">
