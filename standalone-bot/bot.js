@@ -9272,7 +9272,7 @@ async function pollUpdates() {
           else if (update.message?.chat?.type === "group" || update.message?.chat?.type === "supergroup") {
             await handleGroupMessage(update.message, emojiMap);
           }
-          else if (update.message?.photo || update.message?.video) {
+          else if (update.message?.photo || update.message?.video || String(update.message?.document?.mime_type || "").startsWith("image/")) {
             const mChatId = update.message?.chat?.id;
             try { await handleMediaMessage(update.message, emojiMap); }
             finally { if (mChatId != null) invalidateCustomerCache(mChatId); }
