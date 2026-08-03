@@ -5524,6 +5524,7 @@ async function handleMessage(message, emojiMap) {
 
     let bkashEmoji = "📱";
     let bkashEmojiTag = "📱";
+    let bkashCustomEmojiId = null;
     if (bkashPmId) {
       const { data: pm } = await supabase
         .from("bot_payment_methods")
@@ -5532,6 +5533,7 @@ async function handleMessage(message, emojiMap) {
         .maybeSingle();
       if (pm?.emoji) {
         bkashEmoji = pm.emoji;
+        bkashCustomEmojiId = pm.custom_emoji_id || null;
         bkashEmojiTag = pm.custom_emoji_id
           ? `<tg-emoji emoji-id="${pm.custom_emoji_id}">${pm.emoji}</tg-emoji>`
           : pm.emoji;
