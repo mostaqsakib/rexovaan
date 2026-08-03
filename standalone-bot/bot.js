@@ -5546,7 +5546,7 @@ async function handleMessage(message, emojiMap) {
       {
         inline_keyboard: [
           [{
-            text: `${bkashEmoji} Pay with bKash`,
+            text: bkashCustomEmojiId ? "Pay with bKash" : `${bkashEmoji} Pay with bKash`,
             url: result.bkashURL,
             ...(bkashCustomEmojiId ? { icon_custom_emoji_id: bkashCustomEmojiId } : {}),
           }],
