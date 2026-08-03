@@ -5504,6 +5504,35 @@ async function handleMessage(message, emojiMap) {
   if (!(await ensureChannelVerified(chatId))) return;
 
 
+  // bKash deposit — user sends BDT amount, we create a tokenized payment link
+  if (customer.pending_action === "bkash_deposit_amount" && text && !text.startsWith("/")) {
+    const amountBDT = parseFloat(text.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(amountBDT) || amountBDT < 10) {
+      await sendMessage(chatId, "❌ Please send a valid amount in BDT. Minimum is <b>10 BDT</b> (e.g. <code>500</code>).");
+      return;
+    }
+    await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+
+    const result = await createBkashPayment(amountBDT, customer.id);
+    if (!result.ok) {
+      await sendMessage(chatId, `❌ bKash payment could not be started: ${escapeHtml(result.error || "Unknown error")}`, mainMenuKeyboard(emojiMap));
+      return;
+    }
+
+    await sendMessage(
+      chatId,
+      `📱 <b>bKash Payment</b>\n\n💵 Amount: <b>৳${amountBDT.toFixed(2)}</b>\n\n👇 Tap the button below to complete the payment. Your balance updates automatically after payment.`,
+      {
+        inline_keyboard: [
+          [{ text: "💳 Pay with bKash", url: result.bkashURL }],
+          [applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "bkash_back_menu", emojiMap)],
+        ],
+      },
+    );
+    return;
+  }
+
+
   if (customer.pending_action?.startsWith("bep20_deposit_amount") && text && !text.startsWith("/")) {
     const amountUSD = parseFloat(text.replace(/[^0-9.]/g, ""));
     if (!Number.isFinite(amountUSD) || amountUSD < 0.01) {
