@@ -2786,7 +2786,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
 
   if (methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash") {
     const bdtRate = await getDollarRateBDT();
-    msg += `📱 <b>bKash Payment</b>\n\n`;
+    msg += `${methodEmojiTag} <b>bKash Payment</b>\n\n`;
     msg += `📊 <b>Dollar Rate:</b> 1 USD = <b>${bdtRate} BDT</b>\n`;
     msg += `<i>💡 Example: $10 = ৳${(10 * bdtRate).toLocaleString()}</i>\n`;
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
@@ -2796,7 +2796,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     // Set pending action for bkash deposit amount input
     const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
     if (cust) {
-      await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount` }).eq("id", cust.id);
+      await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
   } else if (paymentType === "bep20" || methodName.includes("bep20 auto") || methodName.includes("usdt/usdc bep20")) {
 
