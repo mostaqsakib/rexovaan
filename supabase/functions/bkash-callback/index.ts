@@ -75,11 +75,11 @@ Deno.serve(async (req) => {
 
   const source = deposit?.source ?? "web";
   const htmlResp = (status: "success" | "cancel" | "failed", message: string, extra: Record<string, string> = {}) =>
-    new Response(redirectHTML(source, status, message, extra), {
+    new Response(null, {
+      status: 302,
       headers: {
         ...corsHeaders,
-        "Content-Type": "text/html; charset=utf-8",
-        "X-Content-Type-Options": "nosniff",
+        Location: resultRedirect(source, status, message, extra),
         "Cache-Control": "no-store",
       },
     });
