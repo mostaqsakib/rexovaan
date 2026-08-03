@@ -5543,7 +5543,9 @@ async function handleMessage(message, emojiMap) {
       `${bkashEmojiTag} <b>bKash Payment</b>\n\n💵 Amount: <b>৳${amountBDT.toFixed(2)}</b>\n\n👇 Tap the button below to complete the payment. Your balance updates automatically after payment.`,
       {
         inline_keyboard: [
-          [{ text: `${bkashEmoji} Pay with bKash`, url: result.bkashURL }],
+          // NOTE: Telegram does NOT support premium/custom emoji inside inline
+          // keyboard buttons — only plain unicode emoji render there.
+          [{ text: `💗 Pay with bKash`, url: result.bkashURL }],
           [applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "bkash_back_menu", emojiMap)],
         ],
       },
