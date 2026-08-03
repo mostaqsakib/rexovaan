@@ -5524,6 +5524,7 @@ async function handleMessage(message, emojiMap) {
 
     let bkashEmoji = "📱";
     let bkashEmojiTag = "📱";
+    let bkashCustomEmojiId = null;
     if (bkashPmId) {
       const { data: pm } = await supabase
         .from("bot_payment_methods")
@@ -5532,6 +5533,7 @@ async function handleMessage(message, emojiMap) {
         .maybeSingle();
       if (pm?.emoji) {
         bkashEmoji = pm.emoji;
+        bkashCustomEmojiId = pm.custom_emoji_id || null;
         bkashEmojiTag = pm.custom_emoji_id
           ? `<tg-emoji emoji-id="${pm.custom_emoji_id}">${pm.emoji}</tg-emoji>`
           : pm.emoji;
@@ -5543,9 +5545,11 @@ async function handleMessage(message, emojiMap) {
       `${bkashEmojiTag} <b>bKash Payment</b>\n\n💵 Amount: <b>৳${amountBDT.toFixed(2)}</b>\n\n👇 Tap the button below to complete the payment. Your balance updates automatically after payment.`,
       {
         inline_keyboard: [
-          // NOTE: Telegram does NOT support premium/custom emoji inside inline
-          // keyboard buttons — only plain unicode emoji render there.
-          [{ text: `💗 Pay with bKash`, url: result.bkashURL }],
+          [{
+            text: `${bkashEmoji} Pay with bKash`,
+            url: result.bkashURL,
+            ...(bkashCustomEmojiId ? { icon_custom_emoji_id: bkashCustomEmojiId } : {}),
+          }],
           [applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "bkash_back_menu", emojiMap)],
         ],
       },
