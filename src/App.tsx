@@ -25,6 +25,7 @@ import Deposits from "@/pages/customer/Deposits";
 import Withdraw from "@/pages/customer/Withdraw";
 import Referrals from "@/pages/customer/Referrals";
 import OAuthConsent from "@/pages/OAuthConsent";
+import PaymentResult from "@/pages/PaymentResult";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,8 @@ const App = () => (
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+                <Route path="/payment-result" element={<PaymentResult />} />
+
 
                 {/* Admin console */}
                 <Route path="/admin/login" element={<AdminLogin />} />
