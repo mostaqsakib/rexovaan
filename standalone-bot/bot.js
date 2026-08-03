@@ -2786,7 +2786,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
 
   if (methodName.includes("bkash") || methodName.includes("বিকাশ") || paymentType === "bkash") {
     const bdtRate = await getDollarRateBDT();
-    msg += `📱 <b>bKash Payment</b>\n\n`;
+    msg += `${methodEmojiTag} <b>bKash Payment</b>\n\n`;
     msg += `📊 <b>Dollar Rate:</b> 1 USD = <b>${bdtRate} BDT</b>\n`;
     msg += `<i>💡 Example: $10 = ৳${(10 * bdtRate).toLocaleString()}</i>\n`;
     if (method.instruction) msg += `\n📋 <b>Instructions:</b>\n${method.instruction}\n`;
@@ -2796,7 +2796,7 @@ async function showDepositPaymentDetails(chatId, methodId, emojiMap, editMessage
     // Set pending action for bkash deposit amount input
     const { data: cust } = await supabase.from("bot_customers").select("id").eq("chat_id", chatId).single();
     if (cust) {
-      await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount` }).eq("id", cust.id);
+      await supabase.from("bot_customers").update({ pending_action: `bkash_deposit_amount_pm_${method.id}` }).eq("id", cust.id);
     }
   } else if (paymentType === "bep20" || methodName.includes("bep20 auto") || methodName.includes("usdt/usdc bep20")) {
 
@@ -5505,7 +5505,10 @@ async function handleMessage(message, emojiMap) {
 
 
   // bKash deposit — user sends BDT amount, we create a tokenized payment link
-  if (customer.pending_action === "bkash_deposit_amount" && text && !text.startsWith("/")) {
+  if (customer.pending_action?.startsWith("bkash_deposit_amount") && text && !text.startsWith("/")) {
+    const bkashPmId = customer.pending_action.includes("_pm_")
+      ? customer.pending_action.split("_pm_")[1]
+      : null;
     const amountBDT = parseFloat(text.replace(/[^0-9.]/g, ""));
     if (!Number.isFinite(amountBDT) || amountBDT < 10) {
       await sendMessage(chatId, "❌ Please send a valid amount in BDT. Minimum is <b>10 BDT</b> (e.g. <code>500</code>).");
@@ -5519,12 +5522,28 @@ async function handleMessage(message, emojiMap) {
       return;
     }
 
+    let bkashEmoji = "📱";
+    let bkashEmojiTag = "📱";
+    if (bkashPmId) {
+      const { data: pm } = await supabase
+        .from("bot_payment_methods")
+        .select("emoji, custom_emoji_id")
+        .eq("id", bkashPmId)
+        .maybeSingle();
+      if (pm?.emoji) {
+        bkashEmoji = pm.emoji;
+        bkashEmojiTag = pm.custom_emoji_id
+          ? `<tg-emoji emoji-id="${pm.custom_emoji_id}">${pm.emoji}</tg-emoji>`
+          : pm.emoji;
+      }
+    }
+
     await sendMessage(
       chatId,
-      `📱 <b>bKash Payment</b>\n\n💵 Amount: <b>৳${amountBDT.toFixed(2)}</b>\n\n👇 Tap the button below to complete the payment. Your balance updates automatically after payment.`,
+      `${bkashEmojiTag} <b>bKash Payment</b>\n\n💵 Amount: <b>৳${amountBDT.toFixed(2)}</b>\n\n👇 Tap the button below to complete the payment. Your balance updates automatically after payment.`,
       {
         inline_keyboard: [
-          [{ text: "💳 Pay with bKash", url: result.bkashURL }],
+          [{ text: `${bkashEmoji} Pay with bKash`, url: result.bkashURL }],
           [applyEmoji({ text: "◀️ Back to Menu", callback_data: "menu_main" }, "bkash_back_menu", emojiMap)],
         ],
       },
