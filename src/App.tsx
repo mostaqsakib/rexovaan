@@ -25,6 +25,7 @@ import Deposits from "@/pages/customer/Deposits";
 import Withdraw from "@/pages/customer/Withdraw";
 import Referrals from "@/pages/customer/Referrals";
 import OAuthConsent from "@/pages/OAuthConsent";
+import PaymentResult from "@/pages/PaymentResult";
 
 const queryClient = new QueryClient();
 
