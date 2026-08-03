@@ -27,61 +27,18 @@ async function getBkashToken(): Promise<string | null> {
 
 const SITE_URL = (Deno.env.get("SITE_URL") || "https://rexovaan.com").replace(/\/$/, "");
 
-function redirectHTML(source: string | null, status: "success" | "cancel" | "failed", message: string, extra: Record<string, string> = {}) {
-  const isWeb = source === "web";
+function resultRedirect(source: string | null, status: "success" | "cancel" | "failed", message: string, extra: Record<string, string> = {}) {
   const botUsername = Deno.env.get("BOT_USERNAME") || "";
-  let target = "";
-  if (isWeb) {
-    const params = new URLSearchParams({ bkash: status, msg: message, ...extra });
-    target = `${SITE_URL}/deposit?${params.toString()}`;
-  } else if (botUsername) {
-    target = `https://t.me/${botUsername}`;
-  }
-  const safeMsg = message.replace(/</g, "&lt;");
-  const color = status === "success" ? "#22c55e" : status === "cancel" ? "#f59e0b" : "#ef4444";
-  const icon = status === "success" ? "✅" : status === "cancel" ? "⚠️" : "❌";
-  const title = status === "success" ? "Payment Successful" : status === "cancel" ? "Payment Cancelled" : "Payment Failed";
-  const buttonLabel = isWeb ? "Return to site" : "Open Rexovaan Bot";
-  const amount = extra.amount ? `<div class="row"><span>Credited</span><b>$${extra.amount} USDT</b></div>` : "";
-  const trx = extra.trx ? `<div class="row"><span>TrxID</span><code>${extra.trx}</code></div>` : "";
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>bKash ${title}</title>
-<style>
-:root{color-scheme:dark}
-*{box-sizing:border-box}
-body{margin:0;background:radial-gradient(ellipse at top,#1a1030 0%,#0a0a15 60%);color:#fff;font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px}
-.card{background:rgba(21,21,31,.9);border:1px solid rgba(255,255,255,.08);border-radius:22px;padding:32px 28px;max-width:440px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5);backdrop-filter:blur(12px)}
-.iconWrap{width:88px;height:88px;border-radius:50%;background:${color}22;border:2px solid ${color};display:grid;place-items:center;margin:0 auto 18px;font-size:44px;animation:pop .4s ease-out}
-@keyframes pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
-.title{font-size:22px;font-weight:800;margin:6px 0 4px;color:${color};letter-spacing:-.01em}
-.brand{font-size:12px;font-weight:600;color:#9ca3af;letter-spacing:.15em;text-transform:uppercase;margin-bottom:18px}
-.msg{color:#d1d5db;font-size:14px;line-height:1.5;margin:14px 0 20px}
-.details{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:14px 16px;margin:16px 0;text-align:left}
-.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:#9ca3af}
-.row b{color:#fff;font-weight:700}
-.row code{color:#fff;background:rgba(255,255,255,.06);padding:2px 8px;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
-.btn{display:inline-block;margin-top:8px;padding:12px 28px;background:${color};color:#0a0a15;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;transition:transform .15s}
-.btn:hover{transform:translateY(-1px)}
-.hint{margin-top:14px;font-size:11.5px;color:#6b7280}
-.count{color:${color};font-weight:700}
-</style></head>
-<body><div class="card">
-<div class="iconWrap">${icon}</div>
-<div class="brand">Rexovaan Shoppie</div>
-<div class="title">${title}</div>
-<div class="msg">${safeMsg}</div>
-${amount || trx ? `<div class="details">${amount}${trx}</div>` : ""}
-${target ? `<a class="btn" href="${target}">${buttonLabel}</a><div class="hint">Auto-redirecting in <span class="count" id="c">4</span>s…</div>` : `<div class="hint">You can close this window.</div>`}
-</div>
-<script>(function(){
-  var t=${JSON.stringify(target)};
-  try{if(window.Telegram&&window.Telegram.WebApp){window.Telegram.WebApp.ready();window.Telegram.WebApp.expand();setTimeout(function(){try{window.Telegram.WebApp.close();}catch(e){}},1800);}}catch(e){}
-  if(!t)return;
-  var n=4,el=document.getElementById('c');
-  var iv=setInterval(function(){n--;if(el)el.textContent=n;if(n<=0){clearInterval(iv);window.location.href=t;}},1000);
-})();</script>
-</body></html>`;
+  const params = new URLSearchParams({
+    status,
+    msg: message,
+    source: source === "web" ? "web" : "bot",
+    ...(botUsername ? { bot: botUsername } : {}),
+    ...extra,
+  });
+  return `${SITE_URL}/payment-result?${params.toString()}`;
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
