@@ -7,22 +7,21 @@ export const getFileName = (order: OrderItem) => {
   return `${order.productName}-#${sorted[0]}-#${sorted[sorted.length - 1]}`;
 };
 
-const formatDetail = (detail: Record<string, string>, idx: number, total: number) => {
+const formatDetail = (detail: Record<string, string>) => {
   const entries = Object.entries(detail).filter(([, v]) => v.trim());
-  const prefix = total > 1 ? `${idx + 1}. ` : '';
   if (entries.length <= 1) {
     const mainVal = entries.find(([, v]) => v.startsWith('http'))?.[1] || entries[0]?.[1] || '';
-    return `${prefix}${mainVal}`;
+    return mainVal;
   }
-  return `${prefix}${entries.map(([k, v]) => `${k}: ${v}`).join('\n')}`;
+  return entries.map(([k, v]) => `${k}: ${v}`).join('\n');
 };
 
 export const getCopyText = (order: OrderItem) => {
-  return order.details.map((detail, i) => formatDetail(detail, i, order.details.length)).join('\n\n');
+  return order.details.map((detail) => formatDetail(detail)).join('\n');
 };
 
 export const getTxtContent = (order: OrderItem) => {
-  return order.details.map((detail, i) => formatDetail(detail, i, order.details.length)).join('\n\n');
+  return order.details.map((detail) => formatDetail(detail)).join('\n');
 };
 
 export const getCsvContent = (order: OrderItem) => {

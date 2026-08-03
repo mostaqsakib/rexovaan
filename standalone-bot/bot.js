@@ -1962,17 +1962,14 @@ async function deliverOrderItems(chatId, product, orderDetails, orderId, headerI
     // Bulk order — deliver text items directly as a TXT file, skip in-chat listing & selection prompt
     const orderNumTxt = orderId ? String(orderId).substring(0, 4).toUpperCase() : '';
     const purchaseDateTxt = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dhaka', hour12: false }).replace(',', '') + ' (UTC+6)';
-    let txt = "";
-    for (let i = 0; i < textItems.length; i++) {
-      const entries = Object.entries(textItems[i]).filter(([, v]) => v && String(v).trim());
-      let text = "";
+    const txtLines = textItems.map((item) => {
+      const entries = Object.entries(item).filter(([, v]) => v && String(v).trim());
       if (!isMultiCol || entries.length <= 1) {
-        text = entries.find(([, v]) => String(v).startsWith('http'))?.[1] || entries[0]?.[1] || '';
-      } else {
-        text = entries.map(([k, v]) => `${k}: ${v}`).join('\n');
+        return entries.find(([, v]) => String(v).startsWith('http'))?.[1] || entries[0]?.[1] || '';
       }
-      txt += textItems.length > 1 ? `${i + 1}. ${text}\n${isMultiCol ? '\n' : ''}` : `${text}\n${isMultiCol ? '\n' : ''}`;
-    }
+      return entries.map(([k, v]) => `${k}: ${v}`).join('\n');
+    });
+    const txt = txtLines.join('\n');
     const safeName = String(product.name).replace(/[^\w\-]+/g, '_').slice(0, 40);
     const filename = orderNumTxt
       ? `Order-${orderNumTxt}-${safeName}-${textItems.length}items.txt`

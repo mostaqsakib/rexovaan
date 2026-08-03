@@ -141,8 +141,8 @@ export default function Checkout() {
         };
 
         if (qty > 5) {
-          // Numbered the same way the bot numbers them: "1. ...", "2. ..."
-          const txtContent = items.map((line, i) => `${i + 1}. ${line}`).join('\n');
+          // Plain item list — one per line, no numbering or gaps
+          const txtContent = items.join('\n');
           const safeProduct = product.name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60);
           const filename = `${safeProduct}-${shortOrderId}.txt`;
           (async () => {
