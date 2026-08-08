@@ -241,29 +241,41 @@ const DepositsTab = () => {
                       )}
                       {d.verified_at && <div><span className="text-muted-foreground">Verified: </span><span>{fmtDate(d.verified_at)}</span></div>}
                     </div>
-                    {(d.status === 'pending' || d.status === 'bkash_pending') && (
-                      <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2 border-t border-border pt-3">
-                        <div className="flex items-center gap-2">
-                          <label className="text-xs text-muted-foreground">Credit amount ($)</label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            className="h-8 w-28"
-                            value={amountEdit[d.id] ?? String(d.amount)}
-                            onChange={(e) => setAmountEdit((m) => ({ ...m, [d.id]: e.target.value }))}
-                          />
+                    {d.status !== 'verified' && (() => {
+                      const isFailed = d.status === 'rejected' || d.status === 'bkash_cancelled';
+                      return (
+                        <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2 border-t border-border pt-3">
+                          <div className="flex items-center gap-2">
+                            <label className="text-xs text-muted-foreground">Credit amount ($)</label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder={isFailed ? 'e.g. 0.90' : undefined}
+                              className="h-8 w-28"
+                              value={amountEdit[d.id] ?? (Number(d.amount) > 0 ? String(d.amount) : '')}
+                              onChange={(e) => setAmountEdit((m) => ({ ...m, [d.id]: e.target.value }))}
+                            />
+                          </div>
+                          {isFailed && (
+                            <span className="text-[11px] text-amber-300/90">
+                              Auto-verify failed — confirm the payment yourself before crediting.
+                            </span>
+                          )}
+                          <div className="flex items-center gap-2 sm:ml-auto">
+                            <Button size="sm" onClick={() => approve(d)} disabled={actingId === d.id} className="gap-1.5">
+                              {actingId === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                              {isFailed ? 'Manually Verify' : 'Approve'}
+                            </Button>
+                            {!isFailed && (
+                              <Button size="sm" variant="destructive" onClick={() => reject(d)} disabled={actingId === d.id} className="gap-1.5">
+                                <X className="h-3.5 w-3.5" /> Reject
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 sm:ml-auto">
-                          <Button size="sm" onClick={() => approve(d)} disabled={actingId === d.id} className="gap-1.5">
-                            {actingId === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            Approve
-                          </Button>
-                          <Button size="sm" variant="destructive" onClick={() => reject(d)} disabled={actingId === d.id} className="gap-1.5">
-                            <X className="h-3.5 w-3.5" /> Reject
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
+
                   </div>
 
                 )}
