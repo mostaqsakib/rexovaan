@@ -118,7 +118,12 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
   const knownContracts = new Set(chain.tokens.map((t) => t.address.toLowerCase()));
   const resByAddr = new Map<string, any>();
   for (const r of reservations) resByAddr.set(r.address.toLowerCase(), r);
-  const toAddrTopics = Array.from(resByAddr.keys()).map(padTopicAddress);
+  const allTopics = Array.from(resByAddr.keys()).map(padTopicAddress);
+  // Chunk the address topic list — RPC providers reject very large filters.
+  const TOPIC_BATCH = 200;
+  const topicBatches: string[][] = [];
+  for (let i = 0; i < allTopics.length; i += TOPIC_BATCH) topicBatches.push(allTopics.slice(i, i + TOPIC_BATCH));
+  const toAddrTopics = allTopics;
 
   const symbolCache = new Map<string, string | null>();
   let credited = 0, fakes = 0, scanned = 0;
@@ -127,11 +132,14 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
     const end = Math.min(start + chunkMax, safeTo);
     let logs: any[] = [];
     try {
-      logs = await rpc(rpcUrl, "eth_getLogs", [{
-        fromBlock: "0x" + start.toString(16),
-        toBlock: "0x" + end.toString(16),
-        topics: [TRANSFER_TOPIC, null, toAddrTopics],
-      }]);
+      for (const batch of topicBatches) {
+        const part: any[] = await rpc(rpcUrl, "eth_getLogs", [{
+          fromBlock: "0x" + start.toString(16),
+          toBlock: "0x" + end.toString(16),
+          topics: [TRANSFER_TOPIC, null, batch],
+        }]);
+        logs = logs.concat(part);
+      }
     } catch (e) {
       console.error(`[${chain.id}] getLogs failed`, e);
       break;
@@ -292,11 +300,15 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
       const tipFrom = safeTo + 1;
       const tipTo = latest;
       if (tipTo >= tipFrom && tipTo - tipFrom < 500) {
-        const tipLogs: any[] = await rpc(rpcUrl, "eth_getLogs", [{
-          fromBlock: "0x" + tipFrom.toString(16),
-          toBlock: "0x" + tipTo.toString(16),
-          topics: [TRANSFER_TOPIC, null, toAddrTopics],
-        }]);
+        const tipLogs: any[] = [];
+        for (const batch of topicBatches) {
+          const part: any[] = await rpc(rpcUrl, "eth_getLogs", [{
+            fromBlock: "0x" + tipFrom.toString(16),
+            toBlock: "0x" + tipTo.toString(16),
+            topics: [TRANSFER_TOPIC, null, batch],
+          }]);
+          tipLogs.push(...part);
+        }
         for (const log of tipLogs) {
           const contract = log.address.toLowerCase();
           if (!knownContracts.has(contract)) continue;
@@ -363,16 +375,30 @@ Deno.serve(async (req) => {
     const fromBlockParam = url.searchParams.get("from_block");
     const overrideFromBlock = fromBlockParam ? Number(fromBlockParam) : undefined;
 
+    // IMPORTANT: never truncate the watch list — a plain .limit(500) silently
+    // dropped the NEWEST reservations once the 30-day window exceeded 500 rows,
+    // so fresh deposits were never detected. Page through everything instead.
     const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: reservations } = await supabase
-      .from("bep20_reserved_addresses")
-      .select("id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains, pending_notified_tx")
-      .in("status", ["pending", "paid", "expired", "rejected"])
-      .gte("created_at", cutoffIso)
-      .limit(500);
-    if (!reservations || reservations.length === 0) {
+    const cols = "id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains, pending_notified_tx";
+    const reservations: any[] = [];
+    const PAGE = 1000;
+    for (let page = 0; page < 10; page++) {
+      const { data, error } = await supabase
+        .from("bep20_reserved_addresses")
+        .select(cols)
+        .in("status", ["pending", "paid", "expired", "rejected"])
+        .gte("created_at", cutoffIso)
+        .order("created_at", { ascending: false })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (error) { console.error("reservations page err", error); break; }
+      if (!data || data.length === 0) break;
+      reservations.push(...data);
+      if (data.length < PAGE) break;
+    }
+    if (reservations.length === 0) {
       return json({ ok: true, note: "no reservations" });
     }
+
 
     let chains = enabledChains();
     if (onlyChain) chains = chains.filter((c) => c.id === onlyChain);
