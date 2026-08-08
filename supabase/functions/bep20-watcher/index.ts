@@ -118,7 +118,12 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
   const knownContracts = new Set(chain.tokens.map((t) => t.address.toLowerCase()));
   const resByAddr = new Map<string, any>();
   for (const r of reservations) resByAddr.set(r.address.toLowerCase(), r);
-  const toAddrTopics = Array.from(resByAddr.keys()).map(padTopicAddress);
+  const allTopics = Array.from(resByAddr.keys()).map(padTopicAddress);
+  // Chunk the address topic list — RPC providers reject very large filters.
+  const TOPIC_BATCH = 200;
+  const topicBatches: string[][] = [];
+  for (let i = 0; i < allTopics.length; i += TOPIC_BATCH) topicBatches.push(allTopics.slice(i, i + TOPIC_BATCH));
+  const toAddrTopics = allTopics;
 
   const symbolCache = new Map<string, string | null>();
   let credited = 0, fakes = 0, scanned = 0;
@@ -127,11 +132,14 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
     const end = Math.min(start + chunkMax, safeTo);
     let logs: any[] = [];
     try {
-      logs = await rpc(rpcUrl, "eth_getLogs", [{
-        fromBlock: "0x" + start.toString(16),
-        toBlock: "0x" + end.toString(16),
-        topics: [TRANSFER_TOPIC, null, toAddrTopics],
-      }]);
+      for (const batch of topicBatches) {
+        const part: any[] = await rpc(rpcUrl, "eth_getLogs", [{
+          fromBlock: "0x" + start.toString(16),
+          toBlock: "0x" + end.toString(16),
+          topics: [TRANSFER_TOPIC, null, batch],
+        }]);
+        logs = logs.concat(part);
+      }
     } catch (e) {
       console.error(`[${chain.id}] getLogs failed`, e);
       break;
