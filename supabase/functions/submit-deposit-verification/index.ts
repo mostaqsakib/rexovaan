@@ -192,7 +192,7 @@ async function verifyBybit(
 ): Promise<VerifyResult & { externalRef?: string }> {
   const normalizedOrderId = orderId.trim();
   const recvWindow = "20000";
-  const WINDOW_MS = 6 * 60 * 60 * 1000;
+  const WINDOW_MS = 12 * 60 * 60 * 1000;
   const COINS = ["USDT", "USDC"];
   const freshSign = (qs: string) => {
     const ts = String(Date.now());
