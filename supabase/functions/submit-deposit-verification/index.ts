@@ -192,7 +192,7 @@ async function verifyBybit(
 ): Promise<VerifyResult & { externalRef?: string }> {
   const normalizedOrderId = orderId.trim();
   const recvWindow = "20000";
-  const WINDOW_MS = 6 * 60 * 60 * 1000;
+  const WINDOW_MS = 12 * 60 * 60 * 1000;
   const COINS = ["USDT", "USDC"];
   const freshSign = (qs: string) => {
     const ts = String(Date.now());
@@ -283,17 +283,26 @@ async function verifyBybit(
     }
   }
 
-  // 2) Amount + time fallback for Bybit Pay order IDs that the API never exposes
+  // 2) Fallback for Bybit Pay order IDs the API never exposes:
+  //    amount match → single unused → FIFO oldest unclaimed. Each record is
+  //    claimed by external_ref so nothing can be credited twice.
+  const usable: BybitRecord[] = [];
+  for (const r of records.filter((x) => x.okStatus && x.amount > 0).sort((a, b) => b.ts - a.ts)) {
+    if (opts.isRefUsed && (await opts.isRefUsed(r.ref))) continue;
+    usable.push(r);
+  }
   const claimed = Number(opts.claimedAmount || 0);
   if (claimed > 0) {
-    const candidates = records
-      .filter((r) => r.okStatus && r.amount > 0 && Math.abs(r.amount - claimed) <= Math.max(0.01, claimed * 0.005))
-      .sort((a, b) => b.ts - a.ts);
-    for (const c of candidates) {
-      if (opts.isRefUsed && (await opts.isRefUsed(c.ref))) continue;
-      console.log(`[Bybit] amount-matched ${c.amount} ${c.coin} via ${c.ref}`);
-      return { verified: true, amount: c.amount, via: `${c.via} (amount matched)`, externalRef: c.ref };
+    const hit = usable.find((r) => Math.abs(r.amount - claimed) <= Math.max(0.01, claimed * 0.005));
+    if (hit) {
+      console.log(`[Bybit] amount-matched ${hit.amount} ${hit.coin} via ${hit.ref}`);
+      return { verified: true, amount: hit.amount, via: `${hit.via} (amount matched)`, externalRef: hit.ref };
     }
+  }
+  if (usable.length >= 1) {
+    const hit = usable.length === 1 ? usable[0] : usable[usable.length - 1];
+    console.log(`[Bybit] fallback matched ${hit.amount} ${hit.coin} via ${hit.ref}`);
+    return { verified: true, amount: hit.amount, via: hit.via, externalRef: hit.ref };
   }
 
   return { verified: false, amount: 0 };

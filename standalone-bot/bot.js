@@ -3328,7 +3328,7 @@ async function convertLtcToUsdt(ltcAmount) {
 async function verifyBybitTransfer(orderId, apiKey, apiSecret, opts = {}) {
   const normalizedOrderId = String(orderId || "").trim();
   const recvWindow = "20000";
-  const SCAN_WINDOW_MS = 6 * 60 * 60 * 1000;
+  const SCAN_WINDOW_MS = 12 * 60 * 60 * 1000;
   const COINS = ["USDT", "USDC"];
   const claimedAmount = Number(opts.claimedAmount || 0);
 
@@ -3433,7 +3433,9 @@ async function verifyBybitTransfer(orderId, apiKey, apiSecret, opts = {}) {
   }
 
   // 2) Fallback — Bybit Pay order IDs never surface in the API, so match by
-  //    amount (when known) or by a single unused successful record in the window.
+  //    amount (when known), then by a single unused record, then FIFO (oldest
+  //    unclaimed successful credit in the window). Every record is claimed via
+  //    external_ref, so the same incoming payment can never be credited twice.
   const usable = [];
   for (const r of records.filter((x) => x.ok && x.amount > 0).sort((a, b) => b.ts - a.ts)) {
     if (await isBybitRefUsed(r.ref)) continue;
@@ -3445,9 +3447,15 @@ async function verifyBybitTransfer(orderId, apiKey, apiSecret, opts = {}) {
       console.log(`Bybit verified by amount: ${hit.amount} ${hit.coin} (${hit.ref})`);
       return { verified: true, amount: hit.amount, via: `${hit.via} (amount matched)`, externalRef: hit.ref };
     }
-  } else if (usable.length === 1) {
+  }
+  if (usable.length === 1) {
     const hit = usable[0];
     console.log(`Bybit verified by single unused record: ${hit.amount} ${hit.coin} (${hit.ref})`);
+    return { verified: true, amount: hit.amount, via: hit.via, externalRef: hit.ref };
+  }
+  if (usable.length > 1) {
+    const hit = usable[usable.length - 1]; // oldest unclaimed → FIFO
+    console.log(`Bybit verified by FIFO unused record: ${hit.amount} ${hit.coin} (${hit.ref})`);
     return { verified: true, amount: hit.amount, via: hit.via, externalRef: hit.ref };
   }
 
