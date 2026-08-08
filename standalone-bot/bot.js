@@ -3328,7 +3328,7 @@ async function convertLtcToUsdt(ltcAmount) {
 async function verifyBybitTransfer(orderId, apiKey, apiSecret, opts = {}) {
   const normalizedOrderId = String(orderId || "").trim();
   const recvWindow = "20000";
-  const SCAN_WINDOW_MS = 6 * 60 * 60 * 1000;
+  const SCAN_WINDOW_MS = 12 * 60 * 60 * 1000;
   const COINS = ["USDT", "USDC"];
   const claimedAmount = Number(opts.claimedAmount || 0);
 
