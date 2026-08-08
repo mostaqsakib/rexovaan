@@ -300,11 +300,15 @@ async function scanChain(chain: ChainCfg, supabase: any, reservations: any[], ov
       const tipFrom = safeTo + 1;
       const tipTo = latest;
       if (tipTo >= tipFrom && tipTo - tipFrom < 500) {
-        const tipLogs: any[] = await rpc(rpcUrl, "eth_getLogs", [{
-          fromBlock: "0x" + tipFrom.toString(16),
-          toBlock: "0x" + tipTo.toString(16),
-          topics: [TRANSFER_TOPIC, null, toAddrTopics],
-        }]);
+        const tipLogs: any[] = [];
+        for (const batch of topicBatches) {
+          const part: any[] = await rpc(rpcUrl, "eth_getLogs", [{
+            fromBlock: "0x" + tipFrom.toString(16),
+            toBlock: "0x" + tipTo.toString(16),
+            topics: [TRANSFER_TOPIC, null, batch],
+          }]);
+          tipLogs.push(...part);
+        }
         for (const log of tipLogs) {
           const contract = log.address.toLowerCase();
           if (!knownContracts.has(contract)) continue;
