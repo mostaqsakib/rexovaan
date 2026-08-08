@@ -54,13 +54,16 @@ const DepositsTab = () => {
     const raw = amountEdit[d.id];
     const amount = raw !== undefined && raw !== '' ? Number(raw) : Number(d.amount);
     if (!amount || amount <= 0) { toast.error('Enter a valid amount'); return; }
+    const isFailed = d.status === 'rejected' || d.status === 'bkash_cancelled';
+    if (isFailed && !confirm(`Manually verify this failed deposit and credit $${amount.toFixed(2)}?\n\nMake sure the payment really arrived — this cannot be undone automatically.`)) return;
     setActingId(d.id);
     const { data, error } = await supabase.functions.invoke('admin-verify-deposit', { body: { deposit_id: d.id, amount } });
     setActingId(null);
     if (error || (data as any)?.error) { toast.error((data as any)?.error || error?.message || 'Approve failed'); return; }
-    toast.success('Deposit approved');
+    toast.success(isFailed ? 'Deposit manually verified & credited' : 'Deposit approved');
     void load();
   };
+
 
   const reject = async (d: Deposit) => {
     if (!confirm('Reject this deposit?')) return;
