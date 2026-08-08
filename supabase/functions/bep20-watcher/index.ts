@@ -375,16 +375,30 @@ Deno.serve(async (req) => {
     const fromBlockParam = url.searchParams.get("from_block");
     const overrideFromBlock = fromBlockParam ? Number(fromBlockParam) : undefined;
 
+    // IMPORTANT: never truncate the watch list — a plain .limit(500) silently
+    // dropped the NEWEST reservations once the 30-day window exceeded 500 rows,
+    // so fresh deposits were never detected. Page through everything instead.
     const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: reservations } = await supabase
-      .from("bep20_reserved_addresses")
-      .select("id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains, pending_notified_tx")
-      .in("status", ["pending", "paid", "expired", "rejected"])
-      .gte("created_at", cutoffIso)
-      .limit(500);
-    if (!reservations || reservations.length === 0) {
+    const cols = "id, address, token, expected_amount, status, customer_id, deposit_id, received_amount, received_chains, pending_notified_tx";
+    const reservations: any[] = [];
+    const PAGE = 1000;
+    for (let page = 0; page < 10; page++) {
+      const { data, error } = await supabase
+        .from("bep20_reserved_addresses")
+        .select(cols)
+        .in("status", ["pending", "paid", "expired", "rejected"])
+        .gte("created_at", cutoffIso)
+        .order("created_at", { ascending: false })
+        .range(page * PAGE, page * PAGE + PAGE - 1);
+      if (error) { console.error("reservations page err", error); break; }
+      if (!data || data.length === 0) break;
+      reservations.push(...data);
+      if (data.length < PAGE) break;
+    }
+    if (reservations.length === 0) {
       return json({ ok: true, note: "no reservations" });
     }
+
 
     let chains = enabledChains();
     if (onlyChain) chains = chains.filter((c) => c.id === onlyChain);
