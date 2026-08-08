@@ -40,7 +40,7 @@ export const CHAINS: Record<ChainId, ChainCfg> = {
     rpcEnvKey: "BSC_RPC_URL",
     defaultRpc: "https://bsc-dataseed.binance.org",
     confirmations: 3,
-    chunkSize: 4000,
+    chunkSize: 500,
     minGasNativeWei: 1_000_000_000_000_000n,   // 0.001 BNB (~$0.70) — alert threshold
     gasTopUpWei:        20_000_000_000_000n,   // 0.00002 BNB — ~2× actual sweep cost @ 0.1 gwei (90k gas = 9e-6 BNB)
     explorerTx: (h) => `https://bscscan.com/tx/${h}`,
