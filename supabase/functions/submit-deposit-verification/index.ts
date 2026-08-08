@@ -494,6 +494,17 @@ Deno.serve(async (req) => {
 
     // Run auto-verification (same logic as bot)
     const targets = inferVerificationTargets(normalizedTxn, paymentMethod);
+    // Gate by which methods are actually enabled for deposits (admin toggles).
+    try {
+      const { data: enabledMethods } = await supabase
+        .from("bot_payment_methods")
+        .select("name")
+        .eq("is_active", true)
+        .eq("enabled_for_deposit", true);
+      const names = (enabledMethods || []).map((m: any) => String(m.name || "").toLowerCase());
+      if (targets.binance && !names.some((n: string) => n.includes("binance"))) targets.binance = false;
+      if (targets.bybit && !names.some((n: string) => n.includes("bybit"))) targets.bybit = false;
+    } catch (e) { console.error("enabled-method gate error", e); }
     const binanceKey = Deno.env.get("BINANCE_API_KEY");
     const binanceSecret = Deno.env.get("BINANCE_API_SECRET");
     const bybitKey = Deno.env.get("BYBIT_API_KEY");
