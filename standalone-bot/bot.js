@@ -3826,8 +3826,13 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
       try { await tgFetch("deleteMessage", { chat_id: chatId, message_id: paymentMsgId }); } catch(e) {}
     }
     if (paymentMethodId) {
-      const { data: paymentMethod } = await supabase.from("bot_payment_methods").select("name, emoji").eq("id", paymentMethodId).maybeSingle();
+      const { data: paymentMethod } = await supabase.from("bot_payment_methods").select("name, emoji, is_active, enabled_for_deposit").eq("id", paymentMethodId).maybeSingle();
       if (paymentMethod) {
+        if (paymentMethod.is_active === false || paymentMethod.enabled_for_deposit === false) {
+          await supabase.from("bot_customers").update({ pending_action: null }).eq("id", customer.id);
+          await sendMessage(chatId, `🚫 <b>${paymentMethod.name || "This payment method"}</b> is currently disabled. Please choose another payment method.`, mainMenuKeyboard());
+          return;
+        }
         selectedPaymentMethodName = paymentMethod.name || "";
         selectedPaymentMethodLabel = [paymentMethod.emoji, paymentMethod.name].filter(Boolean).join(" ").trim();
       }
@@ -3835,6 +3840,22 @@ async function handleTxnHash(chatId, customer, txnHash, emojiMap) {
   }
 
   const verifyTargets = inferVerificationTargets(normalizedTxn, selectedPaymentMethodName);
+
+  // Gate auto-verification by which methods are actually enabled for deposits.
+  // Prevents verifying a TxID against Binance/Bybit when that method is disabled.
+  try {
+    const { data: enabledMethods } = await supabase
+      .from("bot_payment_methods")
+      .select("name")
+      .eq("is_active", true)
+      .eq("enabled_for_deposit", true);
+    const names = (enabledMethods || []).map((m) => String(m.name || "").toLowerCase());
+    const binanceEnabled = names.some((n) => n.includes("binance"));
+    const bybitEnabled = names.some((n) => n.includes("bybit"));
+    if (verifyTargets.binance && !binanceEnabled) verifyTargets.binance = false;
+    if (verifyTargets.bybit && !bybitEnabled) verifyTargets.bybit = false;
+  } catch (e) { console.error("[Verify] enabled-method gate error", e); }
+
   console.log(`[Verify] Starting verification for TxID: ${normalizedTxn}, raw: ${txnHash}, customer: ${customer.id}, pending_action: ${customer.pending_action || "none"}, targets: ${JSON.stringify(verifyTargets)}`);
   let amount = 0, verified = false, verifiedVia = "", ltcRawAmount = 0, externalRef = null;
 
