@@ -181,7 +181,9 @@ const DepositsTab = () => {
         <Button variant="outline" size="sm" onClick={load} className="gap-1.5">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </Button>
+        <ManualDepositDialog onDone={load} />
       </div>
+
 
       <div className="text-xs text-muted-foreground px-1">
         {filtered.length} of {deposits.length} deposits
